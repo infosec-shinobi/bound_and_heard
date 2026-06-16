@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bound-and-heard"
+version = "0.1.0"
+description = "A local-first reading and listening analytics app."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "alembic>=1.13",
+    "fastapi>=0.115",
+    "jinja2>=3.1",
+    "pydantic>=2.8",
+    "pydantic-settings>=2.4",
+    "python-multipart>=0.0.9",
+    "sqlalchemy>=2.0",
+    "uvicorn[standard]>=0.30",
+]
+
+[project.optional-dependencies]
+dev = [
+    "httpx2>=0.28",
+    "pytest>=8.3",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

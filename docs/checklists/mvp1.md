@@ -6,13 +6,13 @@ Build the foundation for Bound & Heard: a local-first FastAPI app with manual bo
 
 ## Chunk 1 - Project Foundation
 
-- [ ] Create Python package structure under `app/`
-- [ ] Add `pyproject.toml`
-- [ ] Configure dependencies: FastAPI, Uvicorn, SQLAlchemy 2.0, Alembic, Pydantic, pydantic-settings, Jinja2, python-multipart, pytest
-- [ ] Add `app/main.py`
-- [ ] Add basic health route
-- [ ] Add base app startup path
-- [ ] Verify app runs with `uvicorn app.main:app --reload`
+- [x] Create Python package structure under `app/`
+- [x] Add `pyproject.toml`
+- [x] Configure dependencies: FastAPI, Uvicorn, SQLAlchemy 2.0, Alembic, Pydantic, pydantic-settings, Jinja2, python-multipart, pytest
+- [x] Add `app/main.py`
+- [x] Add basic health route
+- [x] Add base app startup path
+- [x] Verify app runs with `uvicorn app.main:app --reload`
 
 ## Chunk 2 - Configuration
 
