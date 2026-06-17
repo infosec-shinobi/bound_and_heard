@@ -26,13 +26,13 @@ Build the foundation for Bound & Heard: a local-first FastAPI app with manual bo
 
 ## Chunk 3 - Database Foundation
 
-- [ ] Add `app/core/database.py`
-- [ ] Configure SQLAlchemy engine and session
-- [ ] Configure declarative base
-- [ ] Initialize Alembic
-- [ ] Wire Alembic to app models
-- [ ] Add first migration
-- [ ] Verify `alembic upgrade head`
+- [x] Add `app/core/database.py`
+- [x] Configure SQLAlchemy engine and session
+- [x] Configure declarative base
+- [x] Initialize Alembic
+- [x] Wire Alembic to app models
+- [x] Add first migration
+- [x] Verify `alembic upgrade head`
 
 ## Chunk 4 - Core Models
 
