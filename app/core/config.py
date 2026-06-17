@@ -20,6 +20,10 @@ class Settings(BaseSettings):
         default="sqlite:///./data/bound_and_heard.sqlite3",
         validation_alias="BOUND_AND_HEARD_DATABASE_URL",
     )
+    default_user_name: str = Field(
+        default="Local User",
+        validation_alias="BOUND_AND_HEARD_DEFAULT_USER_NAME",
+    )
 
     @property
     def writes_enabled(self) -> bool:

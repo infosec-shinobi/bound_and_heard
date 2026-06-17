@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.core.bootstrap import bootstrap_default_user
 from app.core.config import Settings, get_settings
 
 
@@ -17,6 +18,7 @@ def build_lifespan(settings: Settings):
             logger.warning(
                 "BOUND_AND_HEARD_ADMIN_PASSWORD is not set; write actions are disabled."
             )
+        bootstrap_default_user(settings.default_user_name)
         yield
 
     return lifespan

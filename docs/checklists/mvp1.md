@@ -36,15 +36,15 @@ Build the foundation for Bound & Heard: a local-first FastAPI app with manual bo
 
 ## Chunk 4 - Core Models
 
-- [ ] Add `User` model
-- [ ] Add default local user bootstrap
-- [ ] Add `Book` model
-- [ ] Add `ReadingEvent` model
-- [ ] Add `BookProgress` model
-- [ ] Add timestamp fields
-- [ ] Add basic indexes
-- [ ] Add `user_id` to user-owned tables
-- [ ] Add `archived_at` to books for archive-only removal
+- [x] Add `User` model
+- [x] Add default local user bootstrap
+- [x] Add `Book` model
+- [x] Add `ReadingEvent` model
+- [x] Add `BookProgress` model
+- [x] Add timestamp fields
+- [x] Add basic indexes
+- [x] Add `user_id` to user-owned tables
+- [x] Add `archived_at` to books for archive-only removal
 
 ## Chunk 5 - Write Protection
 
@@ -142,6 +142,11 @@ Build the foundation for Bound & Heard: a local-first FastAPI app with manual bo
 - [ ] Document migration command
 - [ ] Document test command
 - [ ] Confirm `.gitignore` excludes local data and secrets
+
+## Future User Settings
+
+- [ ] Add protected settings/profile page for updating the current user's display name
+- [ ] Keep `BOUND_AND_HEARD_DEFAULT_USER_NAME` as first-run bootstrap only, not an overwrite mechanism
 
 ## MVP 1 Done Criteria
 

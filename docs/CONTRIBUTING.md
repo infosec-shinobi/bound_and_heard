@@ -101,6 +101,22 @@ export BOUND_AND_HEARD_ADMIN_PASSWORD="choose-a-local-admin-password"
 
 If `BOUND_AND_HEARD_ADMIN_PASSWORD` is not set, the app should start in read-only mode for safety. Read-only pages remain available, but mutating actions are disabled. The app should log a clear startup warning and the UI should explain disabled actions with a tooltip, popover, or inline message.
 
+Optionally configure the default local user's display name before the first app startup:
+
+Windows PowerShell:
+
+```powershell
+$env:BOUND_AND_HEARD_DEFAULT_USER_NAME = "Your Name"
+```
+
+Linux/macOS:
+
+```bash
+export BOUND_AND_HEARD_DEFAULT_USER_NAME="Your Name"
+```
+
+This value is used when the default local user is first created. It does not rename an existing user.
+
 Run migrations after the database foundation has been implemented and Alembic has been initialized. This command will fail until `alembic.ini` and the Alembic migration environment exist.
 
 After Alembic is set up, run migrations when setting up the app for the first time or after pulling changes that add new migration files. This does not need to be run before every app start if the database schema has not changed.
