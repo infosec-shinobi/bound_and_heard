@@ -1,8 +1,32 @@
+import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 
+from app.core.config import Settings, get_settings
 
-def create_app() -> FastAPI:
-    app = FastAPI(title="Bound & Heard")
+
+logger = logging.getLogger(__name__)
+
+
+def build_lifespan(settings: Settings):
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        if not settings.writes_enabled:
+            logger.warning(
+                "BOUND_AND_HEARD_ADMIN_PASSWORD is not set; write actions are disabled."
+            )
+        yield
+
+    return lifespan
+
+
+def create_app(settings: Settings | None = None) -> FastAPI:
+    settings = settings or get_settings()
+    app = FastAPI(title=settings.app_name, lifespan=build_lifespan(settings))
+    app.state.settings = settings
+    app.state.writes_enabled = settings.writes_enabled
 
     @app.get("/health", tags=["system"])
     async def health() -> dict[str, str]:

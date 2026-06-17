@@ -16,13 +16,13 @@ Build the foundation for Bound & Heard: a local-first FastAPI app with manual bo
 
 ## Chunk 2 - Configuration
 
-- [ ] Add `app/core/config.py`
-- [ ] Read settings from environment variables
-- [ ] Add `BOUND_AND_HEARD_ADMIN_PASSWORD`
-- [ ] Add app secret or session secret setting
-- [ ] Add database URL setting with SQLite default
-- [ ] Log startup warning when admin password is missing
-- [ ] Expose app-level `writes_enabled` state
+- [x] Add `app/core/config.py`
+- [x] Read settings from environment variables
+- [x] Add `BOUND_AND_HEARD_ADMIN_PASSWORD`
+- [x] Add app secret or session secret setting
+- [x] Add database URL setting with SQLite default
+- [x] Log startup warning when admin password is missing
+- [x] Expose app-level `writes_enabled` state
 
 ## Chunk 3 - Database Foundation
 

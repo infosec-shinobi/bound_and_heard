@@ -27,6 +27,15 @@ Recommended:
 
 Clone the repo:
 
+Windows PowerShell:
+
+```powershell
+git clone <repo-url>
+cd bound-and-heard
+```
+
+Linux/macOS:
+
 ```bash
 git clone <repo-url>
 cd bound-and-heard
@@ -34,11 +43,19 @@ cd bound-and-heard
 
 Create a virtual environment:
 
-```bash
+Windows PowerShell:
+
+```powershell
 python -m venv .venv
 ```
 
-Activate it:
+Linux/macOS:
+
+```bash
+python3 -m venv .venv
+```
+
+Activate it, if you prefer activated-shell commands:
 
 Windows PowerShell:
 
@@ -54,11 +71,23 @@ source .venv/bin/activate
 
 Install dependencies:
 
-```bash
-pip install -e ".[dev]"
+Windows PowerShell:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 ```
 
+Linux/macOS:
+
+```bash
+./.venv/bin/python -m pip install -e ".[dev]"
+```
+
+Use the project-local `.venv` for all Python commands. Do not install project dependencies into the global Python environment.
+
 Configure write protection for local-network use:
+
+Windows PowerShell:
 
 ```powershell
 $env:BOUND_AND_HEARD_ADMIN_PASSWORD = "choose-a-local-admin-password"
@@ -72,16 +101,34 @@ export BOUND_AND_HEARD_ADMIN_PASSWORD="choose-a-local-admin-password"
 
 If `BOUND_AND_HEARD_ADMIN_PASSWORD` is not set, the app should start in read-only mode for safety. Read-only pages remain available, but mutating actions are disabled. The app should log a clear startup warning and the UI should explain disabled actions with a tooltip, popover, or inline message.
 
-Run migrations:
+Run migrations after the database foundation has been implemented and Alembic has been initialized. This command will fail until `alembic.ini` and the Alembic migration environment exist.
+
+After Alembic is set up, run migrations when setting up the app for the first time or after pulling changes that add new migration files. This does not need to be run before every app start if the database schema has not changed.
+
+Windows PowerShell:
+
+```powershell
+.\.venv\Scripts\python.exe -m alembic upgrade head
+```
+
+Linux/macOS:
 
 ```bash
-alembic upgrade head
+./.venv/bin/python -m alembic upgrade head
 ```
 
 Start the app:
 
+Windows PowerShell:
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload
+```
+
+Linux/macOS:
+
 ```bash
-uvicorn app.main:app --reload
+./.venv/bin/python -m uvicorn app.main:app --reload
 ```
 
 Open:
@@ -126,8 +173,16 @@ Initial priorities:
 
 Run tests:
 
+Windows PowerShell:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest
+```
+
+Linux/macOS:
+
 ```bash
-pytest
+./.venv/bin/python -m pytest
 ```
 
 ## Data Safety
@@ -139,7 +194,12 @@ Do not commit local passwords, session secrets, or `.env` files.
 Recommended `.gitignore` entries:
 
 ```gitignore
-data/
+# Keep data folder structure, ignore generated/imported data.
+data/**
+!data/
+!data/**/
+!data/**/.gitkeep
+
 *.db
 *.sqlite
 *.sqlite3

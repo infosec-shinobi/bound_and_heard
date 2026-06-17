@@ -7,3 +7,13 @@ __pycache__/
 data/*.db
 data/*.db-*
 *.egg-info/
+*.db
+*.sqlite
+*.sqlite3
+.pytest_cache/
+
+# Runtime/imported app data
+data/**
+!data/
+!data/**/
+!data/**/.gitkeep
