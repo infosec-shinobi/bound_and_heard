@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <div class="row justify-content-center">
+    <div class="col-md-8 col-lg-5">
+      <div class="card app-login-card shadow-sm">
+        <div class="card-body">
+          <h1 class="h3 mb-3">Admin Login</h1>
+
+          {% if not writes_enabled %}
+            <div class="alert app-status-alert" role="alert">
+              <strong>Write actions are disabled.</strong> Set <code>BOUND_AND_HEARD_ADMIN_PASSWORD</code> to enable admin login.
+            </div>
+          {% endif %}
+
+          {% if error %}
+            <div class="alert alert-danger" role="alert">{{ error }}</div>
+          {% endif %}
+
+          {% if is_admin %}
+            <div class="alert alert-success" role="status">You are signed in as admin.</div>
+          {% endif %}
+
+          <form method="post" action="/admin/login" class="vstack gap-3">
+            <div>
+              <label class="form-label" for="password">Admin password</label>
+              <input class="form-control" id="password" name="password" type="password" required {% if not writes_enabled %}disabled{% endif %}>
+            </div>
+            <button class="btn btn-primary" type="submit" {% if not writes_enabled %}disabled{% endif %}>Log in</button>
+          </form>
+
+          <form method="post" action="/admin/logout" class="mt-3">
+            <button class="btn btn-outline-secondary" type="submit">Log out</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}

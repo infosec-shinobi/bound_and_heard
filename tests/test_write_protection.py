@@ -99,3 +99,35 @@ def test_admin_index_redirects_to_login() -> None:
 
     assert response.status_code == 303
     assert response.headers["location"] == "/admin/login"
+
+
+def test_dashboard_is_read_only_accessible_without_admin_password() -> None:
+    client = make_client(admin_password=None)
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "Dashboard" in response.text
+    assert "Read-only mode" in response.text
+    assert "Set BOUND_AND_HEARD_ADMIN_PASSWORD" in response.text
+
+
+def test_dashboard_shows_admin_login_required_when_writes_configured() -> None:
+    client = make_client()
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "Admin login required" in response.text
+    assert "Admin login is required for write actions." in response.text
+
+
+def test_dashboard_shows_writes_unlocked_after_login() -> None:
+    client = make_client()
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "Writes unlocked" in response.text
+    assert "Write actions are enabled for this admin session." in response.text

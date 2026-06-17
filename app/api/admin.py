@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Form, Request, status
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import RedirectResponse, Response
+from starlette.responses import HTMLResponse
 
+from app.core.templates import template_context, templates
 from app.core.write_protection import (
     ADMIN_SESSION_KEY,
-    is_admin_authenticated,
     verify_admin_password,
 )
 
@@ -22,47 +23,12 @@ def render_login_page(
     error: str | None = None,
     status_code: int = status.HTTP_200_OK,
 ) -> HTMLResponse:
-    writes_enabled = bool(request.app.state.writes_enabled)
-    is_authenticated = is_admin_authenticated(request)
-
-    disabled_message = ""
-    if not writes_enabled:
-        disabled_message = (
-            "<p><strong>Write actions are disabled.</strong> Set "
-            "<code>BOUND_AND_HEARD_ADMIN_PASSWORD</code> to enable admin login.</p>"
-        )
-
-    error_message = f"<p><strong>{error}</strong></p>" if error else ""
-    auth_message = "<p>You are signed in as admin.</p>" if is_authenticated else ""
-    login_disabled = "disabled" if not writes_enabled else ""
-
-    html = f"""
-    <!doctype html>
-    <html lang="en">
-      <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>Admin Login</title>
-      </head>
-      <body>
-        <main>
-          <h1>Admin Login</h1>
-          {disabled_message}
-          {error_message}
-          {auth_message}
-          <form method="post" action="/admin/login">
-            <label for="password">Admin password</label>
-            <input id="password" name="password" type="password" required {login_disabled}>
-            <button type="submit" {login_disabled}>Log in</button>
-          </form>
-          <form method="post" action="/admin/logout">
-            <button type="submit">Log out</button>
-          </form>
-        </main>
-      </body>
-    </html>
-    """
-    return HTMLResponse(html, status_code=status_code)
+    return templates.TemplateResponse(
+        request,
+        "admin/login.html",
+        template_context(request, page_title="Admin Login", error=error),
+        status_code=status_code,
+    )
 
 
 @router.get("/login", response_class=HTMLResponse)

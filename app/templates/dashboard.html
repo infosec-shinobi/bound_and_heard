@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% from "components/actions.html" import protected_link %}
+
+{% block content %}
+  <div class="row align-items-center gy-3 mb-4">
+    <div class="col-lg-8">
+      <p class="app-kicker small fw-semibold mb-2">Local-first reading tracker</p>
+      <h1 class="display-6 mb-2">Dashboard</h1>
+      <p class="lead app-muted mb-0">Track books, Libby imports, series progress, and reading stats from one private local app.</p>
+    </div>
+    <div class="col-lg-4 text-lg-end">
+      {{ protected_link('Add Book', '/books/new', can_write, write_disabled_reason) }}
+    </div>
+  </div>
+
+  <div class="alert app-status-alert" role="status">
+    {% if can_write %}
+      Write actions are enabled for this admin session.
+    {% elif writes_enabled %}
+      Read-only pages are available. Log in as admin to unlock write actions.
+    {% else %}
+      Read-only pages are available. Set <code>BOUND_AND_HEARD_ADMIN_PASSWORD</code> to enable write actions.
+    {% endif %}
+  </div>
+
+  <div class="row g-3">
+    <div class="col-md-4">
+      <section class="card h-100">
+        <div class="card-body">
+          <h2 class="h5">Books</h2>
+          <p class="app-muted mb-0">Book list and manual entry come next.</p>
+        </div>
+      </section>
+    </div>
+    <div class="col-md-4">
+      <section class="card h-100">
+        <div class="card-body">
+          <h2 class="h5">Imports</h2>
+          <p class="app-muted mb-0">Libby import workflows will appear after manual tracking basics.</p>
+        </div>
+      </section>
+    </div>
+    <div class="col-md-4">
+      <section class="card h-100">
+        <div class="card-body">
+          <h2 class="h5">Recaps</h2>
+          <p class="app-muted mb-0">Analytics and recap cards will build on the reading history.</p>
+        </div>
+      </section>
+    </div>
+  </div>
+
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    document.querySelectorAll('[data-bs-toggle="popover"]').forEach((element) => {
+      new bootstrap.Popover(element);
+    });
+  </script>
+{% endblock %}

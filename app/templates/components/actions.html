@@ -1,0 +1,10 @@
+{% macro protected_link(label, href, can_write, disabled_reason, class_name='btn btn-primary') -%}
+  {% if can_write %}
+    <a class="{{ class_name }}" href="{{ href }}">{{ label }}</a>
+  {% else %}
+    <span class="d-inline-block" tabindex="0" data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-content="{{ disabled_reason }}">
+      <a class="{{ class_name }} disabled" href="#" aria-disabled="true" role="button">{{ label }}</a>
+    </span>
+    <span class="visually-hidden">{{ disabled_reason }}</span>
+  {% endif %}
+{%- endmacro %}

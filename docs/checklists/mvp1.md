@@ -59,12 +59,12 @@ Build the foundation for Bound & Heard: a local-first FastAPI app with manual bo
 
 ## Chunk 6 - Layout and Navigation
 
-- [ ] Add `base.html`
-- [ ] Add Bootstrap
-- [ ] Add navigation shell
-- [ ] Add home/dashboard page
-- [ ] Show current write-protection state in UI
-- [ ] Add reusable disabled-action UI pattern
+- [x] Add `base.html`
+- [x] Add Bootstrap
+- [x] Add navigation shell
+- [x] Add home/dashboard page
+- [x] Show current write-protection state in UI
+- [x] Add reusable disabled-action UI pattern
 
 ## Chunk 7 - Book List
 
@@ -147,6 +147,7 @@ Build the foundation for Bound & Heard: a local-first FastAPI app with manual bo
 
 - [ ] Add protected settings/profile page for updating the current user's display name
 - [ ] Keep `BOUND_AND_HEARD_DEFAULT_USER_NAME` as first-run bootstrap only, not an overwrite mechanism
+- [ ] Add dark/light mode toggle switch
 
 ## MVP 1 Done Criteria
 
