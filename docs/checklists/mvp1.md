@@ -48,14 +48,14 @@ Build the foundation for Bound & Heard: a local-first FastAPI app with manual bo
 
 ## Chunk 5 - Write Protection
 
-- [ ] Add session middleware
-- [ ] Add admin login form/page
-- [ ] Verify admin password against `BOUND_AND_HEARD_ADMIN_PASSWORD`
-- [ ] Add logout action
-- [ ] Add dependency or helper for protected write actions
-- [ ] Disable mutating actions when env var is missing
-- [ ] Show tooltip, popover, or inline message for disabled actions
-- [ ] Keep read-only pages accessible
+- [x] Add session middleware
+- [x] Add admin login form/page
+- [x] Verify admin password against `BOUND_AND_HEARD_ADMIN_PASSWORD`
+- [x] Add logout action
+- [x] Add dependency or helper for protected write actions
+- [x] Disable mutating actions when env var is missing
+- [x] Show tooltip, popover, or inline message for disabled actions
+- [x] Keep read-only pages accessible
 
 ## Chunk 6 - Layout and Navigation
 
