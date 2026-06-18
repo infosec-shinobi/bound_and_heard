@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.api.admin import router as admin_router
+from app.api.books import router as books_router
 from app.api.pages import router as pages_router
 from app.core.bootstrap import bootstrap_default_user
 from app.core.config import Settings, get_settings
@@ -36,6 +37,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.writes_enabled = settings.writes_enabled
     app.include_router(admin_router)
+    app.include_router(books_router)
     app.include_router(pages_router)
 
     @app.get("/health", tags=["system"])

@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% from "components/actions.html" import protected_link %}
+
+{% block content %}
+  <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
+    <div>
+      <p class="app-kicker small fw-semibold mb-2">Library</p>
+      <h1 class="display-6 mb-1">Books</h1>
+      <p class="app-muted mb-0">Browse your local reading and listening history.</p>
+    </div>
+    <div>
+      {{ protected_link('Add Book', '/books/new', can_write, write_disabled_reason) }}
+    </div>
+  </div>
+
+  <form class="card mb-4" method="get" action="/books">
+    <div class="card-body">
+      <div class="row g-3 align-items-end">
+        <div class="col-lg-4">
+          <label class="form-label" for="q">Search</label>
+          <input class="form-control" id="q" name="q" value="{{ q }}" placeholder="Title or author">
+        </div>
+        <div class="col-md-4 col-lg-2">
+          <label class="form-label" for="status">Status</label>
+          <select class="form-select" id="status" name="status">
+            <option value="">Any status</option>
+            {% for value in ['want_to_read', 'borrowed', 'started', 'completed', 'abandoned', 'unknown'] %}
+              <option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>{{ value.replace('_', ' ').title() }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-4 col-lg-2">
+          <label class="form-label" for="format">Format</label>
+          <select class="form-select" id="format" name="format">
+            <option value="">Any format</option>
+            {% for value in ['ebook', 'audiobook', 'physical', 'unknown'] %}
+              <option value="{{ value }}" {% if selected_format == value %}selected{% endif %}>{{ value.replace('_', ' ').title() }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-4 col-lg-2">
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" id="include_archived" name="include_archived" value="true" {% if include_archived %}checked{% endif %}>
+            <label class="form-check-label" for="include_archived">Include archived</label>
+          </div>
+        </div>
+        <div class="col-lg-2 d-grid">
+          <button class="btn btn-outline-primary" type="submit">Apply Filters</button>
+        </div>
+      </div>
+    </div>
+  </form>
+
+  {% if books %}
+    <div class="card">
+      <div class="table-responsive">
+        <table class="table table-dark table-hover align-middle mb-0 app-table">
+          <thead>
+            <tr>
+              <th scope="col">Title</th>
+              <th scope="col">Author</th>
+              <th scope="col">Format</th>
+              <th scope="col">Status</th>
+              <th scope="col">Rating</th>
+              <th scope="col">Progress</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for book in books %}
+              {% set progress = book.progress.progress_percent if book.progress and book.progress.progress_percent is not none else book.manual_progress_percent %}
+              <tr {% if book.archived_at %}class="app-archived-row"{% endif %}>
+                <td>
+                  <div class="fw-semibold">{{ book.title }}</div>
+                  {% if book.subtitle %}<div class="small app-muted">{{ book.subtitle }}</div>{% endif %}
+                  {% if book.archived_at %}<span class="badge app-badge-muted mt-1">Archived</span>{% endif %}
+                </td>
+                <td>{{ book.primary_author_name or 'Unknown' }}</td>
+                <td>{{ book.format.replace('_', ' ').title() }}</td>
+                <td>{{ book.status.replace('_', ' ').title() }}</td>
+                <td>{% if book.rating is not none %}{{ '%.1f'|format(book.rating) }}{% else %}<span class="app-muted">Not rated</span>{% endif %}</td>
+                <td>{% if progress is not none %}{{ '%.0f'|format(progress) }}%{% else %}<span class="app-muted">Unknown</span>{% endif %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% else %}
+    <section class="card text-center py-5">
+      <div class="card-body">
+        <p class="app-kicker small fw-semibold mb-2">Empty library</p>
+        <h2 class="h4">No books found</h2>
+        <p class="app-muted mb-4">Add your first book manually, or adjust the filters when imports are available.</p>
+        {{ protected_link('Add Book', '/books/new', can_write, write_disabled_reason) }}
+      </div>
+    </section>
+  {% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    document.querySelectorAll('[data-bs-toggle="popover"]').forEach((element) => {
+      new bootstrap.Popover(element);
+    });
+  </script>
+{% endblock %}

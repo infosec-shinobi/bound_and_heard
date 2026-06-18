@@ -68,14 +68,14 @@ Build the foundation for Bound & Heard: a local-first FastAPI app with manual bo
 
 ## Chunk 7 - Book List
 
-- [ ] Add books route module
-- [ ] Add book list page
-- [ ] Show title, author, format, status, rating, and progress
-- [ ] Hide archived books by default
-- [ ] Add filter to include archived books
-- [ ] Add empty state
-- [ ] Add basic search/filter placeholders
-- [ ] Add protected Add Book action
+- [x] Add books route module
+- [x] Add book list page
+- [x] Show title, author, format, status, rating, and progress
+- [x] Hide archived books by default
+- [x] Add filter to include archived books
+- [x] Add empty state
+- [x] Add basic search/filter placeholders
+- [x] Add protected Add Book action
 
 ## Chunk 8 - Add Book
 
