@@ -355,15 +355,183 @@ def test_book_detail_edit_and_archive_actions_are_protected() -> None:
     assert archive_response.status_code == 403
 
 
-def test_book_detail_edit_and_archive_placeholders_after_login() -> None:
+def test_book_detail_edit_form_is_available_after_login() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(
+        session_factory,
+        title="Editable Book",
+        author="Author",
+        book_format="ebook",
+        status="started",
+        rating=3,
+        manual_progress_percent=25,
+    )
+    client.post("/admin/login", data={"password": "secret"})
+
+    edit_response = client.get(f"/books/{book.id}/edit")
+
+    assert edit_response.status_code == 200
+    assert "Edit Book" in edit_response.text
+    assert "Editable Book" in edit_response.text
+    assert "Save Changes" in edit_response.text
+
+
+def test_update_book_changes_fields_and_redirects_to_detail() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Old Title", author="Old Author")
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.post(
+        f"/books/{book.id}/edit",
+        data={
+            "title": "New Title",
+            "subtitle": "New Subtitle",
+            "primary_author_name": "New Author",
+            "format": "physical",
+            "status": "want_to_read",
+            "rating": "4.2",
+            "notes": "Updated notes.",
+            "started_on": "2026-06-01",
+            "page_count": "300",
+            "audio_hours": "",
+            "manual_progress_percent": "10",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/books/{book.id}"
+    with session_factory() as db:
+        updated = db.get(Book, book.id)
+        assert updated is not None
+        assert updated.title == "New Title"
+        assert updated.subtitle == "New Subtitle"
+        assert updated.primary_author_name == "New Author"
+        assert updated.format == "physical"
+        assert updated.status == "want_to_read"
+        assert updated.rating == 4.2
+        assert updated.notes == "Updated notes."
+        assert updated.page_count == 300
+        assert updated.audio_seconds is None
+        assert updated.manual_progress_percent == 10
+
+
+def test_update_book_creates_correction_event_for_status_progress_or_completion_changes() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(
+        session_factory,
+        title="Corrected Book",
+        author="Author",
+        status="started",
+        manual_progress_percent=20,
+    )
+    with session_factory() as db:
+        db.add(
+            ReadingEvent(
+                user_id=DEFAULT_LOCAL_USER_ID,
+                book_id=book.id,
+                source="manual",
+                event_type="started",
+                event_date=datetime(2026, 6, 1, tzinfo=timezone.utc),
+            )
+        )
+        db.commit()
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.post(
+        f"/books/{book.id}/edit",
+        data={
+            "title": "Corrected Book",
+            "primary_author_name": "Author",
+            "format": "ebook",
+            "status": "completed",
+            "completed_on": "2026-06-05",
+            "manual_progress_percent": "100",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    with session_factory() as db:
+        events = db.query(ReadingEvent).filter_by(book_id=book.id).order_by(ReadingEvent.id).all()
+
+    assert [event.event_type for event in events] == ["started", "manually_corrected"]
+    correction = events[-1]
+    assert correction.progress_percent == 100
+    assert correction.raw_data == {
+        "changed_fields": {
+            "status": {"from": "started", "to": "completed"},
+            "completed_on": {"from": None, "to": "2026-06-05"},
+            "manual_progress_percent": {"from": 20.0, "to": 100.0},
+        }
+    }
+
+
+def test_update_book_does_not_delete_existing_event_history() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="History Book", author="Author")
+    with session_factory() as db:
+        db.add(
+            ReadingEvent(
+                user_id=DEFAULT_LOCAL_USER_ID,
+                book_id=book.id,
+                source="manual",
+                event_type="started",
+                event_date=datetime(2026, 6, 1, tzinfo=timezone.utc),
+            )
+        )
+        db.commit()
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.post(
+        f"/books/{book.id}/edit",
+        data={
+            "title": "History Book Renamed",
+            "primary_author_name": "Author",
+            "format": "ebook",
+            "status": "started",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    with session_factory() as db:
+        events = db.query(ReadingEvent).filter_by(book_id=book.id).all()
+
+    assert len(events) == 1
+    assert events[0].event_type == "started"
+
+
+def test_update_book_renders_validation_errors() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Validation Book", author="Author")
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.post(
+        f"/books/{book.id}/edit",
+        data={
+            "title": " ",
+            "format": "ebook",
+            "status": "started",
+            "completed_on": "bad-date",
+        },
+    )
+
+    assert response.status_code == 400
+    assert "Title is required." in response.text
+    assert "Completed date must be a valid date." in response.text
+    with session_factory() as db:
+        unchanged = db.get(Book, book.id)
+        assert unchanged is not None
+        assert unchanged.title == "Validation Book"
+
+
+def test_archive_placeholder_remains_after_login() -> None:
     client, session_factory = make_books_client()
     book = add_book(session_factory, title="Protected Book", author="Author")
     client.post("/admin/login", data={"password": "secret"})
 
-    edit_response = client.get(f"/books/{book.id}/edit")
     archive_response = client.post(f"/books/{book.id}/archive")
 
-    assert edit_response.status_code == 501
-    assert "The protected edit form will be implemented in Chunk 10." in edit_response.text
     assert archive_response.status_code == 501
     assert "Archive behavior will be implemented in Chunk 11." in archive_response.text

@@ -6,10 +6,10 @@
       <div class="d-flex align-items-center justify-content-between gap-3 mb-4">
         <div>
           <p class="app-kicker small fw-semibold mb-2">Manual entry</p>
-          <h1 class="display-6 mb-1">Add Book</h1>
-          <p class="app-muted mb-0">Create a local book record. Imports and enrichment can fill in more later.</p>
+          <h1 class="display-6 mb-1">{{ heading }}</h1>
+          <p class="app-muted mb-0">{{ description }}</p>
         </div>
-        <a class="btn btn-outline-secondary" href="/books">Back to Books</a>
+        <a class="btn btn-outline-secondary" href="{{ cancel_href }}">Cancel</a>
       </div>
 
       {% if errors %}
@@ -21,7 +21,7 @@
         </div>
       {% endif %}
 
-      <form class="card" method="post" action="/books/new">
+      <form class="card" method="post" action="{{ form_action }}">
         <div class="card-body">
           <div class="row g-3">
             <div class="col-md-8">
@@ -88,8 +88,8 @@
           </div>
         </div>
         <div class="card-footer d-flex justify-content-end gap-2">
-          <a class="btn btn-outline-secondary" href="/books">Cancel</a>
-          <button class="btn btn-primary" type="submit">Create Book</button>
+          <a class="btn btn-outline-secondary" href="{{ cancel_href }}">Cancel</a>
+          <button class="btn btn-primary" type="submit">{{ submit_label }}</button>
         </div>
       </form>
     </div>

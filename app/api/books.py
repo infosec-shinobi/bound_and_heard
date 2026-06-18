@@ -105,6 +105,97 @@ def display_progress(book: Book) -> float | None:
     return book.manual_progress_percent
 
 
+def audio_seconds_to_hours(audio_seconds: int | None) -> str:
+    if audio_seconds is None:
+        return ""
+    return f"{audio_seconds / 3600:g}"
+
+
+def book_form_values(book: Book) -> dict[str, str]:
+    return {
+        "title": book.title,
+        "subtitle": book.subtitle or "",
+        "primary_author_name": book.primary_author_name or "",
+        "format": book.format,
+        "status": book.status,
+        "rating": f"{book.rating:g}" if book.rating is not None else "",
+        "notes": book.notes or "",
+        "started_on": book.started_on.isoformat() if book.started_on else "",
+        "completed_on": book.completed_on.isoformat() if book.completed_on else "",
+        "page_count": str(book.page_count) if book.page_count is not None else "",
+        "audio_hours": audio_seconds_to_hours(book.audio_seconds),
+        "manual_progress_percent": f"{book.manual_progress_percent:g}"
+        if book.manual_progress_percent is not None
+        else "",
+    }
+
+
+def submitted_form_values(
+    *,
+    title: str,
+    subtitle: str | None,
+    primary_author_name: str | None,
+    format: str,
+    status_value: str,
+    rating: str | None,
+    notes: str | None,
+    started_on: str | None,
+    completed_on: str | None,
+    page_count: str | None,
+    audio_hours: str | None,
+    manual_progress_percent: str | None,
+) -> dict[str, str]:
+    return {
+        "title": title,
+        "subtitle": subtitle or "",
+        "primary_author_name": primary_author_name or "",
+        "format": format,
+        "status": status_value,
+        "rating": rating or "",
+        "notes": notes or "",
+        "started_on": started_on or "",
+        "completed_on": completed_on or "",
+        "page_count": page_count or "",
+        "audio_hours": audio_hours or "",
+        "manual_progress_percent": manual_progress_percent or "",
+    }
+
+
+def correction_event_for_changes(
+    book: Book,
+    *,
+    old_status: str,
+    old_completed_on: date | None,
+    old_progress: float | None,
+) -> ReadingEvent | None:
+    changed_fields: dict[str, dict[str, object]] = {}
+    if book.status != old_status:
+        changed_fields["status"] = {"from": old_status, "to": book.status}
+    if book.completed_on != old_completed_on:
+        changed_fields["completed_on"] = {
+            "from": old_completed_on.isoformat() if old_completed_on else None,
+            "to": book.completed_on.isoformat() if book.completed_on else None,
+        }
+    if book.manual_progress_percent != old_progress:
+        changed_fields["manual_progress_percent"] = {
+            "from": old_progress,
+            "to": book.manual_progress_percent,
+        }
+
+    if not changed_fields:
+        return None
+
+    return ReadingEvent(
+        user_id=book.user_id,
+        book_id=book.id,
+        source="manual",
+        event_type="manually_corrected",
+        event_date=datetime.now(timezone.utc),
+        progress_percent=book.manual_progress_percent,
+        raw_data={"changed_fields": changed_fields},
+    )
+
+
 def build_initial_events(book: Book) -> list[ReadingEvent]:
     events: list[ReadingEvent] = []
 
@@ -238,6 +329,11 @@ async def new_book_form(
         template_context(
             request,
             page_title="Add Book",
+            heading="Add Book",
+            description="Create a local book record. Imports and enrichment can fill in more later.",
+            form_action="/books/new",
+            cancel_href="/books",
+            submit_label="Create Book",
             errors=[],
             form={},
             book_statuses=BOOK_STATUSES,
@@ -264,20 +360,20 @@ async def create_book(
     audio_hours: str | None = Form(default=None),
     manual_progress_percent: str | None = Form(default=None),
 ) -> Response:
-    form = {
-        "title": title,
-        "subtitle": subtitle or "",
-        "primary_author_name": primary_author_name or "",
-        "format": format,
-        "status": status_value,
-        "rating": rating or "",
-        "notes": notes or "",
-        "started_on": started_on or "",
-        "completed_on": completed_on or "",
-        "page_count": page_count or "",
-        "audio_hours": audio_hours or "",
-        "manual_progress_percent": manual_progress_percent or "",
-    }
+    form = submitted_form_values(
+        title=title,
+        subtitle=subtitle,
+        primary_author_name=primary_author_name,
+        format=format,
+        status_value=status_value,
+        rating=rating,
+        notes=notes,
+        started_on=started_on,
+        completed_on=completed_on,
+        page_count=page_count,
+        audio_hours=audio_hours,
+        manual_progress_percent=manual_progress_percent,
+    )
     errors: list[str] = []
     clean_title = clean_optional(title)
     if clean_title is None:
@@ -310,6 +406,11 @@ async def create_book(
             template_context(
                 request,
                 page_title="Add Book",
+                heading="Add Book",
+                description="Create a local book record. Imports and enrichment can fill in more later.",
+                form_action="/books/new",
+                cancel_href="/books",
+                submit_label="Create Book",
                 errors=errors,
                 form=form,
                 book_statuses=BOOK_STATUSES,
@@ -347,7 +448,7 @@ async def create_book(
 
 
 @router.get("/{book_id}/edit", response_class=HTMLResponse)
-async def edit_book_placeholder(
+async def edit_book_form(
     book_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -364,16 +465,140 @@ async def edit_book_placeholder(
 
     return templates.TemplateResponse(
         request,
-        "books/action_placeholder.html",
+        "books/new.html",
         template_context(
             request,
             page_title="Edit Book",
             heading="Edit Book",
-            message="The protected edit form will be implemented in Chunk 10.",
-            book=book,
+            description="Update this local book record without deleting its reading event history.",
+            form_action=f"/books/{book.id}/edit",
+            cancel_href=f"/books/{book.id}",
+            submit_label="Save Changes",
+            errors=[],
+            form=book_form_values(book),
+            book_statuses=BOOK_STATUSES,
+            book_formats=BOOK_FORMATS,
         ),
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
     )
+
+
+@router.post("/{book_id}/edit")
+async def update_book(
+    book_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_write_access),
+    title: str = Form(...),
+    subtitle: str | None = Form(default=None),
+    primary_author_name: str | None = Form(default=None),
+    format: str = Form(default="unknown"),
+    status_value: str = Form(default="unknown", alias="status"),
+    rating: str | None = Form(default=None),
+    notes: str | None = Form(default=None),
+    started_on: str | None = Form(default=None),
+    completed_on: str | None = Form(default=None),
+    page_count: str | None = Form(default=None),
+    audio_hours: str | None = Form(default=None),
+    manual_progress_percent: str | None = Form(default=None),
+) -> Response:
+    book = db.get(Book, book_id)
+    if book is None or book.user_id != DEFAULT_LOCAL_USER_ID:
+        return templates.TemplateResponse(
+            request,
+            "books/not_found.html",
+            template_context(request, page_title="Book Not Found"),
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+
+    form = submitted_form_values(
+        title=title,
+        subtitle=subtitle,
+        primary_author_name=primary_author_name,
+        format=format,
+        status_value=status_value,
+        rating=rating,
+        notes=notes,
+        started_on=started_on,
+        completed_on=completed_on,
+        page_count=page_count,
+        audio_hours=audio_hours,
+        manual_progress_percent=manual_progress_percent,
+    )
+    errors: list[str] = []
+    clean_title = clean_optional(title)
+    if clean_title is None:
+        errors.append("Title is required.")
+    if format not in BOOK_FORMATS:
+        errors.append("Format is invalid.")
+    if status_value not in BOOK_STATUSES:
+        errors.append("Status is invalid.")
+
+    parsed_rating = parse_optional_float(rating, "Rating", errors, minimum=0, maximum=5)
+    parsed_started_on = parse_optional_date(started_on, "Started date", errors)
+    parsed_completed_on = parse_optional_date(completed_on, "Completed date", errors)
+    parsed_page_count = parse_optional_int(page_count, "Page count", errors, minimum=1)
+    parsed_audio_hours = parse_optional_float(audio_hours, "Audio duration", errors, minimum=0)
+    parsed_progress = parse_optional_float(
+        manual_progress_percent,
+        "Manual progress percent",
+        errors,
+        minimum=0,
+        maximum=100,
+    )
+    if parsed_started_on and parsed_completed_on and parsed_completed_on < parsed_started_on:
+        errors.append("Completed date cannot be before started date.")
+
+    if errors:
+        return templates.TemplateResponse(
+            request,
+            "books/new.html",
+            template_context(
+                request,
+                page_title="Edit Book",
+                heading="Edit Book",
+                description="Update this local book record without deleting its reading event history.",
+                form_action=f"/books/{book.id}/edit",
+                cancel_href=f"/books/{book.id}",
+                submit_label="Save Changes",
+                errors=errors,
+                form=form,
+                book_statuses=BOOK_STATUSES,
+                book_formats=BOOK_FORMATS,
+            ),
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    old_status = book.status
+    old_completed_on = book.completed_on
+    old_progress = book.manual_progress_percent
+
+    book.title = clean_title or ""
+    book.subtitle = clean_optional(subtitle)
+    book.primary_author_name = clean_optional(primary_author_name)
+    book.format = format
+    book.status = status_value
+    book.rating = parsed_rating
+    book.notes = clean_optional(notes)
+    book.started_on = parsed_started_on
+    book.completed_on = parsed_completed_on
+    book.page_count = parsed_page_count
+    book.audio_seconds = round(parsed_audio_hours * 3600) if parsed_audio_hours is not None else None
+    book.manual_progress_percent = parsed_progress
+    book.title_source = "manual"
+    book.author_source = "manual" if clean_optional(primary_author_name) else None
+    book.metadata_source = "manual"
+
+    correction_event = correction_event_for_changes(
+        book,
+        old_status=old_status,
+        old_completed_on=old_completed_on,
+        old_progress=old_progress,
+    )
+    if correction_event is not None:
+        db.add(correction_event)
+
+    db.commit()
+    return RedirectResponse(f"/books/{book.id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/{book_id}/archive")

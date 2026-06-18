@@ -108,11 +108,11 @@ Build the foundation for Bound & Heard: a local-first FastAPI app with manual bo
 
 ## Chunk 10 - Edit Book
 
-- [ ] Add edit form
-- [ ] Update book fields
-- [ ] Create correction event when status, progress, or completion changes
-- [ ] Avoid silently deleting event history
-- [ ] Redirect to detail page after save
+- [x] Add edit form
+- [x] Update book fields
+- [x] Create correction event when status, progress, or completion changes
+- [x] Avoid silently deleting event history
+- [x] Redirect to detail page after save
 
 ## Chunk 11 - Archive Book
 
