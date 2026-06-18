@@ -526,12 +526,111 @@ def test_update_book_renders_validation_errors() -> None:
         assert unchanged.title == "Validation Book"
 
 
-def test_archive_placeholder_remains_after_login() -> None:
+def test_archive_book_sets_archived_at_and_redirects() -> None:
     client, session_factory = make_books_client()
-    book = add_book(session_factory, title="Protected Book", author="Author")
+    book = add_book(session_factory, title="Archive Me", author="Author")
     client.post("/admin/login", data={"password": "secret"})
 
-    archive_response = client.post(f"/books/{book.id}/archive")
+    response = client.post(f"/books/{book.id}/archive", follow_redirects=False)
 
-    assert archive_response.status_code == 501
-    assert "Archive behavior will be implemented in Chunk 11." in archive_response.text
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/books/{book.id}"
+    with session_factory() as db:
+        archived = db.get(Book, book.id)
+        assert archived is not None
+        assert archived.archived_at is not None
+
+
+def test_archived_book_is_hidden_by_default_but_visible_with_filter() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Hidden Archive", author="Author")
+    client.post("/admin/login", data={"password": "secret"})
+    client.post(f"/books/{book.id}/archive")
+
+    default_response = client.get("/books")
+    filtered_response = client.get("/books?include_archived=true")
+
+    assert default_response.status_code == 200
+    assert "Hidden Archive" not in default_response.text
+    assert filtered_response.status_code == 200
+    assert "Hidden Archive" in filtered_response.text
+    assert "Archived" in filtered_response.text
+
+
+def test_archive_preserves_book_data_events_and_progress() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(
+        session_factory,
+        title="Preserved Book",
+        author="Author",
+        rating=4.5,
+        manual_progress_percent=50,
+    )
+    with session_factory() as db:
+        db_book = db.get(Book, book.id)
+        assert db_book is not None
+        db_book.notes = "Keep this note."
+        db_book.libby_title_id = "libby-123"
+        db_book.libby_share_url = "https://share.libbyapp.com/title/123"
+        db.add(
+            BookProgress(
+                user_id=DEFAULT_LOCAL_USER_ID,
+                book_id=book.id,
+                source="manual",
+                progress_percent=50,
+            )
+        )
+        db.add(
+            ReadingEvent(
+                user_id=DEFAULT_LOCAL_USER_ID,
+                book_id=book.id,
+                source="manual",
+                event_type="progress_seen",
+                event_date=datetime(2026, 6, 1, tzinfo=timezone.utc),
+                progress_percent=50,
+            )
+        )
+        db.commit()
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.post(f"/books/{book.id}/archive", follow_redirects=False)
+
+    assert response.status_code == 303
+    with session_factory() as db:
+        archived = db.get(Book, book.id)
+        assert archived is not None
+        assert archived.archived_at is not None
+        assert archived.notes == "Keep this note."
+        assert archived.rating == 4.5
+        assert archived.manual_progress_percent == 50
+        assert archived.libby_title_id == "libby-123"
+        assert archived.libby_share_url == "https://share.libbyapp.com/title/123"
+        assert db.query(BookProgress).filter_by(book_id=book.id).count() == 1
+        assert db.query(ReadingEvent).filter_by(book_id=book.id).count() == 1
+
+
+def test_restore_book_clears_archived_at_and_redirects() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Restore Me", author="Author", archived=True)
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.post(f"/books/{book.id}/restore", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/books/{book.id}"
+    with session_factory() as db:
+        restored = db.get(Book, book.id)
+        assert restored is not None
+        assert restored.archived_at is None
+
+
+def test_archived_book_detail_shows_restore_action_after_login() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Restorable Detail", author="Author", archived=True)
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.get(f"/books/{book.id}")
+
+    assert response.status_code == 200
+    assert "Restore" in response.text
+    assert f'action="/books/{book.id}/restore"' in response.text

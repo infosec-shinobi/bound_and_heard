@@ -116,12 +116,12 @@ Build the foundation for Bound & Heard: a local-first FastAPI app with manual bo
 
 ## Chunk 11 - Archive Book
 
-- [ ] Implement archive instead of hard delete
-- [ ] Set `archived_at` when a book is archived
-- [ ] Hide archived books from the default list
-- [ ] Allow viewing archived books with a filter
-- [ ] Add restore action if it remains simple
-- [ ] Preserve reading events, progress, notes, ratings, and Libby identifiers
+- [x] Implement archive instead of hard delete
+- [x] Set `archived_at` when a book is archived
+- [x] Hide archived books from the default list
+- [x] Allow viewing archived books with a filter
+- [x] Add restore action if it remains simple
+- [x] Preserve reading events, progress, notes, ratings, and Libby identifiers
 
 ## Chunk 12 - Tests
 

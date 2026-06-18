@@ -13,12 +13,18 @@
     <div class="d-flex flex-wrap gap-2">
       {{ protected_link('Edit', '/books/' ~ book.id ~ '/edit', can_write, write_disabled_reason, 'btn btn-outline-primary') }}
       {% if can_write %}
-        <form method="post" action="/books/{{ book.id }}/archive">
-          <button class="btn btn-outline-danger" type="submit">Archive</button>
-        </form>
+        {% if book.archived_at %}
+          <form method="post" action="/books/{{ book.id }}/restore">
+            <button class="btn btn-outline-success" type="submit">Restore</button>
+          </form>
+        {% else %}
+          <form method="post" action="/books/{{ book.id }}/archive">
+            <button class="btn btn-outline-danger" type="submit">Archive</button>
+          </form>
+        {% endif %}
       {% else %}
         <span class="d-inline-block" tabindex="0" data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-content="{{ write_disabled_reason }}">
-          <button class="btn btn-outline-danger" type="button" disabled>Archive</button>
+          <button class="btn {% if book.archived_at %}btn-outline-success{% else %}btn-outline-danger{% endif %}" type="button" disabled>{% if book.archived_at %}Restore{% else %}Archive{% endif %}</button>
         </span>
       {% endif %}
       <a class="btn btn-outline-secondary" href="/books">Back to Books</a>

@@ -602,12 +602,12 @@ async def update_book(
 
 
 @router.post("/{book_id}/archive")
-async def archive_book_placeholder(
+async def archive_book(
     book_id: int,
     request: Request,
     db: Session = Depends(get_db),
     _: None = Depends(require_write_access),
-) -> HTMLResponse:
+) -> Response:
     book = db.get(Book, book_id)
     if book is None or book.user_id != DEFAULT_LOCAL_USER_ID:
         return templates.TemplateResponse(
@@ -617,18 +617,32 @@ async def archive_book_placeholder(
             status_code=status.HTTP_404_NOT_FOUND,
         )
 
-    return templates.TemplateResponse(
-        request,
-        "books/action_placeholder.html",
-        template_context(
+    if book.archived_at is None:
+        book.archived_at = datetime.now(timezone.utc)
+        db.commit()
+    return RedirectResponse(f"/books/{book.id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{book_id}/restore")
+async def restore_book(
+    book_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_write_access),
+) -> Response:
+    book = db.get(Book, book_id)
+    if book is None or book.user_id != DEFAULT_LOCAL_USER_ID:
+        return templates.TemplateResponse(
             request,
-            page_title="Archive Book",
-            heading="Archive Book",
-            message="Archive behavior will be implemented in Chunk 11.",
-            book=book,
-        ),
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-    )
+            "books/not_found.html",
+            template_context(request, page_title="Book Not Found"),
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+
+    if book.archived_at is not None:
+        book.archived_at = None
+        db.commit()
+    return RedirectResponse(f"/books/{book.id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/{book_id}", response_class=HTMLResponse)
