@@ -10,7 +10,7 @@ from app.core.bootstrap import DEFAULT_LOCAL_USER_ID
 from app.core.config import Settings
 from app.core.database import Base, get_db
 from app.main import create_app
-from app.models import Book, BookProgress, User
+from app.models import Book, BookProgress, ReadingEvent, User
 
 
 def make_books_client(admin_password: str | None = "secret") -> tuple[TestClient, sessionmaker[Session]]:
@@ -163,7 +163,7 @@ def test_books_page_filters_by_search_status_and_format() -> None:
     assert "Other Book" not in response.text
 
 
-def test_add_book_placeholder_is_protected() -> None:
+def test_add_book_form_is_protected() -> None:
     client, _ = make_books_client()
 
     response = client.get("/books/new")
@@ -171,11 +171,99 @@ def test_add_book_placeholder_is_protected() -> None:
     assert response.status_code == 403
 
 
-def test_add_book_placeholder_is_available_after_admin_login() -> None:
+def test_add_book_form_is_available_after_admin_login() -> None:
     client, _ = make_books_client()
     client.post("/admin/login", data={"password": "secret"})
 
     response = client.get("/books/new")
 
-    assert response.status_code == 501
-    assert "The protected add-book form will be implemented in Chunk 8." in response.text
+    assert response.status_code == 200
+    assert "Add Book" in response.text
+    assert "Create Book" in response.text
+
+
+def test_create_book_saves_supported_fields_and_redirects_to_detail() -> None:
+    client, session_factory = make_books_client()
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.post(
+        "/books/new",
+        data={
+            "title": "A Psalm for the Wild-Built",
+            "subtitle": "Monk and Robot",
+            "primary_author_name": "Becky Chambers",
+            "format": "audiobook",
+            "status": "started",
+            "rating": "4.5",
+            "notes": "Cozy robots.",
+            "started_on": "2026-06-01",
+            "page_count": "160",
+            "audio_hours": "4.25",
+            "manual_progress_percent": "35",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"].startswith("/books/")
+
+    with session_factory() as db:
+        book = db.query(Book).filter_by(title="A Psalm for the Wild-Built").one()
+        assert book.subtitle == "Monk and Robot"
+        assert book.primary_author_name == "Becky Chambers"
+        assert book.format == "audiobook"
+        assert book.status == "started"
+        assert book.rating == 4.5
+        assert book.notes == "Cozy robots."
+        assert book.page_count == 160
+        assert book.audio_seconds == 15300
+        assert book.manual_progress_percent == 35
+
+
+def test_create_book_creates_initial_reading_events() -> None:
+    client, session_factory = make_books_client()
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.post(
+        "/books/new",
+        data={
+            "title": "Finished Book",
+            "format": "ebook",
+            "status": "completed",
+            "started_on": "2026-06-01",
+            "completed_on": "2026-06-03",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    with session_factory() as db:
+        book = db.query(Book).filter_by(title="Finished Book").one()
+        events = db.query(ReadingEvent).filter_by(book_id=book.id).order_by(ReadingEvent.event_type).all()
+
+    assert [event.event_type for event in events] == ["manually_completed", "started"]
+    completed_event = next(event for event in events if event.event_type == "manually_completed")
+    assert completed_event.progress_percent == 100
+
+
+def test_create_book_renders_validation_errors() -> None:
+    client, session_factory = make_books_client()
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.post(
+        "/books/new",
+        data={
+            "title": " ",
+            "format": "ebook",
+            "status": "started",
+            "rating": "9",
+            "manual_progress_percent": "120",
+        },
+    )
+
+    assert response.status_code == 400
+    assert "Title is required." in response.text
+    assert "Rating must be no more than 5." in response.text
+    assert "Manual progress percent must be no more than 100." in response.text
+    with session_factory() as db:
+        assert db.query(Book).count() == 0

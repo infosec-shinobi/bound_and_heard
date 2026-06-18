@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <div class="row justify-content-center">
+    <div class="col-xl-9">
+      <div class="d-flex align-items-center justify-content-between gap-3 mb-4">
+        <div>
+          <p class="app-kicker small fw-semibold mb-2">Manual entry</p>
+          <h1 class="display-6 mb-1">Add Book</h1>
+          <p class="app-muted mb-0">Create a local book record. Imports and enrichment can fill in more later.</p>
+        </div>
+        <a class="btn btn-outline-secondary" href="/books">Back to Books</a>
+      </div>
+
+      {% if errors %}
+        <div class="alert alert-danger" role="alert">
+          <p class="fw-semibold mb-2">Fix these fields:</p>
+          <ul class="mb-0">
+            {% for error in errors %}<li>{{ error }}</li>{% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+
+      <form class="card" method="post" action="/books/new">
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-8">
+              <label class="form-label" for="title">Title</label>
+              <input class="form-control" id="title" name="title" value="{{ form.get('title', '') }}" required autofocus>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="format">Format</label>
+              <select class="form-select" id="format" name="format">
+                {% for value in book_formats %}
+                  <option value="{{ value }}" {% if form.get('format', 'unknown') == value %}selected{% endif %}>{{ value.replace('_', ' ').title() }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label" for="subtitle">Subtitle</label>
+              <input class="form-control" id="subtitle" name="subtitle" value="{{ form.get('subtitle', '') }}">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="primary_author_name">Author name</label>
+              <input class="form-control" id="primary_author_name" name="primary_author_name" value="{{ form.get('primary_author_name', '') }}">
+            </div>
+
+            <div class="col-md-4">
+              <label class="form-label" for="status">Status</label>
+              <select class="form-select" id="status" name="status">
+                {% for value in book_statuses %}
+                  <option value="{{ value }}" {% if form.get('status', 'unknown') == value %}selected{% endif %}>{{ value.replace('_', ' ').title() }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="rating">Rating</label>
+              <input class="form-control" id="rating" name="rating" type="number" min="0" max="5" step="0.1" value="{{ form.get('rating', '') }}" placeholder="0-5">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="manual_progress_percent">Manual progress percent</label>
+              <input class="form-control" id="manual_progress_percent" name="manual_progress_percent" type="number" min="0" max="100" step="1" value="{{ form.get('manual_progress_percent', '') }}" placeholder="0-100">
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label" for="started_on">Started date</label>
+              <input class="form-control" id="started_on" name="started_on" type="date" value="{{ form.get('started_on', '') }}">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="completed_on">Completed date</label>
+              <input class="form-control" id="completed_on" name="completed_on" type="date" value="{{ form.get('completed_on', '') }}">
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label" for="page_count">Page count</label>
+              <input class="form-control" id="page_count" name="page_count" type="number" min="1" step="1" value="{{ form.get('page_count', '') }}">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="audio_hours">Audio duration (hours)</label>
+              <input class="form-control" id="audio_hours" name="audio_hours" type="number" min="0" step="0.01" value="{{ form.get('audio_hours', '') }}">
+            </div>
+
+            <div class="col-12">
+              <label class="form-label" for="notes">Notes</label>
+              <textarea class="form-control" id="notes" name="notes" rows="5">{{ form.get('notes', '') }}</textarea>
+            </div>
+          </div>
+        </div>
+        <div class="card-footer d-flex justify-content-end gap-2">
+          <a class="btn btn-outline-secondary" href="/books">Cancel</a>
+          <button class="btn btn-primary" type="submit">Create Book</button>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}

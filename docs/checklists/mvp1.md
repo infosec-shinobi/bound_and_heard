@@ -79,21 +79,21 @@ Build the foundation for Bound & Heard: a local-first FastAPI app with manual bo
 
 ## Chunk 8 - Add Book
 
-- [ ] Add new book form
-- [ ] Support title
-- [ ] Support subtitle
-- [ ] Support author name
-- [ ] Support format
-- [ ] Support status
-- [ ] Support rating
-- [ ] Support notes
-- [ ] Support started date
-- [ ] Support completed date
-- [ ] Support page count
-- [ ] Support audio duration
-- [ ] Support manual progress percent
-- [ ] Create initial reading events where appropriate
-- [ ] Redirect to detail page after create
+- [x] Add new book form
+- [x] Support title
+- [x] Support subtitle
+- [x] Support author name
+- [x] Support format
+- [x] Support status
+- [x] Support rating
+- [x] Support notes
+- [x] Support started date
+- [x] Support completed date
+- [x] Support page count
+- [x] Support audio duration
+- [x] Support manual progress percent
+- [x] Create initial reading events where appropriate
+- [x] Redirect to detail page after create
 
 ## Chunk 9 - Book Detail
 
