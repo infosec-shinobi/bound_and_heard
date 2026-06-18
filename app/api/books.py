@@ -84,6 +84,27 @@ def date_to_datetime(value: date) -> datetime:
     return datetime.combine(value, time.min, tzinfo=timezone.utc)
 
 
+def format_audio_seconds(audio_seconds: int | None) -> str | None:
+    if audio_seconds is None:
+        return None
+    hours = audio_seconds // 3600
+    minutes = round((audio_seconds % 3600) / 60)
+    if minutes == 60:
+        hours += 1
+        minutes = 0
+    if hours and minutes:
+        return f"{hours} hr {minutes} min"
+    if hours:
+        return f"{hours} hr"
+    return f"{minutes} min"
+
+
+def display_progress(book: Book) -> float | None:
+    if book.progress and book.progress.progress_percent is not None:
+        return book.progress.progress_percent
+    return book.manual_progress_percent
+
+
 def build_initial_events(book: Book) -> list[ReadingEvent]:
     events: list[ReadingEvent] = []
 
@@ -325,11 +346,12 @@ async def create_book(
     return RedirectResponse(f"/books/{book.id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
-@router.get("/{book_id}", response_class=HTMLResponse)
-async def book_detail(
+@router.get("/{book_id}/edit", response_class=HTMLResponse)
+async def edit_book_placeholder(
     book_id: int,
     request: Request,
     db: Session = Depends(get_db),
+    _: None = Depends(require_write_access),
 ) -> HTMLResponse:
     book = db.get(Book, book_id)
     if book is None or book.user_id != DEFAULT_LOCAL_USER_ID:
@@ -342,6 +364,82 @@ async def book_detail(
 
     return templates.TemplateResponse(
         request,
-        "books/detail_placeholder.html",
-        template_context(request, page_title=book.title, book=book),
+        "books/action_placeholder.html",
+        template_context(
+            request,
+            page_title="Edit Book",
+            heading="Edit Book",
+            message="The protected edit form will be implemented in Chunk 10.",
+            book=book,
+        ),
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+    )
+
+
+@router.post("/{book_id}/archive")
+async def archive_book_placeholder(
+    book_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_write_access),
+) -> HTMLResponse:
+    book = db.get(Book, book_id)
+    if book is None or book.user_id != DEFAULT_LOCAL_USER_ID:
+        return templates.TemplateResponse(
+            request,
+            "books/not_found.html",
+            template_context(request, page_title="Book Not Found"),
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+
+    return templates.TemplateResponse(
+        request,
+        "books/action_placeholder.html",
+        template_context(
+            request,
+            page_title="Archive Book",
+            heading="Archive Book",
+            message="Archive behavior will be implemented in Chunk 11.",
+            book=book,
+        ),
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+    )
+
+
+@router.get("/{book_id}", response_class=HTMLResponse)
+async def book_detail(
+    book_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    book = db.scalars(
+        select(Book)
+        .options(joinedload(Book.progress))
+        .where(Book.id == book_id, Book.user_id == DEFAULT_LOCAL_USER_ID)
+    ).first()
+    if book is None or book.user_id != DEFAULT_LOCAL_USER_ID:
+        return templates.TemplateResponse(
+            request,
+            "books/not_found.html",
+            template_context(request, page_title="Book Not Found"),
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+
+    events = db.scalars(
+        select(ReadingEvent)
+        .where(ReadingEvent.book_id == book.id, ReadingEvent.user_id == DEFAULT_LOCAL_USER_ID)
+        .order_by(ReadingEvent.event_date.desc(), ReadingEvent.id.desc())
+    ).all()
+
+    return templates.TemplateResponse(
+        request,
+        "books/detail.html",
+        template_context(
+            request,
+            page_title=book.title,
+            book=book,
+            events=events,
+            progress_percent=display_progress(book),
+            audio_duration=format_audio_seconds(book.audio_seconds),
+        ),
     )

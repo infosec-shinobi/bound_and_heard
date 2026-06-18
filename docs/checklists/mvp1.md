@@ -97,14 +97,14 @@ Build the foundation for Bound & Heard: a local-first FastAPI app with manual bo
 
 ## Chunk 9 - Book Detail
 
-- [ ] Add book detail page
-- [ ] Show core metadata
-- [ ] Show progress
-- [ ] Show page/audio stats
-- [ ] Show reading event history
-- [ ] Add protected Edit action
-- [ ] Add protected Archive action
-- [ ] Show archived state when applicable
+- [x] Add book detail page
+- [x] Show core metadata
+- [x] Show progress
+- [x] Show page/audio stats
+- [x] Show reading event history
+- [x] Add protected Edit action
+- [x] Add protected Archive action
+- [x] Show archived state when applicable
 
 ## Chunk 10 - Edit Book
 

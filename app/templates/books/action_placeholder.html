@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="card">
+    <div class="card-body">
+      <p class="app-kicker small fw-semibold mb-2">Coming next</p>
+      <h1 class="h3">{{ heading }}</h1>
+      <p class="app-muted mb-4">{{ message }}</p>
+      <a class="btn btn-outline-primary" href="/books/{{ book.id }}">Back to {{ book.title }}</a>
+    </div>
+  </section>
+{% endblock %}

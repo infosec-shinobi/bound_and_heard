@@ -267,3 +267,103 @@ def test_create_book_renders_validation_errors() -> None:
     assert "Manual progress percent must be no more than 100." in response.text
     with session_factory() as db:
         assert db.query(Book).count() == 0
+
+
+def test_book_detail_shows_metadata_progress_stats_and_events() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(
+        session_factory,
+        title="Detail Book",
+        author="Detail Author",
+        book_format="audiobook",
+        status="completed",
+        rating=5,
+        manual_progress_percent=40,
+    )
+    with session_factory() as db:
+        db_book = db.get(Book, book.id)
+        assert db_book is not None
+        db_book.subtitle = "The Subtitle"
+        db_book.notes = "Line one\nLine two"
+        db_book.page_count = 320
+        db_book.audio_seconds = 3660
+        db.add(
+            BookProgress(
+                user_id=DEFAULT_LOCAL_USER_ID,
+                book_id=book.id,
+                source="manual",
+                progress_percent=100,
+            )
+        )
+        db.add(
+            ReadingEvent(
+                user_id=DEFAULT_LOCAL_USER_ID,
+                book_id=book.id,
+                source="manual",
+                event_type="manually_completed",
+                event_date=datetime(2026, 6, 3, tzinfo=timezone.utc),
+                progress_percent=100,
+            )
+        )
+        db.commit()
+
+    response = client.get(f"/books/{book.id}")
+
+    assert response.status_code == 200
+    assert "Detail Book" in response.text
+    assert "The Subtitle" in response.text
+    assert "Detail Author" in response.text
+    assert "Audiobook" in response.text
+    assert "Completed" in response.text
+    assert "5.0 / 5" in response.text
+    assert "100%" in response.text
+    assert "320" in response.text
+    assert "1 hr 1 min" in response.text
+    assert "Line one" in response.text
+    assert "Manually Completed" in response.text
+    assert "2026-06-03" in response.text
+
+
+def test_book_detail_shows_archived_state() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Archived Detail", author="Author", archived=True)
+
+    response = client.get(f"/books/{book.id}")
+
+    assert response.status_code == 200
+    assert "Archived Detail" in response.text
+    assert "This book is archived" in response.text
+
+
+def test_book_detail_returns_404_for_missing_book() -> None:
+    client, _ = make_books_client()
+
+    response = client.get("/books/999")
+
+    assert response.status_code == 404
+    assert "Book not found" in response.text
+
+
+def test_book_detail_edit_and_archive_actions_are_protected() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Protected Book", author="Author")
+
+    edit_response = client.get(f"/books/{book.id}/edit")
+    archive_response = client.post(f"/books/{book.id}/archive")
+
+    assert edit_response.status_code == 403
+    assert archive_response.status_code == 403
+
+
+def test_book_detail_edit_and_archive_placeholders_after_login() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Protected Book", author="Author")
+    client.post("/admin/login", data={"password": "secret"})
+
+    edit_response = client.get(f"/books/{book.id}/edit")
+    archive_response = client.post(f"/books/{book.id}/archive")
+
+    assert edit_response.status_code == 501
+    assert "The protected edit form will be implemented in Chunk 10." in edit_response.text
+    assert archive_response.status_code == 501
+    assert "Archive behavior will be implemented in Chunk 11." in archive_response.text

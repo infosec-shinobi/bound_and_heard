@@ -70,7 +70,7 @@
               {% set progress = book.progress.progress_percent if book.progress and book.progress.progress_percent is not none else book.manual_progress_percent %}
               <tr {% if book.archived_at %}class="app-archived-row"{% endif %}>
                 <td>
-                  <div class="fw-semibold">{{ book.title }}</div>
+                  <a class="fw-semibold app-link" href="/books/{{ book.id }}">{{ book.title }}</a>
                   {% if book.subtitle %}<div class="small app-muted">{{ book.subtitle }}</div>{% endif %}
                   {% if book.archived_at %}<span class="badge app-badge-muted mt-1">Archived</span>{% endif %}
                 </td>

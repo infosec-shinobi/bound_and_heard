@@ -107,3 +107,34 @@ body {
 .app-archived-row {
   opacity: 0.62;
 }
+
+.app-link {
+  color: #dbeafe;
+  text-decoration-color: rgba(147, 197, 253, 0.45);
+  text-underline-offset: 0.2em;
+}
+
+.app-link:hover {
+  color: #ffffff;
+}
+
+.app-detail-list dt {
+  color: #93c5fd;
+  font-weight: 600;
+}
+
+.app-detail-list dd {
+  color: #e5e7eb;
+}
+
+.app-notes {
+  white-space: pre-wrap;
+}
+
+.progress {
+  background-color: rgba(15, 23, 42, 0.95);
+}
+
+.progress-bar {
+  background: linear-gradient(90deg, #7c3aed, #38bdf8);
+}
