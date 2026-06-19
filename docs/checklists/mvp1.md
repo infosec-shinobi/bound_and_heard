@@ -151,17 +151,17 @@ Build the foundation for Bound & Heard: a local-first FastAPI app with manual bo
 
 ## MVP 1 Done Criteria
 
-- [ ] App starts locally
-- [ ] SQLite database persists data
-- [ ] Migrations run cleanly
-- [ ] Default local user exists
-- [ ] Missing admin password logs a warning
-- [ ] Missing admin password disables write actions
-- [ ] Configured admin password allows protected writes after login
-- [ ] User can manually add a book
-- [ ] User can edit a book
-- [ ] User can view book details
-- [ ] User can archive a book safely
-- [ ] Archived books are hidden by default but can be viewed with a filter
-- [ ] Manual status, progress, and completion changes create reading events
-- [ ] Basic tests pass
+- [x] App starts locally
+- [x] SQLite database persists data
+- [x] Migrations run cleanly
+- [x] Default local user exists
+- [x] Missing admin password logs a warning
+- [x] Missing admin password disables write actions
+- [x] Configured admin password allows protected writes after login
+- [x] User can manually add a book
+- [x] User can edit a book
+- [x] User can view book details
+- [x] User can archive a book safely
+- [x] Archived books are hidden by default but can be viewed with a filter
+- [x] Manual status, progress, and completion changes create reading events
+- [x] Basic tests pass

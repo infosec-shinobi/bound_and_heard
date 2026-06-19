@@ -40,6 +40,9 @@ Import Libby timeline JSON exports and normalize the data into local tables with
 
 ### Deliverables
 
+- Protected settings/profile page for updating the current user's display name
+- Keep `BOUND_AND_HEARD_DEFAULT_USER_NAME` as first-run bootstrap only, not an overwrite mechanism
+- Dark/light mode toggle switch
 - Password-protected upload form for Libby JSON
 - File checksum calculation
 - Raw JSON preservation
