@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <div class="row justify-content-center">
+    <div class="col-lg-7">
+      <div class="d-flex align-items-start justify-content-between gap-3 mb-4">
+        <div>
+          <p class="app-kicker small fw-semibold mb-2">Local profile</p>
+          <h1 class="display-6 mb-2">Settings</h1>
+          <p class="app-muted mb-0">Update the default local user's display name and interface theme.</p>
+        </div>
+      </div>
+
+      {% if errors %}
+        <div class="alert alert-danger" role="alert">
+          {% for error in errors %}
+            <div>{{ error }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      {% if success %}
+        <div class="alert alert-success" role="status">{{ success }}</div>
+      {% endif %}
+
+      <section class="card">
+        <div class="card-body">
+          <form method="post" action="/settings" class="vstack gap-4">
+            <div>
+              <label class="form-label" for="display_name">Display name</label>
+              <input class="form-control" id="display_name" name="display_name" type="text" maxlength="200" value="{{ user.display_name }}" required>
+              <div class="form-text">Used for the default local profile created during first-run bootstrap.</div>
+            </div>
+
+            <fieldset>
+              <legend class="h6 mb-3">Theme</legend>
+              <input type="hidden" name="theme" value="dark">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" role="switch" id="theme" name="theme" value="light" {% if selected_theme == 'light' %}checked{% endif %}>
+                <label class="form-check-label" for="theme">Use light mode</label>
+              </div>
+            </fieldset>
+
+            <div>
+              <button class="btn btn-primary" type="submit">Save Settings</button>
+            </div>
+          </form>
+        </div>
+      </section>
+    </div>
+  </div>
+{% endblock %}

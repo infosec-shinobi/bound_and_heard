@@ -10,14 +10,16 @@ Derived from `docs/ROADMAP.md` MVP 2 - Libby JSON Import.
 
 ## Chunk 1 - Carry-Forward User Settings
 
-- [ ] Add protected settings/profile route
-- [ ] Add settings/profile page
-- [ ] Allow updating the current local user's display name
-- [ ] Keep `BOUND_AND_HEARD_DEFAULT_USER_NAME` as first-run bootstrap only
-- [ ] Add tests proving bootstrap does not overwrite an existing display name
-- [ ] Add dark/light mode toggle switch
-- [ ] Persist theme preference locally or in the user profile
-- [ ] Apply theme preference in `base.html`
+- [x] Add protected settings/profile route
+- [x] Add settings/profile page
+- [x] Allow updating the current local user's display name
+- [x] Keep `BOUND_AND_HEARD_DEFAULT_USER_NAME` as first-run bootstrap only
+- [x] Add tests proving bootstrap does not overwrite an existing display name
+- [x] Add dark/light mode toggle switch
+- [x] Persist theme preference locally or in the user profile
+- [x] Apply theme preference in `base.html`
+- [x] Render an HTML login page instead of JSON for protected browser routes
+- [x] Redirect back to the protected page after admin login
 
 ## Chunk 2 - Import Data Model
 

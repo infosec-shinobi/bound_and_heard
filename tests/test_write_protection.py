@@ -49,6 +49,29 @@ def test_write_action_requires_admin_login() -> None:
     assert response.json()["detail"] == "Admin login is required for write actions."
 
 
+def test_browser_protected_route_renders_login_page_when_admin_login_required() -> None:
+    client = make_client()
+
+    response = client.get("/settings", headers={"accept": "text/html"})
+
+    assert response.status_code == 403
+    assert "Admin Login" in response.text
+    assert "Admin login is required for write actions." in response.text
+    assert 'name="next" value="/settings"' in response.text
+    assert response.headers["content-type"].startswith("text/html")
+
+
+def test_browser_protected_route_renders_login_page_when_writes_disabled() -> None:
+    client = make_client(admin_password=None)
+
+    response = client.get("/settings", headers={"accept": "text/html"})
+
+    assert response.status_code == 403
+    assert "Admin Login" in response.text
+    assert "Write actions are disabled" in response.text
+    assert response.headers["content-type"].startswith("text/html")
+
+
 def test_admin_login_enables_write_actions() -> None:
     client = make_client()
 
@@ -59,6 +82,32 @@ def test_admin_login_enables_write_actions() -> None:
 
     assert response.status_code == 200
     assert response.json() == {"ok": True}
+
+
+def test_admin_login_redirects_to_safe_next_url() -> None:
+    client = make_client()
+
+    login_response = client.post(
+        "/admin/login",
+        data={"password": "secret", "next": "/settings"},
+        follow_redirects=False,
+    )
+
+    assert login_response.status_code == 303
+    assert login_response.headers["location"] == "/settings"
+
+
+def test_admin_login_rejects_external_next_url() -> None:
+    client = make_client()
+
+    login_response = client.post(
+        "/admin/login",
+        data={"password": "secret", "next": "https://example.com"},
+        follow_redirects=False,
+    )
+
+    assert login_response.status_code == 303
+    assert login_response.headers["location"] == "/admin/login"
 
 
 def test_invalid_admin_password_is_rejected() -> None:

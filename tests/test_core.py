@@ -72,3 +72,17 @@ def test_bootstrap_default_user_uses_configured_session_factory(monkeypatch) -> 
 
     assert user.id == DEFAULT_LOCAL_USER_ID
     assert user.display_name == "Bootstrapped User"
+
+
+def test_bootstrap_default_user_does_not_overwrite_existing_display_name(monkeypatch) -> None:
+    session_factory = make_session_factory()
+    monkeypatch.setattr(bootstrap, "SessionLocal", session_factory)
+
+    bootstrap_default_user("First Name")
+    bootstrap_default_user("Second Name")
+
+    with session_factory() as db:
+        user = db.scalars(select(User)).one()
+
+    assert user.id == DEFAULT_LOCAL_USER_ID
+    assert user.display_name == "First Name"

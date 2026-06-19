@@ -22,6 +22,7 @@
           {% endif %}
 
           <form method="post" action="/admin/login" class="vstack gap-3">
+            <input type="hidden" name="next" value="{{ next_url }}">
             <div>
               <label class="form-label" for="password">Admin password</label>
               <input class="form-control" id="password" name="password" type="password" required {% if not writes_enabled %}disabled{% endif %}>
