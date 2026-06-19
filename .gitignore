@@ -1,6 +1,7 @@
 # Avoid tracking export files and local app state.
 exports/*.json
 .env
+.env.*
 .venv/
 __pycache__/
 *.py[cod]

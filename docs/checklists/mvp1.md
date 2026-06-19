@@ -136,12 +136,12 @@ Build the foundation for Bound & Heard: a local-first FastAPI app with manual bo
 
 ## Chunk 13 - Developer Experience
 
-- [ ] Update README with setup instructions
-- [ ] Document env vars
-- [ ] Document run command
-- [ ] Document migration command
-- [ ] Document test command
-- [ ] Confirm `.gitignore` excludes local data and secrets
+- [x] Update README with setup instructions
+- [x] Document env vars
+- [x] Document run command
+- [x] Document migration command
+- [x] Document test command
+- [x] Confirm `.gitignore` excludes local data and secrets
 
 ## Future User Settings
 
