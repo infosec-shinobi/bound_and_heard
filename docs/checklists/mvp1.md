@@ -125,14 +125,14 @@ Build the foundation for Bound & Heard: a local-first FastAPI app with manual bo
 
 ## Chunk 12 - Tests
 
-- [ ] Test settings behavior when admin password is missing
-- [ ] Test write protection blocks mutating actions
-- [ ] Test read-only pages still work
-- [ ] Test default user bootstrap
-- [ ] Test manual book creation
-- [ ] Test reading event creation
-- [ ] Test progress field validation
-- [ ] Test archive behavior
+- [x] Test settings behavior when admin password is missing
+- [x] Test write protection blocks mutating actions
+- [x] Test read-only pages still work
+- [x] Test default user bootstrap
+- [x] Test manual book creation
+- [x] Test reading event creation
+- [x] Test progress field validation
+- [x] Test archive behavior
 
 ## Chunk 13 - Developer Experience
 
