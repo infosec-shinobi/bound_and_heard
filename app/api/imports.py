@@ -15,6 +15,7 @@ from app.core.bootstrap import DEFAULT_LOCAL_USER_ID
 from app.core.database import get_db
 from app.core.templates import template_context, templates
 from app.core.write_protection import require_write_access
+from app.importers.libby_json import LibbyExport, LibbyParseError, parse_libby_export
 from app.models import Import, ImportFile
 
 
@@ -32,12 +33,6 @@ def libby_import_dir(request: Request) -> Path:
 
 def calculate_checksum(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
-
-
-def libby_row_count(parsed_json: object) -> int:
-    if isinstance(parsed_json, dict) and isinstance(parsed_json.get("timeline"), list):
-        return len(parsed_json["timeline"])
-    return 0
 
 
 def render_upload_page(
@@ -82,7 +77,7 @@ async def upload_libby_json(
 ) -> Response:
     filename = safe_filename(file.filename)
     errors: list[str] = []
-    parsed_json: object | None = None
+    parsed_export: LibbyExport | None = None
 
     if Path(filename).suffix.lower() != ".json":
         errors.append("Libby export must be a .json file.")
@@ -93,8 +88,11 @@ async def upload_libby_json(
 
     try:
         parsed_json = json.loads(content.decode("utf-8"))
+        parsed_export = parse_libby_export(parsed_json)
     except (UnicodeDecodeError, json.JSONDecodeError):
         errors.append("Uploaded file must contain valid JSON.")
+    except LibbyParseError as exc:
+        errors.append(str(exc))
 
     if errors:
         return render_upload_page(
@@ -128,7 +126,7 @@ async def upload_libby_json(
         source="libby",
         filename=filename,
         checksum=checksum,
-        row_count=libby_row_count(parsed_json),
+        row_count=len(parsed_export.timeline) if parsed_export else 0,
         status="uploaded",
         summary={"raw_json_preserved": True},
         raw_file_path=target_path.as_posix(),

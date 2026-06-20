@@ -52,18 +52,18 @@ Derived from `docs/ROADMAP.md` MVP 2 - Libby JSON Import.
 
 ## Chunk 5 - Libby JSON Parser
 
-- [ ] Parse top-level `version`
-- [ ] Parse `timeline` array
-- [ ] Parse cover metadata
-- [ ] Parse title text, share URL, and title ID
-- [ ] Parse author
-- [ ] Parse publisher
-- [ ] Parse ISBN
-- [ ] Parse timestamp
-- [ ] Parse activity
-- [ ] Parse details
-- [ ] Parse library metadata
-- [ ] Preserve each raw timeline item for source attribution
+- [x] Parse top-level `version`
+- [x] Parse `timeline` array
+- [x] Parse cover metadata
+- [x] Parse title text, share URL, and title ID
+- [x] Parse author
+- [x] Parse publisher
+- [x] Parse ISBN
+- [x] Parse timestamp
+- [x] Parse activity
+- [x] Parse details
+- [x] Parse library metadata
+- [x] Preserve each raw timeline item for source attribution
 
 ## Chunk 6 - Event-Level Deduplication
 
