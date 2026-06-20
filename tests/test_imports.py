@@ -277,6 +277,46 @@ def test_import_detail_shows_summary_metadata_counts_and_book_links(tmp_path: Pa
         assert db.query(ReadingEvent).count() == 1
 
 
+def test_valid_libby_import_makes_book_and_event_visible_in_ui(tmp_path: Path) -> None:
+    client, _ = make_imports_client(tmp_path)
+    client.post("/admin/login", data={"password": "secret"})
+    content = b"""
+    {
+      "version": 1,
+      "timeline": [
+        {
+          "cover": {"format": "ebook"},
+          "title": {"text": "Visible Imported Book", "url": "https://share.libbyapp.com/title/visible", "titleId": "visible"},
+          "author": "Visible Author",
+          "publisher": "Visible Publisher",
+          "isbn": "9781234567890",
+          "timestamp": 1767903363000,
+          "activity": "Borrowed",
+          "library": {"key": "examplelibrary"}
+        }
+      ]
+    }
+    """
+
+    upload_response = client.post(
+        "/imports/libby",
+        files={"file": ("timeline.json", content, "application/json")},
+        follow_redirects=False,
+    )
+    assert upload_response.status_code == 303
+
+    list_response = client.get("/books")
+    detail_response = client.get("/books/1")
+
+    assert list_response.status_code == 200
+    assert "Visible Imported Book" in list_response.text
+    assert "Visible Author" in list_response.text
+    assert detail_response.status_code == 200
+    assert "Visible Imported Book" in detail_response.text
+    assert "Borrowed" in detail_response.text
+    assert "Libby" in detail_response.text
+
+
 def test_import_detail_shows_duplicate_file_status(tmp_path: Path) -> None:
     client, session_factory = make_imports_client(tmp_path)
     client.post("/admin/login", data={"password": "secret"})

@@ -60,9 +60,27 @@ SQLAlchemy database URL. Defaults to `sqlite:///./data/bound_and_heard.sqlite3`.
 
 Display name used only when bootstrapping the first local user. It does not overwrite an existing user.
 
+`BOUND_AND_HEARD_IMPORTS_DIR`
+
+Directory used to preserve raw uploaded import files. Defaults to `data/imports`.
+
 `BOUND_AND_HEARD_APP_NAME`
 
 Application display name. Defaults to `Bound & Heard`.
+
+## Libby JSON Imports
+
+Libby timeline imports require write access.
+
+1. Set `BOUND_AND_HEARD_ADMIN_PASSWORD` in `.env` and restart the app.
+2. Open `/admin/login` and sign in with the admin password.
+3. Open `/imports` from the navigation.
+4. Upload a Libby timeline `.json` export.
+5. Review the import summary page for checksum, row count, created/updated books, created events, skipped duplicate events, and raw file references.
+
+Raw JSON uploads are preserved under `data/imports/libby/` by default. Exact duplicate files are detected by checksum and skipped without saving another raw copy or creating another import record.
+
+Imported Libby books appear in `/books`, and imported reading events appear on each book detail page. Import updates fill empty metadata fields only; manual edits, notes, ratings, progress, completion dates, and manual correction events are preserved.
 
 ## Common Commands
 

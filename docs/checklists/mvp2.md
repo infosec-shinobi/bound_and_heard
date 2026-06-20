@@ -115,27 +115,27 @@ Derived from `docs/ROADMAP.md` MVP 2 - Libby JSON Import.
 
 ## Chunk 11 - Tests And Documentation
 
-- [ ] Test upload requires write access
-- [ ] Test valid Libby JSON import creates import record
-- [ ] Test raw JSON is preserved
-- [ ] Test duplicate file detection
-- [ ] Test event-level deduplication
-- [ ] Test book creation/update behavior
-- [ ] Test manual overwrite protection
-- [ ] Test import summary counts
-- [ ] Update README with Libby import instructions
+- [x] Test upload requires write access
+- [x] Test valid Libby JSON import creates import record
+- [x] Test raw JSON is preserved
+- [x] Test duplicate file detection
+- [x] Test event-level deduplication
+- [x] Test book creation/update behavior
+- [x] Test manual overwrite protection
+- [x] Test import summary counts
+- [x] Update README with Libby import instructions
 
 ## MVP 2 Done Criteria
 
-- [ ] User can upload a Libby JSON export after admin login
-- [ ] Raw JSON is preserved locally
-- [ ] File checksum is stored
-- [ ] Duplicate files are detected
-- [ ] Overlapping exports do not duplicate reading events
-- [ ] Imported Libby books appear in the book list
-- [ ] Imported reading events appear on book detail pages
-- [ ] Manual edits are not silently overwritten
-- [ ] Import summary shows useful created/skipped counts
-- [ ] Dark/light mode toggle works
-- [ ] Current local user's display name can be updated from a protected settings page
-- [ ] Basic tests pass
+- [x] User can upload a Libby JSON export after admin login
+- [x] Raw JSON is preserved locally
+- [x] File checksum is stored
+- [x] Duplicate files are detected
+- [x] Overlapping exports do not duplicate reading events
+- [x] Imported Libby books appear in the book list
+- [x] Imported reading events appear on book detail pages
+- [x] Manual edits are not silently overwritten
+- [x] Import summary shows useful created/skipped counts
+- [x] Dark/light mode toggle works
+- [x] Current local user's display name can be updated from a protected settings page
+- [x] Basic tests pass
