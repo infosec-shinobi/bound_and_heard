@@ -26,6 +26,12 @@
         </div>
       {% endif %}
 
+      {% if request.query_params.get('duplicate_import_id') %}
+        <div class="alert alert-warning" role="status">
+          Duplicate Libby JSON skipped. This file checksum already exists on import #{{ request.query_params.get('duplicate_import_id') }}.
+        </div>
+      {% endif %}
+
       <form class="card" method="post" action="/imports/libby" enctype="multipart/form-data">
         <div class="card-body">
           <label class="form-label" for="file">Libby timeline JSON</label>
@@ -36,6 +42,40 @@
           <button class="btn btn-primary" type="submit">Upload Libby JSON</button>
         </div>
       </form>
+
+      <section class="card mt-4">
+        <div class="card-body">
+          <h2 class="h5">Recent Imports</h2>
+          {% if imports %}
+            <div class="table-responsive">
+              <table class="table table-dark table-hover align-middle mb-0 app-table">
+                <thead>
+                  <tr>
+                    <th scope="col">File</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Rows</th>
+                    <th scope="col">Checksum</th>
+                    <th scope="col">Raw Path</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for import_record in imports %}
+                    <tr>
+                      <td>{{ import_record.filename }}</td>
+                      <td><span class="badge app-badge-muted">{{ import_record.status.replace('_', ' ').title() }}</span></td>
+                      <td>{{ import_record.row_count }}</td>
+                      <td><code>{{ import_record.checksum[:12] }}</code></td>
+                      <td>{% if import_record.raw_file_path %}<code>{{ import_record.raw_file_path }}</code>{% else %}<span class="app-muted">Not saved</span>{% endif %}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <p class="app-muted mb-0">No imports yet.</p>
+          {% endif %}
+        </div>
+      </section>
     </div>
   </div>
 {% endblock %}

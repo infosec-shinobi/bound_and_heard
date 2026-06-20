@@ -1,12 +1,36 @@
+from collections.abc import Generator
+import hashlib
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
 
+from app.core.bootstrap import DEFAULT_LOCAL_USER_ID
 from app.core.config import Settings
+from app.core.database import Base, get_db
 from app.main import create_app
+from app.models import Import, ImportFile, User
 
 
-def make_imports_client(tmp_path: Path, admin_password: str | None = "secret") -> TestClient:
+def make_imports_client(
+    tmp_path: Path,
+    admin_password: str | None = "secret",
+) -> tuple[TestClient, sessionmaker[Session]]:
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+        future=True,
+    )
+    Base.metadata.create_all(engine)
+    TestingSessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+
+    with TestingSessionLocal() as db:
+        db.add(User(id=DEFAULT_LOCAL_USER_ID, display_name="Local User"))
+        db.commit()
+
     app = create_app(
         Settings(
             admin_password=admin_password,
@@ -15,11 +39,20 @@ def make_imports_client(tmp_path: Path, admin_password: str | None = "secret") -
             imports_dir=str(tmp_path),
         )
     )
-    return TestClient(app)
+
+    def override_get_db() -> Generator[Session, None, None]:
+        db = TestingSessionLocal()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = override_get_db
+    return TestClient(app), TestingSessionLocal
 
 
 def test_imports_page_requires_admin_login(tmp_path: Path) -> None:
-    client = make_imports_client(tmp_path)
+    client, _ = make_imports_client(tmp_path)
 
     response = client.get("/imports")
 
@@ -27,7 +60,7 @@ def test_imports_page_requires_admin_login(tmp_path: Path) -> None:
 
 
 def test_imports_page_shows_upload_form_after_login(tmp_path: Path) -> None:
-    client = make_imports_client(tmp_path)
+    client, _ = make_imports_client(tmp_path)
     client.post("/admin/login", data={"password": "secret"})
 
     response = client.get("/imports")
@@ -38,7 +71,7 @@ def test_imports_page_shows_upload_form_after_login(tmp_path: Path) -> None:
 
 
 def test_libby_upload_requires_write_access(tmp_path: Path) -> None:
-    client = make_imports_client(tmp_path, admin_password=None)
+    client, _ = make_imports_client(tmp_path, admin_password=None)
 
     response = client.post(
         "/imports/libby",
@@ -50,7 +83,7 @@ def test_libby_upload_requires_write_access(tmp_path: Path) -> None:
 
 
 def test_libby_upload_rejects_non_json_extension(tmp_path: Path) -> None:
-    client = make_imports_client(tmp_path)
+    client, _ = make_imports_client(tmp_path)
     client.post("/admin/login", data={"password": "secret"})
 
     response = client.post(
@@ -64,7 +97,7 @@ def test_libby_upload_rejects_non_json_extension(tmp_path: Path) -> None:
 
 
 def test_libby_upload_rejects_invalid_json(tmp_path: Path) -> None:
-    client = make_imports_client(tmp_path)
+    client, _ = make_imports_client(tmp_path)
     client.post("/admin/login", data={"password": "secret"})
 
     response = client.post(
@@ -78,7 +111,7 @@ def test_libby_upload_rejects_invalid_json(tmp_path: Path) -> None:
 
 
 def test_libby_upload_saves_valid_json_under_libby_imports_dir(tmp_path: Path) -> None:
-    client = make_imports_client(tmp_path)
+    client, session_factory = make_imports_client(tmp_path)
     client.post("/admin/login", data={"password": "secret"})
 
     content = b'{"version": 1, "timeline": []}'
@@ -89,15 +122,101 @@ def test_libby_upload_saves_valid_json_under_libby_imports_dir(tmp_path: Path) -
     )
 
     assert response.status_code == 303
-    assert response.headers["location"].startswith("/imports?saved_path=")
+    assert response.headers["location"].startswith("/imports?import_id=")
+    assert "saved_path=" in response.headers["location"]
 
     saved_files = list((tmp_path / "libby").glob("*-timeline.json"))
     assert len(saved_files) == 1
     assert saved_files[0].read_bytes() == content
 
+    with session_factory() as db:
+        import_record = db.query(Import).one()
+        import_file = db.query(ImportFile).one()
+
+    assert import_record.source == "libby"
+    assert import_record.filename == "timeline.json"
+    assert import_record.checksum == hashlib.sha256(content).hexdigest()
+    assert import_record.row_count == 0
+    assert import_record.status == "uploaded"
+    assert import_record.raw_file_path == saved_files[0].as_posix()
+    assert import_file.import_id == import_record.id
+    assert import_file.file_path == saved_files[0].as_posix()
+    assert import_file.file_size == len(content)
+    assert import_file.content_type == "application/json"
+
+
+def test_libby_upload_sets_row_count_from_timeline(tmp_path: Path) -> None:
+    client, session_factory = make_imports_client(tmp_path)
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.post(
+        "/imports/libby",
+        files={"file": ("timeline.json", b'{"version": 1, "timeline": [{}, {}]}', "application/json")},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    with session_factory() as db:
+        import_record = db.query(Import).one()
+
+    assert import_record.row_count == 2
+
+
+def test_duplicate_libby_upload_skips_raw_save_and_import_record(tmp_path: Path) -> None:
+    client, session_factory = make_imports_client(tmp_path)
+    client.post("/admin/login", data={"password": "secret"})
+    content = b'{"version": 1, "timeline": []}'
+
+    first_response = client.post(
+        "/imports/libby",
+        files={"file": ("timeline.json", content, "application/json")},
+        follow_redirects=False,
+    )
+    second_response = client.post(
+        "/imports/libby",
+        files={"file": ("timeline.json", content, "application/json")},
+        follow_redirects=False,
+    )
+
+    assert first_response.status_code == 303
+    assert second_response.status_code == 303
+    assert "duplicate_import_id=" in second_response.headers["location"]
+    assert "checksum=" in second_response.headers["location"]
+    assert len(list((tmp_path / "libby").glob("*-timeline.json"))) == 1
+
+    with session_factory() as db:
+        assert db.query(Import).count() == 1
+        assert db.query(ImportFile).count() == 1
+
+
+def test_imports_page_shows_duplicate_status(tmp_path: Path) -> None:
+    client, session_factory = make_imports_client(tmp_path)
+    client.post("/admin/login", data={"password": "secret"})
+
+    with session_factory() as db:
+        import_record = Import(
+            user_id=DEFAULT_LOCAL_USER_ID,
+            source="libby",
+            filename="timeline.json",
+            checksum="abc123",
+            row_count=1,
+            status="uploaded",
+        )
+        db.add(import_record)
+        db.commit()
+        import_id = import_record.id
+
+    response = client.get(f"/imports?duplicate_import_id={import_id}&checksum=abc123")
+
+    assert response.status_code == 200
+    assert "Duplicate Libby JSON skipped" in response.text
+    assert f"import #{import_id}" in response.text
+    assert "timeline.json" in response.text
+    assert "Uploaded" in response.text
+
 
 def test_imports_nav_link_is_present(tmp_path: Path) -> None:
-    client = make_imports_client(tmp_path, admin_password=None)
+    client, _ = make_imports_client(tmp_path, admin_password=None)
 
     response = client.get("/")
 

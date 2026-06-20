@@ -43,12 +43,12 @@ Derived from `docs/ROADMAP.md` MVP 2 - Libby JSON Import.
 
 ## Chunk 4 - Checksum And Duplicate File Detection
 
-- [ ] Calculate file checksum before processing
-- [ ] Store checksum on import record
-- [ ] Detect exact duplicate files
-- [ ] Skip duplicate file processing safely
-- [ ] Show duplicate status in the UI
-- [ ] Preserve the original raw JSON for non-duplicate imports
+- [x] Calculate file checksum before processing
+- [x] Store checksum on import record
+- [x] Detect exact duplicate files
+- [x] Skip duplicate file processing safely
+- [x] Show duplicate status in the UI
+- [x] Preserve the original raw JSON for non-duplicate imports
 
 ## Chunk 5 - Libby JSON Parser
 
