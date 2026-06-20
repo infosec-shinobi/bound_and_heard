@@ -67,11 +67,11 @@ Derived from `docs/ROADMAP.md` MVP 2 - Libby JSON Import.
 
 ## Chunk 6 - Event-Level Deduplication
 
-- [ ] Define stable Libby source event key
-- [ ] Include title ID, timestamp, activity, library key, and format where available
-- [ ] Store `source="libby"` and `source_event_id`
-- [ ] Prevent duplicate reading events across overlapping exports
-- [ ] Add tests for overlapping exports
+- [x] Define stable Libby source event key
+- [x] Include title ID, timestamp, activity, library key, and format where available
+- [x] Store `source="libby"` and `source_event_id`
+- [x] Prevent duplicate reading events across overlapping exports
+- [x] Add tests for overlapping exports
 
 ## Chunk 7 - Book Creation And Update Logic
 

@@ -138,3 +138,14 @@ def parse_libby_export(value: object) -> LibbyExport:
         version=optional_int(value.get("version")),
         timeline=[parse_timeline_item(item, index) for index, item in enumerate(timeline)],
     )
+
+
+def build_libby_source_event_id(item: LibbyTimelineItem) -> str:
+    parts = {
+        "title_id": item.title.title_id or "",
+        "timestamp": str(item.timestamp_ms) if item.timestamp_ms is not None else "",
+        "activity": item.activity or "",
+        "library": item.library.key or "",
+        "format": item.cover.format or "",
+    }
+    return "libby:" + "|".join(f"{key}={value}" for key, value in parts.items())

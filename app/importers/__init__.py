@@ -8,6 +8,7 @@ from app.importers.libby_json import (
     LibbyParseError,
     LibbyTimelineItem,
     LibbyTitle,
+    build_libby_source_event_id,
     parse_libby_export,
 )
 
@@ -18,5 +19,6 @@ __all__ = [
     "LibbyParseError",
     "LibbyTimelineItem",
     "LibbyTitle",
+    "build_libby_source_event_id",
     "parse_libby_export",
 ]

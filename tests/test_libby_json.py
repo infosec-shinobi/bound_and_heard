@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.importers.libby_json import LibbyParseError, parse_libby_export
+from app.importers.libby_json import LibbyParseError, build_libby_source_event_id, parse_libby_export
 
 
 def sample_export() -> dict[str, object]:
@@ -101,3 +101,18 @@ def test_parse_libby_export_requires_timeline_array() -> None:
 def test_parse_libby_export_requires_timeline_items_to_be_objects() -> None:
     with pytest.raises(LibbyParseError, match="Timeline item 0 must be an object"):
         parse_libby_export({"version": 1, "timeline": ["bad"]})
+
+
+def test_build_libby_source_event_id_uses_stable_source_fields() -> None:
+    item = parse_libby_export(sample_export()).timeline[0]
+
+    source_event_id = build_libby_source_event_id(item)
+
+    assert source_event_id == (
+        "libby:"
+        "title_id=12345|"
+        "timestamp=1767903363000|"
+        "activity=Borrowed|"
+        "library=examplelibrary|"
+        "format=audiobook"
+    )
