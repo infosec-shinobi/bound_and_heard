@@ -16,7 +16,8 @@ from app.core.database import get_db
 from app.core.templates import template_context, templates
 from app.core.write_protection import require_write_access
 from app.importers.libby_json import LibbyExport, LibbyParseError, parse_libby_export
-from app.models import Import, ImportFile
+from app.models import Book, Import, ImportFile
+from app.services.import_service import process_libby_timeline_items
 
 
 router = APIRouter(prefix="/imports", tags=["imports"])
@@ -69,6 +70,43 @@ async def import_upload_form(request: Request, db: Session = Depends(get_db)) ->
     return render_upload_page(request, imports=list(imports))
 
 
+@router.get("/{import_id}", response_class=HTMLResponse, dependencies=[Depends(require_write_access)])
+async def import_detail(import_id: int, request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    import_record = db.scalars(
+        select(Import).where(Import.id == import_id, Import.user_id == DEFAULT_LOCAL_USER_ID)
+    ).first()
+    if import_record is None:
+        return templates.TemplateResponse(
+            request,
+            "imports/not_found.html",
+            template_context(request, page_title="Import Not Found"),
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+
+    summary = import_record.summary or {}
+    book_ids = summary.get("book_ids") if isinstance(summary.get("book_ids"), list) else []
+    linked_books = []
+    if book_ids:
+        linked_books = db.scalars(
+            select(Book)
+            .where(Book.user_id == DEFAULT_LOCAL_USER_ID, Book.id.in_(book_ids))
+            .order_by(Book.title.asc())
+        ).all()
+
+    return templates.TemplateResponse(
+        request,
+        "imports/detail.html",
+        template_context(
+            request,
+            page_title=f"Import #{import_record.id}",
+            import_record=import_record,
+            summary=summary,
+            linked_books=list(linked_books),
+            is_duplicate_view=request.query_params.get("duplicate") == "1",
+        ),
+    )
+
+
 @router.post("/libby", dependencies=[Depends(require_write_access)])
 async def upload_libby_json(
     request: Request,
@@ -111,7 +149,7 @@ async def upload_libby_json(
     ).first()
     if existing_import is not None:
         return RedirectResponse(
-            f"/imports?{urlencode({'duplicate_import_id': existing_import.id, 'checksum': checksum})}",
+            f"/imports/{existing_import.id}?{urlencode({'duplicate': '1', 'checksum': checksum})}",
             status_code=status.HTTP_303_SEE_OTHER,
         )
 
@@ -127,7 +165,7 @@ async def upload_libby_json(
         filename=filename,
         checksum=checksum,
         row_count=len(parsed_export.timeline) if parsed_export else 0,
-        status="uploaded",
+        status="processing",
         summary={"raw_json_preserved": True},
         raw_file_path=target_path.as_posix(),
     )
@@ -141,9 +179,16 @@ async def upload_libby_json(
             content_type=file.content_type,
         )
     )
+    import_summary = process_libby_timeline_items(
+        db,
+        user_id=DEFAULT_LOCAL_USER_ID,
+        items=parsed_export.timeline if parsed_export else [],
+    )
+    import_record.status = "completed"
+    import_record.summary = {"raw_json_preserved": True, **import_summary.as_dict()}
     db.commit()
 
     return RedirectResponse(
-        f"/imports?{urlencode({'import_id': import_record.id, 'saved_path': target_path.as_posix()})}",
+        f"/imports/{import_record.id}?{urlencode({'saved_path': target_path.as_posix()})}",
         status_code=status.HTTP_303_SEE_OTHER,
     )

@@ -29,6 +29,17 @@ class LibbyImportSummary:
     events_created: int = 0
     events_skipped: int = 0
     unsupported_events: int = 0
+    book_ids: tuple[int, ...] = ()
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "books_created": self.books_created,
+            "books_updated": self.books_updated,
+            "events_created": self.events_created,
+            "duplicate_events_skipped": self.events_skipped,
+            "unsupported_events": self.unsupported_events,
+            "book_ids": list(self.book_ids),
+        }
 
 
 LIBBY_ACTIVITY_EVENT_TYPES = {
@@ -216,9 +227,12 @@ def process_libby_timeline_items(
     events_created = 0
     events_skipped = 0
     unsupported_events = 0
+    book_ids: list[int] = []
 
     for item in items:
         book_result = upsert_libby_book(db, user_id=user_id, item=item)
+        if book_result.book.id not in book_ids:
+            book_ids.append(book_result.book.id)
         if book_result.created:
             books_created += 1
         elif book_result.updated:
@@ -247,4 +261,5 @@ def process_libby_timeline_items(
         events_created=events_created,
         events_skipped=events_skipped,
         unsupported_events=unsupported_events,
+        book_ids=tuple(book_ids),
     )

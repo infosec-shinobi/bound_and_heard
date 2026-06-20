@@ -7,7 +7,7 @@
         <div>
           <p class="app-kicker small fw-semibold mb-2">Libby import</p>
           <h1 class="display-6 mb-1">Imports</h1>
-          <p class="app-muted mb-0">Upload a Libby timeline JSON export. Processing and duplicate detection will be added in the next chunks.</p>
+          <p class="app-muted mb-0">Upload a Libby timeline JSON export and review the import summary.</p>
         </div>
       </div>
 
@@ -61,7 +61,7 @@
                 <tbody>
                   {% for import_record in imports %}
                     <tr>
-                      <td>{{ import_record.filename }}</td>
+                      <td><a class="app-link" href="/imports/{{ import_record.id }}">{{ import_record.filename }}</a></td>
                       <td><span class="badge app-badge-muted">{{ import_record.status.replace('_', ' ').title() }}</span></td>
                       <td>{{ import_record.row_count }}</td>
                       <td><code>{{ import_record.checksum[:12] }}</code></td>

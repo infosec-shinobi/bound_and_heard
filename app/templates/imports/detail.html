@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <div class="d-flex flex-column flex-lg-row align-items-lg-start justify-content-between gap-3 mb-4">
+    <div>
+      <p class="app-kicker small fw-semibold mb-2">Import summary</p>
+      <h1 class="display-6 mb-2">Import #{{ import_record.id }}</h1>
+      <p class="app-muted mb-0">{{ import_record.filename }}</p>
+    </div>
+    <a class="btn btn-outline-secondary" href="/imports">Back to Imports</a>
+  </div>
+
+  {% if request.query_params.get('saved_path') %}
+    <div class="alert alert-success" role="status">
+      Libby JSON uploaded and saved to <code>{{ request.query_params.get('saved_path') }}</code>.
+    </div>
+  {% endif %}
+
+  {% if is_duplicate_view %}
+    <div class="alert alert-warning" role="status">
+      Duplicate Libby JSON skipped. This checksum already exists on this import, so no duplicate file processing was run.
+    </div>
+  {% endif %}
+
+  <div class="row g-4">
+    <div class="col-lg-7">
+      <section class="card h-100">
+        <div class="card-body">
+          <h2 class="h5 mb-3">File Metadata</h2>
+          <dl class="row mb-0 app-detail-list">
+            <dt class="col-sm-4">Filename</dt>
+            <dd class="col-sm-8">{{ import_record.filename }}</dd>
+            <dt class="col-sm-4">Source</dt>
+            <dd class="col-sm-8">{{ import_record.source.title() }}</dd>
+            <dt class="col-sm-4">Status</dt>
+            <dd class="col-sm-8"><span class="badge app-badge-muted">{{ import_record.status.replace('_', ' ').title() }}</span></dd>
+            <dt class="col-sm-4">Imported</dt>
+            <dd class="col-sm-8">{{ import_record.imported_at }}</dd>
+            <dt class="col-sm-4">Checksum</dt>
+            <dd class="col-sm-8"><code>{{ import_record.checksum }}</code></dd>
+            <dt class="col-sm-4">Row Count</dt>
+            <dd class="col-sm-8">{{ import_record.row_count }}</dd>
+            <dt class="col-sm-4">Duplicate File</dt>
+            <dd class="col-sm-8">{% if is_duplicate_view %}Skipped duplicate upload{% else %}No duplicate file detected{% endif %}</dd>
+            <dt class="col-sm-4">Raw Path</dt>
+            <dd class="col-sm-8">{% if import_record.raw_file_path %}<code>{{ import_record.raw_file_path }}</code>{% else %}<span class="app-muted">Not saved</span>{% endif %}</dd>
+          </dl>
+        </div>
+      </section>
+    </div>
+
+    <div class="col-lg-5">
+      <section class="card h-100">
+        <div class="card-body">
+          <h2 class="h5 mb-3">Import Counts</h2>
+          <dl class="row mb-0 app-detail-list">
+            <dt class="col-7">Books Created</dt>
+            <dd class="col-5">{{ summary.get('books_created', 0) }}</dd>
+            <dt class="col-7">Books Updated</dt>
+            <dd class="col-5">{{ summary.get('books_updated', 0) }}</dd>
+            <dt class="col-7">Events Created</dt>
+            <dd class="col-5">{{ summary.get('events_created', 0) }}</dd>
+            <dt class="col-7">Duplicate Events Skipped</dt>
+            <dd class="col-5">{{ summary.get('duplicate_events_skipped', 0) }}</dd>
+            <dt class="col-7">Unsupported Events</dt>
+            <dd class="col-5">{{ summary.get('unsupported_events', 0) }}</dd>
+          </dl>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <section class="card mt-4">
+    <div class="card-body">
+      <h2 class="h5 mb-3">Imported Or Updated Books</h2>
+      {% if linked_books %}
+        <div class="list-group list-group-flush">
+          {% for book in linked_books %}
+            <a class="list-group-item list-group-item-action" href="/books/{{ book.id }}">{{ book.title }}</a>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="app-muted mb-0">No book links are available for this import yet.</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="card mt-4">
+    <div class="card-body">
+      <h2 class="h5 mb-3">Raw File References</h2>
+      {% if import_record.files %}
+        <div class="table-responsive">
+          <table class="table table-dark table-hover align-middle mb-0 app-table">
+            <thead>
+              <tr>
+                <th scope="col">Path</th>
+                <th scope="col">Size</th>
+                <th scope="col">Content Type</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for import_file in import_record.files %}
+                <tr>
+                  <td><code>{{ import_file.file_path }}</code></td>
+                  <td>{{ import_file.file_size or 'Unknown' }}</td>
+                  <td>{{ import_file.content_type or 'Unknown' }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="app-muted mb-0">No raw file metadata is attached.</p>
+      {% endif %}
+    </div>
+  </section>
+{% endblock %}

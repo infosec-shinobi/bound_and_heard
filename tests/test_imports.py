@@ -11,7 +11,7 @@ from app.core.bootstrap import DEFAULT_LOCAL_USER_ID
 from app.core.config import Settings
 from app.core.database import Base, get_db
 from app.main import create_app
-from app.models import Import, ImportFile, User
+from app.models import Book, Import, ImportFile, ReadingEvent, User
 
 
 def make_imports_client(
@@ -122,7 +122,7 @@ def test_libby_upload_saves_valid_json_under_libby_imports_dir(tmp_path: Path) -
     )
 
     assert response.status_code == 303
-    assert response.headers["location"].startswith("/imports?import_id=")
+    assert response.headers["location"].startswith("/imports/1?")
     assert "saved_path=" in response.headers["location"]
 
     saved_files = list((tmp_path / "libby").glob("*-timeline.json"))
@@ -137,7 +137,16 @@ def test_libby_upload_saves_valid_json_under_libby_imports_dir(tmp_path: Path) -
     assert import_record.filename == "timeline.json"
     assert import_record.checksum == hashlib.sha256(content).hexdigest()
     assert import_record.row_count == 0
-    assert import_record.status == "uploaded"
+    assert import_record.status == "completed"
+    assert import_record.summary == {
+        "raw_json_preserved": True,
+        "books_created": 0,
+        "books_updated": 0,
+        "events_created": 0,
+        "duplicate_events_skipped": 0,
+        "unsupported_events": 0,
+        "book_ids": [],
+    }
     assert import_record.raw_file_path == saved_files[0].as_posix()
     assert import_file.import_id == import_record.id
     assert import_file.file_path == saved_files[0].as_posix()
@@ -180,7 +189,8 @@ def test_duplicate_libby_upload_skips_raw_save_and_import_record(tmp_path: Path)
 
     assert first_response.status_code == 303
     assert second_response.status_code == 303
-    assert "duplicate_import_id=" in second_response.headers["location"]
+    assert second_response.headers["location"].startswith("/imports/1?")
+    assert "duplicate=1" in second_response.headers["location"]
     assert "checksum=" in second_response.headers["location"]
     assert len(list((tmp_path / "libby").glob("*-timeline.json"))) == 1
 
@@ -213,6 +223,93 @@ def test_imports_page_shows_duplicate_status(tmp_path: Path) -> None:
     assert f"import #{import_id}" in response.text
     assert "timeline.json" in response.text
     assert "Uploaded" in response.text
+
+
+def test_import_detail_shows_summary_metadata_counts_and_book_links(tmp_path: Path) -> None:
+    client, session_factory = make_imports_client(tmp_path)
+    client.post("/admin/login", data={"password": "secret"})
+    content = b"""
+    {
+      "version": 1,
+      "timeline": [
+        {
+          "cover": {"format": "audiobook"},
+          "title": {"text": "Imported Book", "url": "https://share.libbyapp.com/title/1", "titleId": "1"},
+          "author": "Import Author",
+          "publisher": "Import Publisher",
+          "isbn": "9781234567890",
+          "timestamp": 1767903363000,
+          "activity": "Borrowed",
+          "library": {"key": "examplelibrary"}
+        }
+      ]
+    }
+    """
+
+    upload_response = client.post(
+        "/imports/libby",
+        files={"file": ("timeline.json", content, "application/json")},
+        follow_redirects=False,
+    )
+
+    assert upload_response.status_code == 303
+    detail_response = client.get(upload_response.headers["location"])
+
+    assert detail_response.status_code == 200
+    assert "Import #1" in detail_response.text
+    assert "timeline.json" in detail_response.text
+    assert hashlib.sha256(content).hexdigest() in detail_response.text
+    assert "Completed" in detail_response.text
+    assert "Row Count" in detail_response.text
+    assert "Books Created" in detail_response.text
+    assert "Events Created" in detail_response.text
+    assert "Duplicate Events Skipped" in detail_response.text
+    assert "No duplicate file detected" in detail_response.text
+    assert "Imported Book" in detail_response.text
+    assert 'href="/books/1"' in detail_response.text
+
+    with session_factory() as db:
+        import_record = db.query(Import).one()
+        assert import_record.row_count == 1
+        assert import_record.summary["books_created"] == 1
+        assert import_record.summary["events_created"] == 1
+        assert db.query(Book).count() == 1
+        assert db.query(ReadingEvent).count() == 1
+
+
+def test_import_detail_shows_duplicate_file_status(tmp_path: Path) -> None:
+    client, session_factory = make_imports_client(tmp_path)
+    client.post("/admin/login", data={"password": "secret"})
+
+    with session_factory() as db:
+        import_record = Import(
+            user_id=DEFAULT_LOCAL_USER_ID,
+            source="libby",
+            filename="timeline.json",
+            checksum="abc123",
+            row_count=1,
+            status="completed",
+            summary={"books_created": 0, "events_created": 0},
+        )
+        db.add(import_record)
+        db.commit()
+        import_id = import_record.id
+
+    response = client.get(f"/imports/{import_id}?duplicate=1")
+
+    assert response.status_code == 200
+    assert "Duplicate Libby JSON skipped" in response.text
+    assert "Skipped duplicate upload" in response.text
+
+
+def test_import_detail_returns_not_found_for_missing_import(tmp_path: Path) -> None:
+    client, _ = make_imports_client(tmp_path)
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.get("/imports/999")
+
+    assert response.status_code == 404
+    assert "Import not found" in response.text
 
 
 def test_imports_nav_link_is_present(tmp_path: Path) -> None:

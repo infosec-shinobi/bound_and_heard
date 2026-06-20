@@ -95,15 +95,15 @@ Derived from `docs/ROADMAP.md` MVP 2 - Libby JSON Import.
 
 ## Chunk 9 - Import Summary Page
 
-- [ ] Add import detail/summary page
-- [ ] Show filename, checksum, status, and import time
-- [ ] Show row count
-- [ ] Show books created
-- [ ] Show books updated
-- [ ] Show events created
-- [ ] Show duplicate events skipped
-- [ ] Show duplicate file status
-- [ ] Link from summary to imported/updated books where simple
+- [x] Add import detail/summary page
+- [x] Show filename, checksum, status, and import time
+- [x] Show row count
+- [x] Show books created
+- [x] Show books updated
+- [x] Show events created
+- [x] Show duplicate events skipped
+- [x] Show duplicate file status
+- [x] Link from summary to imported/updated books where simple
 
 ## Chunk 10 - Manual Overwrite Protection
 
