@@ -33,13 +33,13 @@ Derived from `docs/ROADMAP.md` MVP 2 - Libby JSON Import.
 
 ## Chunk 3 - Libby Upload Form
 
-- [ ] Add imports route module
-- [ ] Add password-protected Libby JSON upload form
-- [ ] Accept `.json` uploads
-- [ ] Validate that uploaded content is JSON
-- [ ] Save uploaded raw JSON under `data/imports/libby/`
-- [ ] Keep read-only users blocked from upload
-- [ ] Add navigation entry for imports
+- [x] Add imports route module
+- [x] Add password-protected Libby JSON upload form
+- [x] Accept `.json` uploads
+- [x] Validate that uploaded content is JSON
+- [x] Save uploaded raw JSON under `data/imports/libby/`
+- [x] Keep read-only users blocked from upload
+- [x] Add navigation entry for imports
 
 ## Chunk 4 - Checksum And Duplicate File Detection
 

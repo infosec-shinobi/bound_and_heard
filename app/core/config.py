@@ -24,6 +24,10 @@ class Settings(BaseSettings):
         default="Local User",
         validation_alias="BOUND_AND_HEARD_DEFAULT_USER_NAME",
     )
+    imports_dir: str = Field(
+        default="data/imports",
+        validation_alias="BOUND_AND_HEARD_IMPORTS_DIR",
+    )
 
     @property
     def writes_enabled(self) -> bool:

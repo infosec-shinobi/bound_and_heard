@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <div class="row justify-content-center">
+    <div class="col-xl-8">
+      <div class="d-flex align-items-start justify-content-between gap-3 mb-4">
+        <div>
+          <p class="app-kicker small fw-semibold mb-2">Libby import</p>
+          <h1 class="display-6 mb-1">Imports</h1>
+          <p class="app-muted mb-0">Upload a Libby timeline JSON export. Processing and duplicate detection will be added in the next chunks.</p>
+        </div>
+      </div>
+
+      {% if errors %}
+        <div class="alert alert-danger" role="alert">
+          <p class="fw-semibold mb-2">Upload failed:</p>
+          <ul class="mb-0">
+            {% for error in errors %}<li>{{ error }}</li>{% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+
+      {% if request.query_params.get('saved_path') %}
+        <div class="alert alert-success" role="status">
+          Libby JSON uploaded and saved to <code>{{ request.query_params.get('saved_path') }}</code>.
+        </div>
+      {% endif %}
+
+      <form class="card" method="post" action="/imports/libby" enctype="multipart/form-data">
+        <div class="card-body">
+          <label class="form-label" for="file">Libby timeline JSON</label>
+          <input class="form-control" id="file" name="file" type="file" accept=".json,application/json" required>
+          <div class="form-text">The raw upload is preserved locally before import processing.</div>
+        </div>
+        <div class="card-footer d-flex justify-content-end">
+          <button class="btn btn-primary" type="submit">Upload Libby JSON</button>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}
