@@ -75,13 +75,13 @@ Derived from `docs/ROADMAP.md` MVP 2 - Libby JSON Import.
 
 ## Chunk 7 - Book Creation And Update Logic
 
-- [ ] Create books from Libby timeline entries when no matching local book exists
-- [ ] Match/update existing Libby books by Libby title ID where available
-- [ ] Use title/author/format fallback matching cautiously
-- [ ] Fill empty fields from import data
-- [ ] Avoid overwriting manual title, author, notes, rating, progress, or completion edits
-- [ ] Store Libby identifiers and share URL on book records
-- [ ] Set format from Libby cover metadata when available
+- [x] Create books from Libby timeline entries when no matching local book exists
+- [x] Match/update existing Libby books by Libby title ID where available
+- [x] Use title/author/format fallback matching cautiously
+- [x] Fill empty fields from import data
+- [x] Avoid overwriting manual title, author, notes, rating, progress, or completion edits
+- [x] Store Libby identifiers and share URL on book records
+- [x] Set format from Libby cover metadata when available
 
 ## Chunk 8 - Reading Event Creation
 

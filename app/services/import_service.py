@@ -6,13 +6,141 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.importers.libby_json import LibbyTimelineItem, build_libby_source_event_id
-from app.models import ReadingEvent
+from app.models import Book, ReadingEvent
+
+
+@dataclass(frozen=True)
+class LibbyBookResult:
+    book: Book
+    created: bool
+    updated: bool
 
 
 @dataclass(frozen=True)
 class LibbyEventResult:
     event: ReadingEvent
     created: bool
+
+
+def clean_string(value: str | None) -> str | None:
+    if value is None:
+        return None
+    value = value.strip()
+    return value or None
+
+
+def normalize_match_value(value: str | None) -> str:
+    return (value or "").strip().casefold()
+
+
+def isbn_fields(isbn: str | None) -> dict[str, str | None]:
+    clean_isbn = clean_string(isbn)
+    if clean_isbn is None:
+        return {"isbn10": None, "isbn13": None}
+    digits = "".join(character for character in clean_isbn if character.isdigit() or character.upper() == "X")
+    if len(digits) == 10:
+        return {"isbn10": digits, "isbn13": None}
+    if len(digits) == 13:
+        return {"isbn10": None, "isbn13": digits}
+    return {"isbn10": None, "isbn13": None}
+
+
+def find_libby_book_match(db: Session, *, user_id: int, item: LibbyTimelineItem) -> Book | None:
+    title_id = clean_string(item.title.title_id)
+    if title_id is not None:
+        matched_by_id = db.scalars(
+            select(Book).where(Book.user_id == user_id, Book.libby_title_id == title_id)
+        ).first()
+        if matched_by_id is not None:
+            return matched_by_id
+
+    title = clean_string(item.title.text)
+    author = clean_string(item.author)
+    book_format = clean_string(item.cover.format)
+    if title is None or author is None or book_format is None:
+        return None
+
+    candidates = db.scalars(
+        select(Book).where(
+            Book.user_id == user_id,
+            Book.libby_title_id.is_(None),
+            Book.format == book_format,
+        )
+    ).all()
+    for candidate in candidates:
+        if (
+            normalize_match_value(candidate.title) == normalize_match_value(title)
+            and normalize_match_value(candidate.primary_author_name) == normalize_match_value(author)
+        ):
+            return candidate
+    return None
+
+
+def fill_empty_book_fields(book: Book, item: LibbyTimelineItem) -> bool:
+    updated = False
+    isbn_values = isbn_fields(item.isbn)
+    field_values: dict[str, str | None] = {
+        "primary_author_name": clean_string(item.author),
+        "publisher": clean_string(item.publisher),
+        "isbn10": isbn_values["isbn10"],
+        "isbn13": isbn_values["isbn13"],
+        "libby_title_id": clean_string(item.title.title_id),
+        "libby_share_url": clean_string(item.title.url),
+        "cover_url": clean_string(item.cover.url),
+        "cover_color": clean_string(item.cover.color),
+    }
+    for field_name, value in field_values.items():
+        if value is not None and getattr(book, field_name) in (None, ""):
+            setattr(book, field_name, value)
+            updated = True
+
+    if book.format == "unknown" and clean_string(item.cover.format) is not None:
+        book.format = clean_string(item.cover.format) or book.format
+        updated = True
+
+    if book.metadata_source is None:
+        book.metadata_source = "libby"
+        updated = True
+    if book.author_source is None and clean_string(item.author) is not None and book.primary_author_name == clean_string(item.author):
+        book.author_source = "libby"
+        updated = True
+    return updated
+
+
+def create_book_from_libby_item(user_id: int, item: LibbyTimelineItem) -> Book:
+    title = clean_string(item.title.text) or clean_string(item.cover.title) or "Untitled Libby Book"
+    isbn_values = isbn_fields(item.isbn)
+    return Book(
+        user_id=user_id,
+        title=title,
+        primary_author_name=clean_string(item.author),
+        isbn10=isbn_values["isbn10"],
+        isbn13=isbn_values["isbn13"],
+        libby_title_id=clean_string(item.title.title_id),
+        libby_share_url=clean_string(item.title.url),
+        publisher=clean_string(item.publisher),
+        format=clean_string(item.cover.format) or "unknown",
+        status="borrowed" if item.activity == "Borrowed" else "unknown",
+        cover_url=clean_string(item.cover.url),
+        cover_color=clean_string(item.cover.color),
+        title_source="libby",
+        author_source="libby" if clean_string(item.author) else None,
+        metadata_source="libby",
+    )
+
+
+def upsert_libby_book(db: Session, *, user_id: int, item: LibbyTimelineItem) -> LibbyBookResult:
+    book = find_libby_book_match(db, user_id=user_id, item=item)
+    if book is None:
+        book = create_book_from_libby_item(user_id, item)
+        db.add(book)
+        db.flush()
+        return LibbyBookResult(book=book, created=True, updated=False)
+
+    updated = fill_empty_book_fields(book, item)
+    if updated:
+        db.flush()
+    return LibbyBookResult(book=book, created=False, updated=updated)
 
 
 def create_libby_reading_event(
