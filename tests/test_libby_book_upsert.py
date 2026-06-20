@@ -211,6 +211,38 @@ def test_upsert_libby_book_fills_only_empty_fields_on_existing_book() -> None:
     assert book.publisher == "Example Publisher"
     assert book.isbn13 == "9781234567890"
     assert book.cover_url == "https://example.test/cover.jpg"
+    assert book.author_source is None
+    assert book.metadata_source == "libby"
+
+
+def test_upsert_libby_book_tracks_source_when_filling_empty_imported_metadata() -> None:
+    session_factory = make_session_factory()
+
+    with session_factory() as db:
+        add_user(db)
+        existing = Book(
+            user_id=DEFAULT_LOCAL_USER_ID,
+            title="Manual Title",
+            format="unknown",
+            status="unknown",
+            libby_title_id="12345",
+            title_source="manual",
+        )
+        db.add(existing)
+        db.commit()
+
+        result = upsert_libby_book(db, user_id=DEFAULT_LOCAL_USER_ID, item=libby_item())
+        db.commit()
+        book = db.query(Book).one()
+
+    assert result.created is False
+    assert result.updated is True
+    assert book.title == "Manual Title"
+    assert book.title_source == "manual"
+    assert book.primary_author_name == "Example Author"
+    assert book.author_source == "libby"
+    assert book.publisher == "Example Publisher"
+    assert book.metadata_source == "libby"
 
 
 def test_upsert_libby_book_stores_isbn10_when_libby_isbn_is_ten_digits() -> None:

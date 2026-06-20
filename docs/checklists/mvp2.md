@@ -107,11 +107,11 @@ Derived from `docs/ROADMAP.md` MVP 2 - Libby JSON Import.
 
 ## Chunk 10 - Manual Overwrite Protection
 
-- [ ] Track source for imported book metadata
-- [ ] Do not overwrite manual edits by default
-- [ ] Fill empty fields only unless an explicit overwrite path is added later
-- [ ] Keep manual correction events intact
-- [ ] Add tests proving manual edits survive re-imports
+- [x] Track source for imported book metadata
+- [x] Do not overwrite manual edits by default
+- [x] Fill empty fields only unless an explicit overwrite path is added later
+- [x] Keep manual correction events intact
+- [x] Add tests proving manual edits survive re-imports
 
 ## Chunk 11 - Tests And Documentation
 
