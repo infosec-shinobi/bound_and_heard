@@ -23,13 +23,13 @@ Derived from `docs/ROADMAP.md` MVP 2 - Libby JSON Import.
 
 ## Chunk 2 - Import Data Model
 
-- [ ] Add `Import` model
-- [ ] Add `ImportFile` model if raw file metadata needs separate storage
-- [ ] Add fields for source, filename, checksum, imported_at, row_count, status, and summary
-- [ ] Add raw file path or raw JSON preservation reference
-- [ ] Add indexes/constraints for duplicate detection
-- [ ] Add Alembic migration
-- [ ] Verify `alembic upgrade head`
+- [x] Add `Import` model
+- [x] Add `ImportFile` model if raw file metadata needs separate storage
+- [x] Add fields for source, filename, checksum, imported_at, row_count, status, and summary
+- [x] Add raw file path or raw JSON preservation reference
+- [x] Add indexes/constraints for duplicate detection
+- [x] Add Alembic migration
+- [x] Verify `alembic upgrade head`
 
 ## Chunk 3 - Libby Upload Form
 

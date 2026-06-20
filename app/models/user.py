@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
 if TYPE_CHECKING:
+    from app.models.import_record import Import
     from app.models.book import Book
     from app.models.progress import BookProgress
     from app.models.reading_event import ReadingEvent
@@ -33,5 +34,6 @@ class User(Base):
     )
 
     books: Mapped[list[Book]] = relationship(back_populates="user")
+    imports: Mapped[list[Import]] = relationship(back_populates="user")
     reading_events: Mapped[list[ReadingEvent]] = relationship(back_populates="user")
     book_progress: Mapped[list[BookProgress]] = relationship(back_populates="user")

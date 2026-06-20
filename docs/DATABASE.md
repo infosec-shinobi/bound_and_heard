@@ -174,6 +174,7 @@ Fields:
 - row_count
 - status
 - summary
+- raw_file_path
 
 ### import_files
 
