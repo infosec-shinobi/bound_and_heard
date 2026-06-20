@@ -103,6 +103,9 @@ Fields:
 - title_source
 - author_source
 - metadata_source
+- review_status
+- reviewed_at
+- review_note
 - created_at
 - updated_at
 
@@ -114,6 +117,13 @@ Recommended status values:
 - completed
 - abandoned
 - unknown
+
+Recommended review_status values:
+
+- needs_review
+- reviewed
+- ignored
+- duplicate_candidate
 
 Recommended format values:
 

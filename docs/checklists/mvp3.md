@@ -10,14 +10,14 @@ Derived from `docs/ROADMAP.md` MVP 3 - Import Review and Cleanup, with continuit
 
 ## Chunk 1 - Review State And Cleanup Data Model
 
-- [ ] Decide whether review state belongs on `books` or a separate review table
-- [ ] Add fields for review status if needed: needs_review, reviewed, ignored, duplicate_candidate
-- [ ] Add reviewed_at or ignored_at if useful
-- [ ] Add reviewed_note or review_reason if useful
-- [ ] Keep imported metadata source fields intact
-- [ ] Add indexes for review filters
-- [ ] Add Alembic migration if schema changes
-- [ ] Verify `alembic upgrade head`
+- [x] Decide whether review state belongs on `books` or a separate review table
+- [x] Add fields for review status if needed: needs_review, reviewed, ignored, duplicate_candidate
+- [x] Add reviewed_at or ignored_at if useful
+- [x] Add reviewed_note or review_reason if useful
+- [x] Keep imported metadata source fields intact
+- [x] Add indexes for review filters
+- [x] Add Alembic migration if schema changes
+- [x] Verify `alembic upgrade head`
 
 ## Chunk 2 - Imported Books Needing Review Page
 

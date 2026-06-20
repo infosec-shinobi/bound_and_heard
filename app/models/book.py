@@ -41,6 +41,9 @@ class Book(Base):
     title_source: Mapped[str | None] = mapped_column(String(50))
     author_source: Mapped[str | None] = mapped_column(String(50))
     metadata_source: Mapped[str | None] = mapped_column(String(50))
+    review_status: Mapped[str | None] = mapped_column(String(50), index=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    review_note: Mapped[str | None] = mapped_column(Text)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
