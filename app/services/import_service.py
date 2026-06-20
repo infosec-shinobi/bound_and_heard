@@ -22,6 +22,27 @@ class LibbyEventResult:
     created: bool
 
 
+@dataclass(frozen=True)
+class LibbyImportSummary:
+    books_created: int = 0
+    books_updated: int = 0
+    events_created: int = 0
+    events_skipped: int = 0
+    unsupported_events: int = 0
+
+
+LIBBY_ACTIVITY_EVENT_TYPES = {
+    "borrowed": "borrowed",
+    "returned": "returned",
+    "started": "started",
+    "opened": "started",
+    "progress": "progress_seen",
+    "progress seen": "progress_seen",
+    "completed": "completed",
+    "finished": "completed",
+}
+
+
 def clean_string(value: str | None) -> str | None:
     if value is None:
         return None
@@ -31,6 +52,11 @@ def clean_string(value: str | None) -> str | None:
 
 def normalize_match_value(value: str | None) -> str:
     return (value or "").strip().casefold()
+
+
+def libby_activity_to_event_type(activity: str | None) -> str | None:
+    normalized = normalize_match_value(activity).replace("_", " ").replace("-", " ")
+    return LIBBY_ACTIVITY_EVENT_TYPES.get(" ".join(normalized.split()))
 
 
 def isbn_fields(isbn: str | None) -> dict[str, str | None]:
@@ -177,3 +203,48 @@ def create_libby_reading_event(
     db.add(event)
     db.flush()
     return LibbyEventResult(event=event, created=True)
+
+
+def process_libby_timeline_items(
+    db: Session,
+    *,
+    user_id: int,
+    items: list[LibbyTimelineItem],
+) -> LibbyImportSummary:
+    books_created = 0
+    books_updated = 0
+    events_created = 0
+    events_skipped = 0
+    unsupported_events = 0
+
+    for item in items:
+        book_result = upsert_libby_book(db, user_id=user_id, item=item)
+        if book_result.created:
+            books_created += 1
+        elif book_result.updated:
+            books_updated += 1
+
+        event_type = libby_activity_to_event_type(item.activity)
+        if event_type is None or item.timestamp is None:
+            unsupported_events += 1
+            continue
+
+        event_result = create_libby_reading_event(
+            db,
+            user_id=user_id,
+            book_id=book_result.book.id,
+            item=item,
+            event_type=event_type,
+        )
+        if event_result.created:
+            events_created += 1
+        else:
+            events_skipped += 1
+
+    return LibbyImportSummary(
+        books_created=books_created,
+        books_updated=books_updated,
+        events_created=events_created,
+        events_skipped=events_skipped,
+        unsupported_events=unsupported_events,
+    )

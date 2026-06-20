@@ -85,13 +85,13 @@ Derived from `docs/ROADMAP.md` MVP 2 - Libby JSON Import.
 
 ## Chunk 8 - Reading Event Creation
 
-- [ ] Map Libby activities to internal event types
-- [ ] Convert Libby timestamps to timezone-aware datetimes
-- [ ] Create borrowed events
-- [ ] Create returned events where applicable
-- [ ] Create started/progress/completed events when inferable
-- [ ] Preserve raw event data
-- [ ] Include import summary counts for created/skipped events
+- [x] Map Libby activities to internal event types
+- [x] Convert Libby timestamps to timezone-aware datetimes
+- [x] Create borrowed events
+- [x] Create returned events where applicable
+- [x] Create started/progress/completed events when inferable
+- [x] Preserve raw event data
+- [x] Include import summary counts for created/skipped events
 
 ## Chunk 9 - Import Summary Page
 
