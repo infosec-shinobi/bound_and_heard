@@ -56,6 +56,8 @@ def add_book(
     rating: float | None = None,
     manual_progress_percent: float | None = None,
     archived: bool = False,
+    metadata_source: str | None = None,
+    review_status: str | None = None,
 ) -> Book:
     with session_factory() as db:
         book = Book(
@@ -67,6 +69,8 @@ def add_book(
             rating=rating,
             manual_progress_percent=manual_progress_percent,
             archived_at=datetime.now(timezone.utc) if archived else None,
+            metadata_source=metadata_source,
+            review_status=review_status,
         )
         db.add(book)
         db.commit()
@@ -161,6 +165,120 @@ def test_books_page_filters_by_search_status_and_format() -> None:
     assert response.status_code == 200
     assert "Matching Book" in response.text
     assert "Other Book" not in response.text
+
+
+def test_imported_books_review_page_is_readable_without_write_access() -> None:
+    client, session_factory = make_books_client(admin_password=None)
+    add_book(
+        session_factory,
+        title="Readonly Review Book",
+        author="Libby Author",
+        metadata_source="libby",
+    )
+
+    response = client.get("/books/review")
+
+    assert response.status_code == 200
+    assert "Imported Books Needing Review" in response.text
+    assert "Readonly Review Book" in response.text
+    assert "Read-only mode" in response.text
+
+
+def test_imported_books_review_page_lists_libby_books_needing_review() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(
+        session_factory,
+        title="Libby Review Book",
+        author="Review Author",
+        book_format="audiobook",
+        status="completed",
+        manual_progress_percent=100,
+        metadata_source="libby",
+    )
+    with session_factory() as db:
+        db_book = db.get(Book, book.id)
+        assert db_book is not None
+        db_book.page_count = 320
+        db_book.audio_seconds = 8100
+        db_book.completed_on = datetime(2026, 6, 20, tzinfo=timezone.utc).date()
+        db_book.libby_title_id = "libby-1"
+        db.commit()
+
+    response = client.get("/books/review")
+
+    assert response.status_code == 200
+    assert "Libby Review Book" in response.text
+    assert "Review Author" in response.text
+    assert "Audiobook" in response.text
+    assert "Completed" in response.text
+    assert "100%" in response.text
+    assert "320" in response.text
+    assert "2 hr 15 min" in response.text
+    assert "2026-06-20" in response.text
+    assert "Title ID libby-1" in response.text
+    assert f'href="/books/{book.id}"' in response.text
+
+
+def test_imported_books_review_page_excludes_non_review_books() -> None:
+    client, session_factory = make_books_client()
+    add_book(session_factory, title="Needs Review", author="Author", metadata_source="libby")
+    add_book(session_factory, title="Manual Book", author="Author", metadata_source="manual")
+    add_book(
+        session_factory,
+        title="Reviewed Book",
+        author="Author",
+        metadata_source="libby",
+        review_status="reviewed",
+    )
+    add_book(
+        session_factory,
+        title="Ignored Book",
+        author="Author",
+        metadata_source="libby",
+        review_status="ignored",
+    )
+    add_book(
+        session_factory,
+        title="Duplicate Candidate",
+        author="Author",
+        metadata_source="libby",
+        review_status="duplicate_candidate",
+    )
+    add_book(
+        session_factory,
+        title="Archived Imported",
+        author="Author",
+        metadata_source="libby",
+        archived=True,
+    )
+
+    response = client.get("/books/review")
+
+    assert response.status_code == 200
+    assert "Needs Review" in response.text
+    assert "Duplicate Candidate" in response.text
+    assert "Manual Book" not in response.text
+    assert "Reviewed Book" not in response.text
+    assert "Ignored Book" not in response.text
+    assert "Archived Imported" not in response.text
+
+
+def test_imported_books_review_page_shows_empty_state() -> None:
+    client, _ = make_books_client(admin_password=None)
+
+    response = client.get("/books/review")
+
+    assert response.status_code == 200
+    assert "No imported books need review" in response.text
+
+
+def test_review_nav_link_is_present() -> None:
+    client, _ = make_books_client(admin_password=None)
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert 'href="/books/review"' in response.text
 
 
 def test_add_book_form_is_protected() -> None:

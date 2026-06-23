@@ -21,13 +21,13 @@ Derived from `docs/ROADMAP.md` MVP 3 - Import Review and Cleanup, with continuit
 
 ## Chunk 2 - Imported Books Needing Review Page
 
-- [ ] Add review route module or extend books route cleanly
-- [ ] Add protected/read-only review page for imported books
-- [ ] List imported Libby books that need cleanup
-- [ ] Show title, author, format, status, progress, page count, audio duration, completion date, and import/source indicators
-- [ ] Link each row to the book detail page
-- [ ] Add navigation entry for review/cleanup
-- [ ] Add empty state when no imported books need review
+- [x] Add review route module or extend books route cleanly
+- [x] Add protected/read-only review page for imported books
+- [x] List imported Libby books that need cleanup
+- [x] Show title, author, format, status, progress, page count, audio duration, completion date, and import/source indicators
+- [x] Link each row to the book detail page
+- [x] Add navigation entry for review/cleanup
+- [x] Add empty state when no imported books need review
 
 ## Chunk 3 - Missing Core Metadata Filters
 

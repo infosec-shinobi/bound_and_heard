@@ -318,6 +318,35 @@ async def book_list(
     )
 
 
+@router.get("/review", response_class=HTMLResponse)
+async def imported_books_review(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    books = db.scalars(
+        select(Book)
+        .options(joinedload(Book.progress))
+        .where(
+            Book.user_id == DEFAULT_LOCAL_USER_ID,
+            Book.archived_at.is_(None),
+            Book.metadata_source == "libby",
+            or_(Book.review_status.is_(None), Book.review_status.not_in(["reviewed", "ignored"])),
+        )
+        .order_by(Book.title.asc(), Book.id.asc())
+    ).unique().all()
+
+    return templates.TemplateResponse(
+        request,
+        "books/review.html",
+        template_context(
+            request,
+            page_title="Import Review",
+            books=books,
+            format_audio_seconds=format_audio_seconds,
+        ),
+    )
+
+
 @router.get("/new", response_class=HTMLResponse)
 async def new_book_form(
     request: Request,

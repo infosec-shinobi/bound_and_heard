@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
+    <div>
+      <p class="app-kicker small fw-semibold mb-2">Import cleanup</p>
+      <h1 class="display-6 mb-1">Imported Books Needing Review</h1>
+      <p class="app-muted mb-0">Scan Libby-imported records before relying on them for scraping, analytics, and recaps.</p>
+    </div>
+    <a class="btn btn-outline-secondary" href="/imports">View Imports</a>
+  </div>
+
+  {% if books %}
+    <div class="card">
+      <div class="table-responsive">
+        <table class="table table-dark table-hover align-middle mb-0 app-table">
+          <thead>
+            <tr>
+              <th scope="col">Title</th>
+              <th scope="col">Author</th>
+              <th scope="col">Format</th>
+              <th scope="col">Status</th>
+              <th scope="col">Progress</th>
+              <th scope="col">Pages</th>
+              <th scope="col">Audio</th>
+              <th scope="col">Completed</th>
+              <th scope="col">Source</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for book in books %}
+              {% set progress = book.progress.progress_percent if book.progress and book.progress.progress_percent is not none else book.manual_progress_percent %}
+              <tr>
+                <td>
+                  <a class="fw-semibold app-link" href="/books/{{ book.id }}">{{ book.title }}</a>
+                  {% if book.subtitle %}<div class="small app-muted">{{ book.subtitle }}</div>{% endif %}
+                  {% if book.review_status %}<span class="badge app-badge-muted mt-1">{{ book.review_status.replace('_', ' ').title() }}</span>{% endif %}
+                </td>
+                <td>{{ book.primary_author_name or 'Unknown' }}</td>
+                <td>{{ book.format.replace('_', ' ').title() }}</td>
+                <td>{{ book.status.replace('_', ' ').title() }}</td>
+                <td>{% if progress is not none %}{{ '%.0f'|format(progress) }}%{% else %}<span class="app-muted">Unknown</span>{% endif %}</td>
+                <td>{% if book.page_count is not none %}{{ book.page_count }}{% else %}<span class="app-muted">Missing</span>{% endif %}</td>
+                <td>{% if book.audio_seconds is not none %}{{ format_audio_seconds(book.audio_seconds) }}{% else %}<span class="app-muted">Missing</span>{% endif %}</td>
+                <td>{% if book.completed_on %}{{ book.completed_on }}{% else %}<span class="app-muted">None</span>{% endif %}</td>
+                <td>
+                  <span class="badge app-badge-success">Libby</span>
+                  {% if book.libby_title_id %}<div class="small app-muted mt-1">Title ID {{ book.libby_title_id }}</div>{% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% else %}
+    <section class="card text-center py-5">
+      <div class="card-body">
+        <p class="app-kicker small fw-semibold mb-2">Clean slate</p>
+        <h2 class="h4">No imported books need review</h2>
+        <p class="app-muted mb-4">Libby-imported books will appear here until they are reviewed or ignored.</p>
+        <a class="btn btn-outline-secondary" href="/books">Back to Books</a>
+      </div>
+    </section>
+  {% endif %}
+{% endblock %}
