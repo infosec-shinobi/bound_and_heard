@@ -1,6 +1,7 @@
 from collections.abc import Generator
 from datetime import datetime, timezone
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -50,7 +51,7 @@ def add_book(
     session_factory: sessionmaker[Session],
     *,
     title: str,
-    author: str,
+    author: str | None,
     book_format: str = "ebook",
     status: str = "started",
     rating: float | None = None,
@@ -76,6 +77,29 @@ def add_book(
         db.commit()
         db.refresh(book)
         return book
+
+
+def set_review_metadata(
+    session_factory: sessionmaker[Session],
+    book_id: int,
+    *,
+    page_count: int | None = 320,
+    audio_seconds: int | None = 8100,
+    author: str | None = "Review Author",
+    publisher: str | None = "Review Publisher",
+    isbn13: str | None = "9781234567890",
+    cover_url: str | None = "https://example.test/cover.jpg",
+) -> None:
+    with session_factory() as db:
+        book = db.get(Book, book_id)
+        assert book is not None
+        book.page_count = page_count
+        book.audio_seconds = audio_seconds
+        book.primary_author_name = author
+        book.publisher = publisher
+        book.isbn13 = isbn13
+        book.cover_url = cover_url
+        db.commit()
 
 
 def test_books_page_shows_empty_state() -> None:
@@ -270,6 +294,89 @@ def test_imported_books_review_page_shows_empty_state() -> None:
 
     assert response.status_code == 200
     assert "No imported books need review" in response.text
+
+
+@pytest.mark.parametrize(
+    ("query_param", "missing_field"),
+    [
+        ("missing_page_count", "page_count"),
+        ("missing_audio_duration", "audio_seconds"),
+        ("missing_author", "author"),
+        ("missing_publisher", "publisher"),
+        ("missing_isbn", "isbn13"),
+        ("missing_cover_url", "cover_url"),
+    ],
+)
+def test_imported_books_review_page_filters_missing_core_metadata(
+    query_param: str,
+    missing_field: str,
+) -> None:
+    client, session_factory = make_books_client()
+    matching = add_book(
+        session_factory,
+        title=f"Missing {missing_field}",
+        author="Review Author",
+        metadata_source="libby",
+    )
+    complete = add_book(
+        session_factory,
+        title="Complete Metadata",
+        author="Review Author",
+        metadata_source="libby",
+    )
+    set_review_metadata(session_factory, complete.id)
+
+    missing_values = {
+        "page_count": {"page_count": None},
+        "audio_seconds": {"audio_seconds": None},
+        "author": {"author": None},
+        "publisher": {"publisher": None},
+        "isbn13": {"isbn13": None},
+        "cover_url": {"cover_url": None},
+    }
+    set_review_metadata(session_factory, matching.id, **missing_values[missing_field])
+
+    response = client.get(f"/books/review?{query_param}=true")
+
+    assert response.status_code == 200
+    assert f"Missing {missing_field}" in response.text
+    assert "Complete Metadata" not in response.text
+    assert f'id="filter-{query_param}" checked' in response.text
+
+
+def test_imported_books_review_page_combines_missing_metadata_filters() -> None:
+    client, session_factory = make_books_client()
+    matching = add_book(
+        session_factory,
+        title="Missing Pages And Author",
+        author="Review Author",
+        metadata_source="libby",
+    )
+    missing_pages_only = add_book(
+        session_factory,
+        title="Missing Pages Only",
+        author="Review Author",
+        metadata_source="libby",
+    )
+    missing_author_only = add_book(
+        session_factory,
+        title="Missing Author Only",
+        author="Review Author",
+        metadata_source="libby",
+    )
+
+    set_review_metadata(session_factory, matching.id, page_count=None, author=None)
+    set_review_metadata(session_factory, missing_pages_only.id, page_count=None)
+    set_review_metadata(session_factory, missing_author_only.id, author=None)
+
+    response = client.get("/books/review?missing_page_count=true&missing_author=true")
+
+    assert response.status_code == 200
+    assert "Missing Pages And Author" in response.text
+    assert "Missing Pages Only" not in response.text
+    assert "Missing Author Only" not in response.text
+    assert 'id="filter-missing_page_count" checked' in response.text
+    assert 'id="filter-missing_author" checked' in response.text
 
 
 def test_review_nav_link_is_present() -> None:

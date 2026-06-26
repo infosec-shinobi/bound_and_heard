@@ -2,7 +2,7 @@ from datetime import date, datetime, time, timezone
 
 from fastapi import APIRouter, Depends, Form, Query, Request, status
 from fastapi.responses import RedirectResponse, Response
-from sqlalchemy import Select, or_, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session, joinedload
 from starlette.responses import HTMLResponse
 
@@ -17,6 +17,14 @@ router = APIRouter(prefix="/books", tags=["books"])
 
 BOOK_FORMATS = ["ebook", "audiobook", "physical", "unknown"]
 BOOK_STATUSES = ["want_to_read", "borrowed", "started", "completed", "abandoned", "unknown"]
+REVIEW_METADATA_FILTERS = {
+    "missing_page_count": "Missing page count",
+    "missing_audio_duration": "Missing audio duration",
+    "missing_author": "Missing author",
+    "missing_publisher": "Missing publisher",
+    "missing_isbn": "Missing ISBN",
+    "missing_cover_url": "Missing cover URL",
+}
 
 
 def clean_optional(value: str | None) -> str | None:
@@ -103,6 +111,10 @@ def display_progress(book: Book) -> float | None:
     if book.progress and book.progress.progress_percent is not None:
         return book.progress.progress_percent
     return book.manual_progress_percent
+
+
+def missing_text_filter(column: object) -> object:
+    return or_(column.is_(None), func.trim(column) == "")
 
 
 def audio_seconds_to_hours(audio_seconds: int | None) -> str:
@@ -322,8 +334,23 @@ async def book_list(
 async def imported_books_review(
     request: Request,
     db: Session = Depends(get_db),
+    missing_page_count: bool = Query(default=False),
+    missing_audio_duration: bool = Query(default=False),
+    missing_author: bool = Query(default=False),
+    missing_publisher: bool = Query(default=False),
+    missing_isbn: bool = Query(default=False),
+    missing_cover_url: bool = Query(default=False),
 ) -> HTMLResponse:
-    books = db.scalars(
+    active_filters = {
+        "missing_page_count": missing_page_count,
+        "missing_audio_duration": missing_audio_duration,
+        "missing_author": missing_author,
+        "missing_publisher": missing_publisher,
+        "missing_isbn": missing_isbn,
+        "missing_cover_url": missing_cover_url,
+    }
+
+    statement = (
         select(Book)
         .options(joinedload(Book.progress))
         .where(
@@ -333,7 +360,22 @@ async def imported_books_review(
             or_(Book.review_status.is_(None), Book.review_status.not_in(["reviewed", "ignored"])),
         )
         .order_by(Book.title.asc(), Book.id.asc())
-    ).unique().all()
+    )
+
+    if missing_page_count:
+        statement = statement.where(Book.page_count.is_(None))
+    if missing_audio_duration:
+        statement = statement.where(Book.audio_seconds.is_(None))
+    if missing_author:
+        statement = statement.where(missing_text_filter(Book.primary_author_name))
+    if missing_publisher:
+        statement = statement.where(missing_text_filter(Book.publisher))
+    if missing_isbn:
+        statement = statement.where(missing_text_filter(Book.isbn10), missing_text_filter(Book.isbn13))
+    if missing_cover_url:
+        statement = statement.where(missing_text_filter(Book.cover_url))
+
+    books = db.scalars(statement).unique().all()
 
     return templates.TemplateResponse(
         request,
@@ -342,6 +384,8 @@ async def imported_books_review(
             request,
             page_title="Import Review",
             books=books,
+            filter_options=REVIEW_METADATA_FILTERS,
+            active_filters=active_filters,
             format_audio_seconds=format_audio_seconds,
         ),
     )

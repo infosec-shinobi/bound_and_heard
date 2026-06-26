@@ -31,14 +31,14 @@ Derived from `docs/ROADMAP.md` MVP 3 - Import Review and Cleanup, with continuit
 
 ## Chunk 3 - Missing Core Metadata Filters
 
-- [ ] Add filter for missing page count
-- [ ] Add filter for missing audio duration
-- [ ] Add filter for missing author
-- [ ] Add filter for missing publisher
-- [ ] Add filter for missing ISBN
-- [ ] Add filter for missing cover URL
-- [ ] Allow combining filters
-- [ ] Preserve filter state in query params
+- [x] Add filter for missing page count
+- [x] Add filter for missing audio duration
+- [x] Add filter for missing author
+- [x] Add filter for missing publisher
+- [x] Add filter for missing ISBN
+- [x] Add filter for missing cover URL
+- [x] Allow combining filters
+- [x] Preserve filter state in query params
 
 ## Chunk 4 - Ambiguous Or Suspicious Metadata Filters
 
