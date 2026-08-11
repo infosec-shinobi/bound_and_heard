@@ -1,5 +1,6 @@
 from datetime import date, datetime, time, timezone
 import re
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from fastapi import APIRouter, Depends, Form, Query, Request, status
 from fastapi.responses import RedirectResponse, Response
@@ -206,9 +207,18 @@ def review_progress_expression() -> object:
 
 
 def safe_review_return_url(value: str | None) -> str:
-    if value and value.startswith("/books/review") and not value.startswith("//"):
-        return value
-    return "/books/review"
+    if not value or not value.startswith("/books/review") or value.startswith("//"):
+        return "/books/review"
+    parsed = urlsplit(value)
+    query_items = [(key, item_value) for key, item_value in parse_qsl(parsed.query) if key != "review_error"]
+    return urlunsplit(("", "", parsed.path, urlencode(query_items), ""))
+
+
+def review_return_url_with_error(return_url: str, message: str) -> str:
+    parsed = urlsplit(return_url)
+    query_items = parse_qsl(parsed.query)
+    query_items.append(("review_error", message))
+    return urlunsplit(("", "", parsed.path, urlencode(query_items), ""))
 
 
 def audio_seconds_to_hours(audio_seconds: int | None) -> str:
@@ -455,6 +465,7 @@ async def imported_books_review(
     completed_without_completion_date: bool = Query(default=False),
     progress_status_mismatch: bool = Query(default=False),
     duplicate_candidate: bool = Query(default=False),
+    review_error: str | None = Query(default=None),
 ) -> HTMLResponse:
     active_filters = {
         "missing_page_count": missing_page_count,
@@ -546,6 +557,7 @@ async def imported_books_review(
             suspicious_filter_options=REVIEW_SUSPICIOUS_FILTERS,
             active_filters=active_filters,
             book_statuses=BOOK_STATUSES,
+            review_error=review_error,
             duplicate_reasons=duplicate_reasons,
             format_audio_seconds=format_audio_seconds,
         ),
@@ -571,6 +583,49 @@ async def update_review_book_status(
     old_completed_on = book.completed_on
     old_progress = book.manual_progress_percent
     book.status = status_value
+
+    correction_event = correction_event_for_changes(
+        book,
+        old_status=old_status,
+        old_completed_on=old_completed_on,
+        old_progress=old_progress,
+    )
+    if correction_event is not None:
+        db.add(correction_event)
+
+    db.commit()
+    return RedirectResponse(return_url, status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{book_id}/review/progress")
+async def update_review_book_progress(
+    book_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_write_access),
+    manual_progress_percent: str | None = Form(default=None),
+    return_to: str | None = Form(default=None),
+) -> Response:
+    return_url = safe_review_return_url(return_to)
+    errors: list[str] = []
+    parsed_progress = parse_optional_float(
+        manual_progress_percent,
+        "Manual progress percent",
+        errors,
+        minimum=0,
+        maximum=100,
+    )
+    if errors:
+        error_url = review_return_url_with_error(return_url, errors[0])
+        return RedirectResponse(error_url, status_code=status.HTTP_303_SEE_OTHER)
+
+    book = db.get(Book, book_id)
+    if book is None or book.user_id != DEFAULT_LOCAL_USER_ID:
+        return RedirectResponse(return_url, status_code=status.HTTP_303_SEE_OTHER)
+
+    old_status = book.status
+    old_completed_on = book.completed_on
+    old_progress = book.manual_progress_percent
+    book.manual_progress_percent = parsed_progress
 
     correction_event = correction_event_for_changes(
         book,

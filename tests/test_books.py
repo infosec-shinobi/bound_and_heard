@@ -279,6 +279,7 @@ def test_imported_books_review_page_lists_libby_books_needing_review() -> None:
     assert "Audiobook" in response.text
     assert "Completed" in response.text
     assert f'action="/books/{book.id}/review/status"' not in response.text
+    assert f'action="/books/{book.id}/review/progress"' not in response.text
     assert "100%" in response.text
     assert "320" in response.text
     assert "2 hr 15 min" in response.text
@@ -361,6 +362,144 @@ def test_quick_status_update_rejects_invalid_status() -> None:
         unchanged = db.get(Book, book.id)
         assert unchanged is not None
         assert unchanged.status == "started"
+        assert db.query(ReadingEvent).filter_by(book_id=book.id, event_type="manually_corrected").count() == 0
+
+
+def test_imported_books_review_page_shows_quick_progress_form_after_admin_login() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(
+        session_factory,
+        title="Progress Review Book",
+        author="Author",
+        manual_progress_percent=25,
+        metadata_source="libby",
+    )
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.get("/books/review?missing_page_count=true")
+
+    assert response.status_code == 200
+    assert f'action="/books/{book.id}/review/progress"' in response.text
+    assert 'name="return_to" value="/books/review?missing_page_count=true"' in response.text
+    assert 'name="manual_progress_percent"' in response.text
+    assert 'value="25"' in response.text
+
+
+def test_quick_progress_update_requires_admin_login() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(
+        session_factory,
+        title="Protected Progress",
+        author="Author",
+        manual_progress_percent=10,
+        metadata_source="libby",
+    )
+
+    response = client.post(
+        f"/books/{book.id}/review/progress",
+        data={"manual_progress_percent": "45", "return_to": "/books/review?missing_page_count=true"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 403
+    with session_factory() as db:
+        unchanged = db.get(Book, book.id)
+        assert unchanged is not None
+        assert unchanged.manual_progress_percent == 10
+
+
+def test_quick_progress_update_changes_manual_progress_creates_event_and_returns_to_filter() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(
+        session_factory,
+        title="Quick Progress",
+        author="Author",
+        manual_progress_percent=10,
+        metadata_source="libby",
+    )
+    with session_factory() as db:
+        db.add(
+            BookProgress(
+                user_id=DEFAULT_LOCAL_USER_ID,
+                book_id=book.id,
+                source="libby",
+                progress_percent=60,
+            )
+        )
+        db.commit()
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.post(
+        f"/books/{book.id}/review/progress",
+        data={"manual_progress_percent": "45", "return_to": "/books/review?missing_page_count=true"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/books/review?missing_page_count=true"
+    with session_factory() as db:
+        updated = db.get(Book, book.id)
+        assert updated is not None
+        assert updated.manual_progress_percent == 45
+        assert updated.metadata_source == "libby"
+        imported_progress = db.query(BookProgress).filter_by(book_id=book.id).one()
+        assert imported_progress.source == "libby"
+        assert imported_progress.progress_percent == 60
+        event = db.query(ReadingEvent).filter_by(book_id=book.id, event_type="manually_corrected").one()
+        assert event.progress_percent == 45
+        assert event.raw_data == {"changed_fields": {"manual_progress_percent": {"from": 10, "to": 45.0}}}
+
+
+def test_quick_progress_update_can_clear_manual_progress() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(
+        session_factory,
+        title="Clear Progress",
+        author="Author",
+        manual_progress_percent=80,
+        metadata_source="libby",
+    )
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.post(
+        f"/books/{book.id}/review/progress",
+        data={"manual_progress_percent": "", "return_to": "/books/review?missing_page_count=true"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    with session_factory() as db:
+        updated = db.get(Book, book.id)
+        assert updated is not None
+        assert updated.manual_progress_percent is None
+        event = db.query(ReadingEvent).filter_by(book_id=book.id, event_type="manually_corrected").one()
+        assert event.raw_data == {"changed_fields": {"manual_progress_percent": {"from": 80, "to": None}}}
+
+
+def test_quick_progress_update_shows_validation_error_without_losing_filter_context() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(
+        session_factory,
+        title="Invalid Progress",
+        author="Author",
+        manual_progress_percent=20,
+        metadata_source="libby",
+    )
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.post(
+        f"/books/{book.id}/review/progress",
+        data={"manual_progress_percent": "120", "return_to": "/books/review?missing_page_count=true"},
+    )
+
+    assert response.status_code == 200
+    assert "Manual progress percent must be no more than 100." in response.text
+    assert 'id="filter-missing_page_count" checked' in response.text
+    assert "Invalid Progress" in response.text
+    with session_factory() as db:
+        unchanged = db.get(Book, book.id)
+        assert unchanged is not None
+        assert unchanged.manual_progress_percent == 20
         assert db.query(ReadingEvent).filter_by(book_id=book.id, event_type="manually_corrected").count() == 0
 
 

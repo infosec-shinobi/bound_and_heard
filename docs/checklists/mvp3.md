@@ -73,12 +73,12 @@ Derived from `docs/ROADMAP.md` MVP 3 - Import Review and Cleanup, with continuit
 
 ## Chunk 7 - Quick Progress Correction
 
-- [ ] Add protected quick progress percent update action
-- [ ] Validate 0-100 percent values
-- [ ] Allow clearing manual progress when appropriate
-- [ ] Create a manual correction event when progress changes
-- [ ] Show validation errors without losing filter context
-- [ ] Keep imported progress/source records intact unless explicitly changed later
+- [x] Add protected quick progress percent update action
+- [x] Validate 0-100 percent values
+- [x] Allow clearing manual progress when appropriate
+- [x] Create a manual correction event when progress changes
+- [x] Show validation errors without losing filter context
+- [x] Keep imported progress/source records intact unless explicitly changed later
 
 ## Chunk 8 - Quick Completion Date Correction
 
@@ -117,7 +117,7 @@ Derived from `docs/ROADMAP.md` MVP 3 - Import Review and Cleanup, with continuit
 - [ ] Test missing or ambiguous metadata filters
 - [x] Test duplicate candidate detection
 - [x] Test quick status correction creates manual correction event
-- [ ] Test quick progress correction creates manual correction event
+- [x] Test quick progress correction creates manual correction event
 - [ ] Test quick completion date correction creates manual correction event
 - [ ] Test archive/ignore controls preserve records and events
 - [ ] Test filter context is preserved after quick actions

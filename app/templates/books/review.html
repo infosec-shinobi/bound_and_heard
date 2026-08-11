@@ -47,6 +47,10 @@
     </div>
   </form>
 
+  {% if review_error %}
+    <div class="alert alert-danger" role="alert">{{ review_error }}</div>
+  {% endif %}
+
   {% if books %}
     <div class="card">
       <div class="table-responsive">
@@ -97,7 +101,22 @@
                     </span>
                   {% endif %}
                 </td>
-                <td>{% if progress is not none %}{{ '%.0f'|format(progress) }}%{% else %}<span class="app-muted">Unknown</span>{% endif %}</td>
+                <td>
+                  {% if can_write %}
+                    <form class="d-flex gap-2 align-items-center" method="post" action="/books/{{ book.id }}/review/progress">
+                      <input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+                      <input class="form-control form-control-sm" name="manual_progress_percent" type="number" min="0" max="100" step="1" value="{% if book.manual_progress_percent is not none %}{{ '%.0f'|format(book.manual_progress_percent) }}{% endif %}" placeholder="Clear" aria-label="Manual progress for {{ book.title }}">
+                      <button class="btn btn-sm btn-outline-primary" type="submit">Save</button>
+                    </form>
+                    {% if book.progress and book.progress.progress_percent is not none %}
+                      <div class="small app-muted mt-1">Imported: {{ '%.0f'|format(book.progress.progress_percent) }}%</div>
+                    {% endif %}
+                  {% elif progress is not none %}
+                    {{ '%.0f'|format(progress) }}%
+                  {% else %}
+                    <span class="app-muted">Unknown</span>
+                  {% endif %}
+                </td>
                 <td>{% if book.page_count is not none %}{{ book.page_count }}{% else %}<span class="app-muted">Missing</span>{% endif %}</td>
                 <td>{% if book.audio_seconds is not none %}{{ format_audio_seconds(book.audio_seconds) }}{% else %}<span class="app-muted">Missing</span>{% endif %}</td>
                 <td>{% if book.completed_on %}{{ book.completed_on }}{% else %}<span class="app-muted">None</span>{% endif %}</td>
