@@ -59,6 +59,9 @@ def add_book(
     archived: bool = False,
     metadata_source: str | None = None,
     review_status: str | None = None,
+    isbn10: str | None = None,
+    isbn13: str | None = None,
+    libby_title_id: str | None = None,
 ) -> Book:
     with session_factory() as db:
         book = Book(
@@ -72,6 +75,9 @@ def add_book(
             archived_at=datetime.now(timezone.utc) if archived else None,
             metadata_source=metadata_source,
             review_status=review_status,
+            isbn10=isbn10,
+            isbn13=isbn13,
+            libby_title_id=libby_title_id,
         )
         db.add(book)
         db.commit()
@@ -481,6 +487,121 @@ def test_imported_books_review_page_filters_books_without_reading_events() -> No
     assert "No Reading Events" in response.text
     assert "Has Reading Event" not in response.text
     assert 'id="filter-no_reading_events" checked' in response.text
+
+
+@pytest.mark.parametrize(
+    ("matching_kwargs", "duplicate_kwargs", "reason"),
+    [
+        (
+            {"libby_title_id": "libby-duplicate-1", "book_format": "ebook"},
+            {"libby_title_id": "libby-duplicate-1", "book_format": "ebook"},
+            "Same Libby title ID and format: libby-duplicate-1 / ebook",
+        ),
+        (
+            {"title": "Duplicate Title", "author": "Same Author", "book_format": "ebook"},
+            {"title": " duplicate   title ", "author": "same author", "book_format": "ebook"},
+            "Same normalized title, author, and format",
+        ),
+        (
+            {"isbn13": "9781234567890", "book_format": "ebook"},
+            {"isbn13": "9781234567890", "book_format": "ebook"},
+            "Same ISBN and format: 9781234567890 / ebook",
+        ),
+    ],
+)
+def test_imported_books_review_page_filters_duplicate_candidates(
+    matching_kwargs: dict[str, object],
+    duplicate_kwargs: dict[str, object],
+    reason: str,
+) -> None:
+    client, session_factory = make_books_client()
+    matching = add_book(
+        session_factory,
+        title=str(matching_kwargs.pop("title", "Duplicate Match")),
+        author=matching_kwargs.pop("author", "Review Author"),
+        metadata_source="libby",
+        **matching_kwargs,
+    )
+    add_book(
+        session_factory,
+        title=str(duplicate_kwargs.pop("title", "Existing Duplicate")),
+        author=duplicate_kwargs.pop("author", "Review Author"),
+        metadata_source="manual",
+        **duplicate_kwargs,
+    )
+    add_book(session_factory, title="Unique Review Book", author="Review Author", metadata_source="libby")
+
+    response = client.get("/books/review?duplicate_candidate=true")
+
+    assert response.status_code == 200
+    assert matching.title in response.text
+    assert "Unique Review Book" not in response.text
+    assert reason in response.text
+    assert 'id="filter-duplicate_candidate" checked' in response.text
+
+
+def test_imported_books_review_page_keeps_title_author_duplicates_format_specific() -> None:
+    client, session_factory = make_books_client()
+    add_book(
+        session_factory,
+        title="Format Specific",
+        author="Same Author",
+        book_format="ebook",
+        metadata_source="libby",
+    )
+    add_book(
+        session_factory,
+        title="format specific",
+        author="same author",
+        book_format="audiobook",
+        metadata_source="manual",
+    )
+
+    response = client.get("/books/review?duplicate_candidate=true")
+
+    assert response.status_code == 200
+    assert "Format Specific" not in response.text
+    assert "No imported books need review" in response.text
+
+
+@pytest.mark.parametrize(
+    ("matching_kwargs", "duplicate_kwargs"),
+    [
+        (
+            {"libby_title_id": "libby-related-1", "book_format": "ebook"},
+            {"libby_title_id": "libby-related-1", "book_format": "audiobook"},
+        ),
+        (
+            {"isbn13": "9781234567890", "book_format": "ebook"},
+            {"isbn13": "9781234567890", "book_format": "audiobook"},
+        ),
+    ],
+)
+def test_imported_books_review_page_keeps_identifier_matches_format_specific(
+    matching_kwargs: dict[str, object],
+    duplicate_kwargs: dict[str, object],
+) -> None:
+    client, session_factory = make_books_client()
+    add_book(
+        session_factory,
+        title="Related Format",
+        author="Same Author",
+        metadata_source="libby",
+        **matching_kwargs,
+    )
+    add_book(
+        session_factory,
+        title="Related Format",
+        author="Same Author",
+        metadata_source="manual",
+        **duplicate_kwargs,
+    )
+
+    response = client.get("/books/review?duplicate_candidate=true")
+
+    assert response.status_code == 200
+    assert "Related Format" not in response.text
+    assert "No imported books need review" in response.text
 
 
 def test_review_nav_link_is_present() -> None:

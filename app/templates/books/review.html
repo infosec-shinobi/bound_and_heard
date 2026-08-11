@@ -72,6 +72,11 @@
                   <a class="fw-semibold app-link" href="/books/{{ book.id }}">{{ book.title }}</a>
                   {% if book.subtitle %}<div class="small app-muted">{{ book.subtitle }}</div>{% endif %}
                   {% if book.review_status %}<span class="badge app-badge-muted mt-1">{{ book.review_status.replace('_', ' ').title() }}</span>{% endif %}
+                  {% if duplicate_reasons.get(book.id) %}
+                    <div class="small app-muted mt-2">
+                      Duplicate candidate: {{ duplicate_reasons[book.id]|join('; ') }}
+                    </div>
+                  {% endif %}
                 </td>
                 <td>{{ book.primary_author_name or 'Unknown' }}</td>
                 <td>{{ book.format.replace('_', ' ').title() }}</td>

@@ -52,14 +52,14 @@ Derived from `docs/ROADMAP.md` MVP 3 - Import Review and Cleanup, with continuit
 
 ## Chunk 5 - Duplicate Candidate Detection
 
-- [ ] Define duplicate candidate rules for review UI
-- [ ] Detect same Libby title ID across multiple local books
-- [ ] Detect same normalized title, author, and format
-- [ ] Detect same ISBN across multiple local books
-- [ ] Keep audiobook and ebook records separate unless identifiers strongly indicate a duplicate
-- [ ] Add duplicate candidate filter
-- [ ] Show why each candidate was flagged
-- [ ] Do not auto-merge duplicate candidates in MVP 3
+- [x] Define duplicate candidate rules for review UI
+- [x] Detect same Libby title ID and format across multiple local books
+- [x] Detect same normalized title, author, and format
+- [x] Detect same ISBN and format across multiple local books
+- [x] Keep audiobook and ebook records separate unless identifiers strongly indicate a duplicate
+- [x] Add duplicate candidate filter
+- [x] Show why each candidate was flagged
+- [x] Do not auto-merge duplicate candidates in MVP 3
 
 ## Chunk 6 - Quick Status Correction
 
@@ -115,7 +115,7 @@ Derived from `docs/ROADMAP.md` MVP 3 - Import Review and Cleanup, with continuit
 - [ ] Test missing page count filter
 - [ ] Test missing audio duration filter
 - [ ] Test missing or ambiguous metadata filters
-- [ ] Test duplicate candidate detection
+- [x] Test duplicate candidate detection
 - [ ] Test quick status correction creates manual correction event
 - [ ] Test quick progress correction creates manual correction event
 - [ ] Test quick completion date correction creates manual correction event

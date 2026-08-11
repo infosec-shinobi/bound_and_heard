@@ -1,4 +1,5 @@
 from datetime import date, datetime, time, timezone
+import re
 
 from fastapi import APIRouter, Depends, Form, Query, Request, status
 from fastapi.responses import RedirectResponse, Response
@@ -33,8 +34,10 @@ REVIEW_SUSPICIOUS_FILTERS = {
     "no_reading_events": "No reading events",
     "completed_without_completion_date": "Completed without completion date",
     "progress_status_mismatch": "Progress/status mismatch",
+    "duplicate_candidate": "Duplicate candidate",
 }
 TITLE_FALLBACK_VALUES = ["untitled libby book"]
+WHITESPACE_PATTERN = re.compile(r"\s+")
 
 
 def clean_optional(value: str | None) -> str | None:
@@ -42,6 +45,57 @@ def clean_optional(value: str | None) -> str | None:
         return None
     value = value.strip()
     return value or None
+
+
+def normalize_duplicate_text(value: str | None) -> str | None:
+    value = clean_optional(value)
+    if value is None:
+        return None
+    return WHITESPACE_PATTERN.sub(" ", value.casefold())
+
+
+def add_duplicate_reason(
+    duplicate_reasons: dict[int, list[str]],
+    books: list[Book],
+    reason: str,
+) -> None:
+    if len(books) < 2:
+        return
+    for book in books:
+        duplicate_reasons.setdefault(book.id, []).append(reason)
+
+
+def duplicate_reasons_by_book_id(books: list[Book]) -> dict[int, list[str]]:
+    duplicate_reasons: dict[int, list[str]] = {}
+    libby_title_format_groups: dict[tuple[str, str], list[Book]] = {}
+    title_author_format_groups: dict[tuple[str, str, str], list[Book]] = {}
+    isbn_format_groups: dict[tuple[str, str], list[Book]] = {}
+
+    for book in books:
+        libby_title_id = clean_optional(book.libby_title_id)
+        if libby_title_id is not None:
+            libby_title_format_groups.setdefault((libby_title_id, book.format), []).append(book)
+
+        normalized_title = normalize_duplicate_text(book.title)
+        normalized_author = normalize_duplicate_text(book.primary_author_name)
+        if normalized_title is not None and normalized_author is not None:
+            title_author_format_groups.setdefault(
+                (normalized_title, normalized_author, book.format),
+                [],
+            ).append(book)
+
+        for isbn in (clean_optional(book.isbn10), clean_optional(book.isbn13)):
+            if isbn is not None:
+                isbn_format_groups.setdefault((isbn, book.format), []).append(book)
+
+    for (title_id, book_format), grouped_books in libby_title_format_groups.items():
+        add_duplicate_reason(duplicate_reasons, grouped_books, f"Same Libby title ID and format: {title_id} / {book_format}")
+    for grouped_books in title_author_format_groups.values():
+        add_duplicate_reason(duplicate_reasons, grouped_books, "Same normalized title, author, and format")
+    for (isbn, book_format), grouped_books in isbn_format_groups.items():
+        add_duplicate_reason(duplicate_reasons, grouped_books, f"Same ISBN and format: {isbn} / {book_format}")
+
+    return duplicate_reasons
 
 
 def parse_optional_date(value: str | None, field_name: str, errors: list[str]) -> date | None:
@@ -379,6 +433,7 @@ async def imported_books_review(
     no_reading_events: bool = Query(default=False),
     completed_without_completion_date: bool = Query(default=False),
     progress_status_mismatch: bool = Query(default=False),
+    duplicate_candidate: bool = Query(default=False),
 ) -> HTMLResponse:
     active_filters = {
         "missing_page_count": missing_page_count,
@@ -394,7 +449,16 @@ async def imported_books_review(
         "no_reading_events": no_reading_events,
         "completed_without_completion_date": completed_without_completion_date,
         "progress_status_mismatch": progress_status_mismatch,
+        "duplicate_candidate": duplicate_candidate,
     }
+
+    duplicate_universe = db.scalars(
+        select(Book).where(
+            Book.user_id == DEFAULT_LOCAL_USER_ID,
+            Book.archived_at.is_(None),
+        )
+    ).all()
+    duplicate_reasons = duplicate_reasons_by_book_id(list(duplicate_universe))
 
     statement = (
         select(Book)
@@ -441,6 +505,12 @@ async def imported_books_review(
                 and_(Book.status != "completed", progress >= 100),
             )
         )
+    if duplicate_candidate:
+        duplicate_book_ids = list(duplicate_reasons)
+        if duplicate_book_ids:
+            statement = statement.where(Book.id.in_(duplicate_book_ids))
+        else:
+            statement = statement.where(Book.id == -1)
 
     books = db.scalars(statement).unique().all()
 
@@ -454,6 +524,7 @@ async def imported_books_review(
             metadata_filter_options=REVIEW_METADATA_FILTERS,
             suspicious_filter_options=REVIEW_SUSPICIOUS_FILTERS,
             active_filters=active_filters,
+            duplicate_reasons=duplicate_reasons,
             format_audio_seconds=format_audio_seconds,
         ),
     )
