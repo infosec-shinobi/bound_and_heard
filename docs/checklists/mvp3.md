@@ -110,18 +110,18 @@ Derived from `docs/ROADMAP.md` MVP 3 - Import Review and Cleanup, with continuit
 
 ## Chunk 11 - Tests
 
-- [ ] Test review page requires write access for mutations but remains readable if intended
-- [ ] Test imported books needing review page lists imported Libby books
-- [ ] Test missing page count filter
-- [ ] Test missing audio duration filter
-- [ ] Test missing or ambiguous metadata filters
+- [x] Test review page requires write access for mutations but remains readable if intended
+- [x] Test imported books needing review page lists imported Libby books
+- [x] Test missing page count filter
+- [x] Test missing audio duration filter
+- [x] Test missing or ambiguous metadata filters
 - [x] Test duplicate candidate detection
 - [x] Test quick status correction creates manual correction event
 - [x] Test quick progress correction creates manual correction event
 - [x] Test quick completion date correction creates manual correction event
 - [x] Test archive/ignore controls preserve records and events
 - [x] Test filter context is preserved after quick actions
-- [ ] Test manual edits still survive later imports
+- [x] Test manual edits still survive later imports
 
 ## Chunk 12 - Documentation
 
