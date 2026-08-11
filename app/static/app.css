@@ -186,6 +186,28 @@ body {
   border-color: rgba(148, 163, 184, 0.16);
 }
 
+.app-review-table {
+  min-width: 78rem;
+}
+
+.app-review-control .form-select,
+.app-review-control .form-control {
+  width: 8.5rem;
+}
+
+.app-review-control .btn,
+.app-review-actions .btn {
+  width: 100%;
+}
+
+.app-review-progress-control .form-control {
+  width: 5.5rem;
+}
+
+.app-review-actions {
+  width: 7rem;
+}
+
 .app-archived-row {
   opacity: 0.62;
 }

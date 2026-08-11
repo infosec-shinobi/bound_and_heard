@@ -285,6 +285,7 @@ def test_imported_books_review_page_lists_libby_books_needing_review() -> None:
     assert "320" in response.text
     assert "2 hr 15 min" in response.text
     assert "2026-06-20" in response.text
+    assert "Imported metadata" in response.text
     assert "Title ID libby-1" in response.text
     assert f'href="/books/{book.id}"' in response.text
     assert f'action="/books/{book.id}/review/archive"' not in response.text
@@ -299,6 +300,10 @@ def test_imported_books_review_page_shows_quick_status_form_after_admin_login() 
     response = client.get("/books/review?missing_page_count=true")
 
     assert response.status_code == 200
+    assert "Active filters:" in response.text
+    assert "Missing page count" in response.text
+    assert "Reset Filters" in response.text
+    assert "app-review-table" in response.text
     assert f'action="/books/{book.id}/review/status"' in response.text
     assert 'name="return_to" value="/books/review?missing_page_count=true"' in response.text
     assert 'option value="want_to_read"' in response.text
@@ -338,7 +343,7 @@ def test_quick_status_update_changes_status_creates_event_and_returns_to_filter(
     )
 
     assert response.status_code == 303
-    assert response.headers["location"] == "/books/review?missing_page_count=true"
+    assert response.headers["location"] == "/books/review?missing_page_count=true&review_message=Status+updated."
     with session_factory() as db:
         updated = db.get(Book, book.id)
         assert updated is not None
@@ -346,6 +351,21 @@ def test_quick_status_update_changes_status_creates_event_and_returns_to_filter(
         assert updated.metadata_source == "libby"
         event = db.query(ReadingEvent).filter_by(book_id=book.id, event_type="manually_corrected").one()
         assert event.raw_data == {"changed_fields": {"status": {"from": "started", "to": "completed"}}}
+
+
+def test_quick_status_update_shows_success_message_after_redirect() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Status Message", author="Author", metadata_source="libby")
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.post(
+        f"/books/{book.id}/review/status",
+        data={"status": "completed", "return_to": "/books/review?missing_page_count=true"},
+    )
+
+    assert response.status_code == 200
+    assert "Status updated." in response.text
+    assert 'id="filter-missing_page_count" checked' in response.text
 
 
 def test_quick_status_update_rejects_invalid_status() -> None:
@@ -439,7 +459,7 @@ def test_quick_progress_update_changes_manual_progress_creates_event_and_returns
     )
 
     assert response.status_code == 303
-    assert response.headers["location"] == "/books/review?missing_page_count=true"
+    assert response.headers["location"] == "/books/review?missing_page_count=true&review_message=Manual+progress+updated."
     with session_factory() as db:
         updated = db.get(Book, book.id)
         assert updated is not None
@@ -568,7 +588,7 @@ def test_quick_completion_date_update_changes_date_creates_event_and_returns_to_
     )
 
     assert response.status_code == 303
-    assert response.headers["location"] == "/books/review?completed_without_completion_date=true"
+    assert response.headers["location"] == "/books/review?completed_without_completion_date=true&review_message=Completion+date+updated."
     with session_factory() as db:
         updated = db.get(Book, book.id)
         assert updated is not None
@@ -682,7 +702,7 @@ def test_quick_review_archive_preserves_book_data_events_progress_and_returns_to
     )
 
     assert response.status_code == 303
-    assert response.headers["location"] == "/books/review?missing_page_count=true"
+    assert response.headers["location"] == "/books/review?missing_page_count=true&review_message=Book+archived."
     with session_factory() as db:
         archived = db.get(Book, book.id)
         assert archived is not None
@@ -707,7 +727,7 @@ def test_quick_review_restore_clears_archived_at_and_returns_to_filter() -> None
     )
 
     assert response.status_code == 303
-    assert response.headers["location"] == "/books/review?missing_page_count=true"
+    assert response.headers["location"] == "/books/review?missing_page_count=true&review_message=Book+restored."
     with session_factory() as db:
         restored = db.get(Book, book.id)
         assert restored is not None
@@ -726,7 +746,7 @@ def test_quick_review_state_marks_reviewed_and_returns_to_filter() -> None:
     )
 
     assert response.status_code == 303
-    assert response.headers["location"] == "/books/review?missing_page_count=true"
+    assert response.headers["location"] == "/books/review?missing_page_count=true&review_message=Book+marked+reviewed."
     with session_factory() as db:
         reviewed = db.get(Book, book.id)
         assert reviewed is not None

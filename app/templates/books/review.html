@@ -19,9 +19,19 @@
         </div>
         <div class="d-flex gap-2 align-items-start">
           <button class="btn btn-primary" type="submit">Apply Filters</button>
-          <a class="btn btn-outline-secondary" href="/books/review">Reset</a>
+          <a class="btn btn-outline-secondary" href="/books/review">Reset Filters</a>
         </div>
       </div>
+      {% if active_filter_labels %}
+        <div class="d-flex flex-wrap gap-2 align-items-center mt-3" aria-label="Active filters">
+          <span class="small app-muted">Active filters:</span>
+          {% for filter_label in active_filter_labels %}
+            <span class="badge app-badge-muted">{{ filter_label }}</span>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="small app-muted mt-3 mb-0">No filters active.</p>
+      {% endif %}
       <h3 class="h6 mt-4 mb-2">Missing Core Metadata</h3>
       <div class="row g-3 mt-1">
         {% for filter_name, filter_label in metadata_filter_options.items() %}
@@ -51,10 +61,14 @@
     <div class="alert alert-danger" role="alert">{{ review_error }}</div>
   {% endif %}
 
+  {% if review_message %}
+    <div class="alert alert-success" role="status">{{ review_message }}</div>
+  {% endif %}
+
   {% if books %}
     <div class="card">
       <div class="table-responsive">
-        <table class="table table-dark table-hover align-middle mb-0 app-table">
+        <table class="table table-sm table-dark table-hover align-middle mb-0 app-table app-review-table">
           <thead>
             <tr>
               <th scope="col">Title</th>
@@ -87,7 +101,7 @@
                 <td>{{ book.format.replace('_', ' ').title() }}</td>
                 <td>
                   {% if can_write %}
-                    <form class="d-flex gap-2 align-items-center" method="post" action="/books/{{ book.id }}/review/status">
+                    <form class="d-flex flex-column gap-2 app-review-control" method="post" action="/books/{{ book.id }}/review/status">
                       <input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
                       <select class="form-select form-select-sm" name="status" aria-label="Status for {{ book.title }}">
                         {% for value in book_statuses %}
@@ -104,7 +118,7 @@
                 </td>
                 <td>
                   {% if can_write %}
-                    <form class="d-flex gap-2 align-items-center" method="post" action="/books/{{ book.id }}/review/progress">
+                    <form class="d-flex flex-column gap-2 app-review-control app-review-progress-control" method="post" action="/books/{{ book.id }}/review/progress">
                       <input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
                       <input class="form-control form-control-sm" name="manual_progress_percent" type="number" min="0" max="100" step="1" value="{% if book.manual_progress_percent is not none %}{{ '%.0f'|format(book.manual_progress_percent) }}{% endif %}" placeholder="Clear" aria-label="Manual progress for {{ book.title }}">
                       <button class="btn btn-sm btn-outline-primary" type="submit">Save</button>
@@ -122,7 +136,7 @@
                 <td>{% if book.audio_seconds is not none %}{{ format_audio_seconds(book.audio_seconds) }}{% else %}<span class="app-muted">Missing</span>{% endif %}</td>
                 <td>
                   {% if can_write %}
-                    <form class="d-flex gap-2 align-items-center" method="post" action="/books/{{ book.id }}/review/completion-date">
+                    <form class="d-flex flex-column gap-2 app-review-control" method="post" action="/books/{{ book.id }}/review/completion-date">
                       <input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
                       <input class="form-control form-control-sm" name="completed_on" type="date" value="{% if book.completed_on %}{{ book.completed_on }}{% endif %}" aria-label="Completion date for {{ book.title }}">
                       <button class="btn btn-sm btn-outline-primary" type="submit">Save</button>
@@ -135,11 +149,13 @@
                 </td>
                 <td>
                   <span class="badge app-badge-success">Libby</span>
+                  <div class="small app-muted mt-1">Imported metadata</div>
                   {% if book.libby_title_id %}<div class="small app-muted mt-1">Title ID {{ book.libby_title_id }}</div>{% endif %}
+                  {% if book.libby_share_url %}<a class="small app-link d-block mt-1" href="{{ book.libby_share_url }}">Libby share</a>{% endif %}
                 </td>
                 <td>
                   {% if can_write %}
-                    <div class="d-flex flex-wrap gap-2">
+                    <div class="d-flex flex-column gap-2 app-review-actions">
                       <form method="post" action="/books/{{ book.id }}/review/state">
                         <input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
                         <input type="hidden" name="review_status" value="reviewed">

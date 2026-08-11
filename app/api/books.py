@@ -210,7 +210,11 @@ def safe_review_return_url(value: str | None) -> str:
     if not value or not value.startswith("/books/review") or value.startswith("//"):
         return "/books/review"
     parsed = urlsplit(value)
-    query_items = [(key, item_value) for key, item_value in parse_qsl(parsed.query) if key != "review_error"]
+    query_items = [
+        (key, item_value)
+        for key, item_value in parse_qsl(parsed.query)
+        if key not in {"review_error", "review_message"}
+    ]
     return urlunsplit(("", "", parsed.path, urlencode(query_items), ""))
 
 
@@ -219,6 +223,18 @@ def review_return_url_with_error(return_url: str, message: str) -> str:
     query_items = parse_qsl(parsed.query)
     query_items.append(("review_error", message))
     return urlunsplit(("", "", parsed.path, urlencode(query_items), ""))
+
+
+def review_return_url_with_message(return_url: str, message: str) -> str:
+    parsed = urlsplit(return_url)
+    query_items = parse_qsl(parsed.query)
+    query_items.append(("review_message", message))
+    return urlunsplit(("", "", parsed.path, urlencode(query_items), ""))
+
+
+def active_review_filter_labels(active_filters: dict[str, bool]) -> list[str]:
+    filter_labels = REVIEW_METADATA_FILTERS | REVIEW_SUSPICIOUS_FILTERS
+    return [filter_labels[name] for name, is_active in active_filters.items() if is_active and name in filter_labels]
 
 
 def audio_seconds_to_hours(audio_seconds: int | None) -> str:
@@ -466,6 +482,7 @@ async def imported_books_review(
     progress_status_mismatch: bool = Query(default=False),
     duplicate_candidate: bool = Query(default=False),
     review_error: str | None = Query(default=None),
+    review_message: str | None = Query(default=None),
 ) -> HTMLResponse:
     active_filters = {
         "missing_page_count": missing_page_count,
@@ -556,8 +573,10 @@ async def imported_books_review(
             metadata_filter_options=REVIEW_METADATA_FILTERS,
             suspicious_filter_options=REVIEW_SUSPICIOUS_FILTERS,
             active_filters=active_filters,
+            active_filter_labels=active_review_filter_labels(active_filters),
             book_statuses=BOOK_STATUSES,
             review_error=review_error,
+            review_message=review_message,
             duplicate_reasons=duplicate_reasons,
             format_audio_seconds=format_audio_seconds,
         ),
@@ -594,7 +613,10 @@ async def update_review_book_status(
         db.add(correction_event)
 
     db.commit()
-    return RedirectResponse(return_url, status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        review_return_url_with_message(return_url, "Status updated."),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
 
 
 @router.post("/{book_id}/review/progress")
@@ -637,7 +659,10 @@ async def update_review_book_progress(
         db.add(correction_event)
 
     db.commit()
-    return RedirectResponse(return_url, status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        review_return_url_with_message(return_url, "Manual progress updated."),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
 
 
 @router.post("/{book_id}/review/completion-date")
@@ -674,7 +699,10 @@ async def update_review_book_completion_date(
         db.add(correction_event)
 
     db.commit()
-    return RedirectResponse(return_url, status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        review_return_url_with_message(return_url, "Completion date updated."),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
 
 
 @router.post("/{book_id}/review/archive")
@@ -692,7 +720,10 @@ async def archive_review_book(
     if book.archived_at is None:
         book.archived_at = datetime.now(timezone.utc)
         db.commit()
-    return RedirectResponse(return_url, status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        review_return_url_with_message(return_url, "Book archived."),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
 
 
 @router.post("/{book_id}/review/restore")
@@ -710,7 +741,10 @@ async def restore_review_book(
     if book.archived_at is not None:
         book.archived_at = None
         db.commit()
-    return RedirectResponse(return_url, status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        review_return_url_with_message(return_url, "Book restored."),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
 
 
 @router.post("/{book_id}/review/state")
@@ -733,7 +767,10 @@ async def update_review_book_state(
     book.reviewed_at = datetime.now(timezone.utc)
     book.review_note = f"Marked {review_status} from import review."
     db.commit()
-    return RedirectResponse(return_url, status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        review_return_url_with_message(return_url, f"Book marked {review_status}."),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
 
 
 @router.get("/new", response_class=HTMLResponse)

@@ -100,13 +100,13 @@ Derived from `docs/ROADMAP.md` MVP 3 - Import Review and Cleanup, with continuit
 
 ## Chunk 10 - Review Workflow UX
 
-- [ ] Add bulk-friendly table layout for fast scanning
-- [ ] Keep quick correction controls compact on desktop
-- [ ] Ensure review page works on mobile
-- [ ] Add visible active filter chips or summary
-- [ ] Add reset filters link
-- [ ] Add per-row source/import context where simple
-- [ ] Add clear success/error messages after quick actions
+- [x] Add bulk-friendly table layout for fast scanning
+- [x] Keep quick correction controls compact on desktop
+- [x] Ensure review page works on mobile
+- [x] Add visible active filter chips or summary
+- [x] Add reset filters link
+- [x] Add per-row source/import context where simple
+- [x] Add clear success/error messages after quick actions
 
 ## Chunk 11 - Tests
 
@@ -120,7 +120,7 @@ Derived from `docs/ROADMAP.md` MVP 3 - Import Review and Cleanup, with continuit
 - [x] Test quick progress correction creates manual correction event
 - [x] Test quick completion date correction creates manual correction event
 - [x] Test archive/ignore controls preserve records and events
-- [ ] Test filter context is preserved after quick actions
+- [x] Test filter context is preserved after quick actions
 - [ ] Test manual edits still survive later imports
 
 ## Chunk 12 - Documentation
