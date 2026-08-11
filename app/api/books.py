@@ -18,6 +18,11 @@ router = APIRouter(prefix="/books", tags=["books"])
 
 BOOK_FORMATS = ["ebook", "audiobook", "physical", "unknown"]
 BOOK_STATUSES = ["want_to_read", "borrowed", "started", "completed", "abandoned", "unknown"]
+BOOK_SOURCE_FILTERS = {
+    "libby": "Libby",
+    "manual": "Manual",
+    "missing": "Missing source",
+}
 REVIEW_METADATA_FILTERS = {
     "missing_page_count": "Missing page count",
     "missing_audio_duration": "Missing audio duration",
@@ -357,6 +362,7 @@ def apply_book_filters(
     q: str | None,
     status: str | None,
     book_format: str | None,
+    source: str | None,
     include_archived: bool,
 ) -> Select[tuple[Book]]:
     if not include_archived:
@@ -378,6 +384,11 @@ def apply_book_filters(
     if book_format:
         statement = statement.where(Book.format == book_format)
 
+    if source == "missing":
+        statement = statement.where(missing_text_filter(Book.metadata_source))
+    elif source in BOOK_SOURCE_FILTERS:
+        statement = statement.where(Book.metadata_source == source)
+
     return statement
 
 
@@ -388,6 +399,7 @@ async def book_list(
     q: str | None = Query(default=None),
     status: str | None = Query(default=None),
     format: str | None = Query(default=None),
+    source: str | None = Query(default=None),
     include_archived: bool = Query(default=False),
 ) -> HTMLResponse:
     statement = (
@@ -401,6 +413,7 @@ async def book_list(
         q=q,
         status=status,
         book_format=format,
+        source=source,
         include_archived=include_archived,
     )
     books = db.scalars(statement).unique().all()
@@ -415,8 +428,10 @@ async def book_list(
             q=q or "",
             selected_status=status or "",
             selected_format=format or "",
+            selected_source=source or "",
             book_statuses=BOOK_STATUSES,
             book_formats=BOOK_FORMATS,
+            book_source_filters=BOOK_SOURCE_FILTERS,
             include_archived=include_archived,
         ),
     )

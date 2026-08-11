@@ -24,7 +24,7 @@
           <label class="form-label" for="status">Status</label>
           <select class="form-select" id="status" name="status">
             <option value="">Any status</option>
-            {% for value in ['want_to_read', 'borrowed', 'started', 'completed', 'abandoned', 'unknown'] %}
+            {% for value in book_statuses %}
               <option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>{{ value.replace('_', ' ').title() }}</option>
             {% endfor %}
           </select>
@@ -33,8 +33,17 @@
           <label class="form-label" for="format">Format</label>
           <select class="form-select" id="format" name="format">
             <option value="">Any format</option>
-            {% for value in ['ebook', 'audiobook', 'physical', 'unknown'] %}
+            {% for value in book_formats %}
               <option value="{{ value }}" {% if selected_format == value %}selected{% endif %}>{{ value.replace('_', ' ').title() }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-4 col-lg-2">
+          <label class="form-label" for="source">Source</label>
+          <select class="form-select" id="source" name="source">
+            <option value="">Any source</option>
+            {% for value, label in book_source_filters.items() %}
+              <option value="{{ value }}" {% if selected_source == value %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
           </select>
         </div>
@@ -61,6 +70,7 @@
               <th scope="col">Author</th>
               <th scope="col">Format</th>
               <th scope="col">Status</th>
+              <th scope="col">Source</th>
               <th scope="col">Rating</th>
               <th scope="col">Progress</th>
             </tr>
@@ -77,6 +87,17 @@
                 <td>{{ book.primary_author_name or 'Unknown' }}</td>
                 <td>{{ book.format.replace('_', ' ').title() }}</td>
                 <td>{{ book.status.replace('_', ' ').title() }}</td>
+                <td>
+                  {% if book.metadata_source == 'libby' %}
+                    <span class="badge app-badge-success">Libby</span>
+                  {% elif book.metadata_source == 'manual' %}
+                    <span class="badge app-badge-muted">Manual</span>
+                  {% elif book.metadata_source %}
+                    <span class="badge app-badge-muted">{{ book.metadata_source.replace('_', ' ').title() }}</span>
+                  {% else %}
+                    <span class="app-muted">Missing</span>
+                  {% endif %}
+                </td>
                 <td>{% if book.rating is not none %}{{ '%.1f'|format(book.rating) }}{% else %}<span class="app-muted">Not rated</span>{% endif %}</td>
                 <td>{% if progress is not none %}{{ '%.0f'|format(progress) }}%{% else %}<span class="app-muted">Unknown</span>{% endif %}</td>
               </tr>

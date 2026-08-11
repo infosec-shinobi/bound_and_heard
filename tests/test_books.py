@@ -164,6 +164,7 @@ def test_books_page_lists_core_book_fields() -> None:
     assert "Becky Chambers" in response.text
     assert "Audiobook" in response.text
     assert "Completed" in response.text
+    assert "Missing" in response.text
     assert "4.5" in response.text
     assert "100%" in response.text
 
@@ -191,7 +192,7 @@ def test_books_page_can_include_archived_books() -> None:
     assert "Archived" in response.text
 
 
-def test_books_page_filters_by_search_status_and_format() -> None:
+def test_books_page_filters_by_search_status_format_and_source() -> None:
     client, session_factory = make_books_client()
     add_book(
         session_factory,
@@ -199,6 +200,7 @@ def test_books_page_filters_by_search_status_and_format() -> None:
         author="Target Author",
         book_format="physical",
         status="completed",
+        metadata_source="libby",
     )
     add_book(
         session_factory,
@@ -206,13 +208,30 @@ def test_books_page_filters_by_search_status_and_format() -> None:
         author="Someone Else",
         book_format="ebook",
         status="started",
+        metadata_source="manual",
     )
 
-    response = client.get("/books?q=Target&status=completed&format=physical")
+    response = client.get("/books?q=Target&status=completed&format=physical&source=libby")
 
     assert response.status_code == 200
     assert "Matching Book" in response.text
+    assert "Libby" in response.text
     assert "Other Book" not in response.text
+    assert 'id="source" name="source"' in response.text
+    assert 'option value="libby" selected' in response.text
+
+
+def test_books_page_filters_by_missing_source() -> None:
+    client, session_factory = make_books_client()
+    add_book(session_factory, title="Missing Source Book", author="Author")
+    add_book(session_factory, title="Manual Source Book", author="Author", metadata_source="manual")
+
+    response = client.get("/books?source=missing")
+
+    assert response.status_code == 200
+    assert "Missing Source Book" in response.text
+    assert "Manual Source Book" not in response.text
+    assert 'option value="missing" selected' in response.text
 
 
 def test_imported_books_review_page_is_readable_without_write_access() -> None:
