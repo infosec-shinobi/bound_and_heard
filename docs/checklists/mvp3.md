@@ -125,22 +125,22 @@ Derived from `docs/ROADMAP.md` MVP 3 - Import Review and Cleanup, with continuit
 
 ## Chunk 12 - Documentation
 
-- [ ] Update README with import review workflow
-- [ ] Document what counts as needing review
-- [ ] Document duplicate candidate behavior and no auto-merge policy
-- [ ] Document quick correction behavior and manual correction events
-- [ ] Update any relevant database documentation for review state fields
+- [x] Update README with import review workflow
+- [x] Document what counts as needing review
+- [x] Document duplicate candidate behavior and no auto-merge policy
+- [x] Document quick correction behavior and manual correction events
+- [x] Update any relevant database documentation for review state fields
 
 ## MVP 3 Done Criteria
 
-- [ ] User can open an imported-books review page
-- [ ] User can filter imported books missing page count or audio duration
-- [ ] User can filter imported books missing or suspicious metadata
-- [ ] User can identify duplicate candidates without automatic merging
-- [ ] User can quickly correct status from the review workflow
-- [ ] User can quickly correct progress from the review workflow
-- [ ] User can quickly correct completion date from the review workflow
-- [ ] User can archive or ignore records from the review workflow
-- [ ] Quick corrections create manual correction events
-- [ ] Manual edits and correction events remain intact after later imports
-- [ ] Basic tests pass
+- [x] User can open an imported-books review page
+- [x] User can filter imported books missing page count or audio duration
+- [x] User can filter imported books missing or suspicious metadata
+- [x] User can identify duplicate candidates without automatic merging
+- [x] User can quickly correct status from the review workflow
+- [x] User can quickly correct progress from the review workflow
+- [x] User can quickly correct completion date from the review workflow
+- [x] User can archive or ignore records from the review workflow
+- [x] Quick corrections create manual correction events
+- [x] Manual edits and correction events remain intact after later imports
+- [x] Basic tests pass

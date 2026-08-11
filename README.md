@@ -82,6 +82,23 @@ Raw JSON uploads are preserved under `data/imports/libby/` by default. Exact dup
 
 Imported Libby books appear in `/books`, and imported reading events appear on each book detail page. Import updates fill empty metadata fields only; manual edits, notes, ratings, progress, completion dates, and manual correction events are preserved.
 
+## Import Review Workflow
+
+Open `/books/review` after importing Libby JSON to review imported records before relying on them for scraping, analytics, and recaps. The page remains readable without write access, but quick corrections require admin login.
+
+Books need review when they are Libby-imported, not archived, and not marked reviewed or ignored. Filters help find missing or suspicious metadata, including missing page count, audio duration, author, publisher, ISBN, cover URL, unknown format/status, missing Libby title ID, fallback titles, missing reading events, completed books without completion dates, progress/status mismatches, and duplicate candidates.
+
+Duplicate candidates are only flagged for same-format records. The review page flags matching Libby title ID and format, ISBN and format, or normalized title, author, and format. Audiobook, ebook, and physical records are kept separate unless they match within the same format. MVP 3 never auto-merges duplicates.
+
+Admin users can make quick corrections from review rows:
+
+- Status updates support want_to_read, borrowed, started, completed, abandoned, and unknown.
+- Manual progress updates accept 0-100 percent, and blank clears manual progress.
+- Completion date updates accept ISO dates, and blank clears the completion date.
+- Archive, restore, reviewed, and ignored actions preserve the book record, reading events, progress rows, and import attribution.
+
+Quick status, progress, and completion-date changes create `manually_corrected` reading events. Marking a book reviewed or ignored stores review state and a review note. Ignored and reviewed books stay out of the default review results.
+
 ## Common Commands
 
 Run the development server:

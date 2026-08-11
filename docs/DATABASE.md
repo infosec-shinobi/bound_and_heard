@@ -125,6 +125,8 @@ Recommended review_status values:
 - ignored
 - duplicate_candidate
 
+Review state is used by the import cleanup workflow. Libby-imported books with `review_status` unset, `needs_review`, or `duplicate_candidate` appear in the default review flow unless archived. Books marked `reviewed` or `ignored` are hidden from default review results. `reviewed_at` stores when the review action happened, and `review_note` stores lightweight context such as `Marked ignored from import review.`.
+
 Recommended format values:
 
 - ebook
@@ -434,6 +436,14 @@ For Libby imports, prefer matching books by:
 
 A repeated borrow should create a new reading event, not necessarily a new book.
 
+The import review duplicate-candidate UI is intentionally more conservative than import matching. It flags duplicate candidates only when records share the same format and one of these identifiers:
+
+- same `libby_title_id` and `format`
+- same `isbn13` or `isbn10` and `format`
+- same normalized title, normalized author, and `format`
+
+Audiobook, ebook, and physical records should remain separate in the review workflow unless a same-format duplicate rule matches. MVP 3 does not auto-merge duplicate candidates.
+
 Whole-file checksums prevent reprocessing the exact same file, but they are not enough for repeated Libby exports with overlapping history. Reading events should also have a stable source identity, such as:
 
 ```text
@@ -452,6 +462,8 @@ When importing Libby JSON:
 - Do not overwrite manual notes, ratings, or manually edited fields.
 - Fill empty metadata fields only unless the user explicitly requests overwrite behavior.
 - If title/author changed from a source, preserve source attribution.
+
+Manual quick corrections from the import review workflow update the book row directly and preserve imported source rows. Status, manual progress, and completion-date corrections create `reading_events` rows with `source="manual"`, `event_type="manually_corrected"`, and `raw_data.changed_fields` describing the before/after values. Clearing manual progress or completion date records `to: null`. Setting or clearing completion date does not implicitly change status.
 
 ## Progress Skip Logic
 
