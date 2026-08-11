@@ -119,7 +119,19 @@
                 </td>
                 <td>{% if book.page_count is not none %}{{ book.page_count }}{% else %}<span class="app-muted">Missing</span>{% endif %}</td>
                 <td>{% if book.audio_seconds is not none %}{{ format_audio_seconds(book.audio_seconds) }}{% else %}<span class="app-muted">Missing</span>{% endif %}</td>
-                <td>{% if book.completed_on %}{{ book.completed_on }}{% else %}<span class="app-muted">None</span>{% endif %}</td>
+                <td>
+                  {% if can_write %}
+                    <form class="d-flex gap-2 align-items-center" method="post" action="/books/{{ book.id }}/review/completion-date">
+                      <input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+                      <input class="form-control form-control-sm" name="completed_on" type="date" value="{% if book.completed_on %}{{ book.completed_on }}{% endif %}" aria-label="Completion date for {{ book.title }}">
+                      <button class="btn btn-sm btn-outline-primary" type="submit">Save</button>
+                    </form>
+                  {% elif book.completed_on %}
+                    {{ book.completed_on }}
+                  {% else %}
+                    <span class="app-muted">None</span>
+                  {% endif %}
+                </td>
                 <td>
                   <span class="badge app-badge-success">Libby</span>
                   {% if book.libby_title_id %}<div class="small app-muted mt-1">Title ID {{ book.libby_title_id }}</div>{% endif %}

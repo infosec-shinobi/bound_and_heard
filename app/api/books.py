@@ -640,6 +640,43 @@ async def update_review_book_progress(
     return RedirectResponse(return_url, status_code=status.HTTP_303_SEE_OTHER)
 
 
+@router.post("/{book_id}/review/completion-date")
+async def update_review_book_completion_date(
+    book_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_write_access),
+    completed_on: str | None = Form(default=None),
+    return_to: str | None = Form(default=None),
+) -> Response:
+    return_url = safe_review_return_url(return_to)
+    errors: list[str] = []
+    parsed_completed_on = parse_optional_date(completed_on, "Completed date", errors)
+    if errors:
+        error_url = review_return_url_with_error(return_url, errors[0])
+        return RedirectResponse(error_url, status_code=status.HTTP_303_SEE_OTHER)
+
+    book = db.get(Book, book_id)
+    if book is None or book.user_id != DEFAULT_LOCAL_USER_ID:
+        return RedirectResponse(return_url, status_code=status.HTTP_303_SEE_OTHER)
+
+    old_status = book.status
+    old_completed_on = book.completed_on
+    old_progress = book.manual_progress_percent
+    book.completed_on = parsed_completed_on
+
+    correction_event = correction_event_for_changes(
+        book,
+        old_status=old_status,
+        old_completed_on=old_completed_on,
+        old_progress=old_progress,
+    )
+    if correction_event is not None:
+        db.add(correction_event)
+
+    db.commit()
+    return RedirectResponse(return_url, status_code=status.HTTP_303_SEE_OTHER)
+
+
 @router.get("/new", response_class=HTMLResponse)
 async def new_book_form(
     request: Request,

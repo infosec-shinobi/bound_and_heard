@@ -280,6 +280,7 @@ def test_imported_books_review_page_lists_libby_books_needing_review() -> None:
     assert "Completed" in response.text
     assert f'action="/books/{book.id}/review/status"' not in response.text
     assert f'action="/books/{book.id}/review/progress"' not in response.text
+    assert f'action="/books/{book.id}/review/completion-date"' not in response.text
     assert "100%" in response.text
     assert "320" in response.text
     assert "2 hr 15 min" in response.text
@@ -500,6 +501,111 @@ def test_quick_progress_update_shows_validation_error_without_losing_filter_cont
         unchanged = db.get(Book, book.id)
         assert unchanged is not None
         assert unchanged.manual_progress_percent == 20
+        assert db.query(ReadingEvent).filter_by(book_id=book.id, event_type="manually_corrected").count() == 0
+
+
+def test_imported_books_review_page_shows_quick_completion_date_form_after_admin_login() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Completion Review Book", author="Author", metadata_source="libby")
+    with session_factory() as db:
+        db_book = db.get(Book, book.id)
+        assert db_book is not None
+        db_book.completed_on = datetime(2026, 6, 20, tzinfo=timezone.utc).date()
+        db.commit()
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.get("/books/review?missing_page_count=true")
+
+    assert response.status_code == 200
+    assert f'action="/books/{book.id}/review/completion-date"' in response.text
+    assert 'name="return_to" value="/books/review?missing_page_count=true"' in response.text
+    assert 'name="completed_on" type="date" value="2026-06-20"' in response.text
+
+
+def test_quick_completion_date_update_requires_admin_login() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Protected Completion", author="Author", metadata_source="libby")
+
+    response = client.post(
+        f"/books/{book.id}/review/completion-date",
+        data={"completed_on": "2026-06-20", "return_to": "/books/review?completed_without_completion_date=true"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 403
+    with session_factory() as db:
+        unchanged = db.get(Book, book.id)
+        assert unchanged is not None
+        assert unchanged.completed_on is None
+
+
+def test_quick_completion_date_update_changes_date_creates_event_and_returns_to_filter() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Quick Completion", author="Author", status="started", metadata_source="libby")
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.post(
+        f"/books/{book.id}/review/completion-date",
+        data={"completed_on": "2026-06-20", "return_to": "/books/review?completed_without_completion_date=true"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/books/review?completed_without_completion_date=true"
+    with session_factory() as db:
+        updated = db.get(Book, book.id)
+        assert updated is not None
+        assert updated.completed_on is not None
+        assert updated.completed_on.isoformat() == "2026-06-20"
+        assert updated.status == "started"
+        event = db.query(ReadingEvent).filter_by(book_id=book.id, event_type="manually_corrected").one()
+        assert event.raw_data == {"changed_fields": {"completed_on": {"from": None, "to": "2026-06-20"}}}
+
+
+def test_quick_completion_date_update_can_clear_completion_date() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Clear Completion", author="Author", status="completed", metadata_source="libby")
+    with session_factory() as db:
+        db_book = db.get(Book, book.id)
+        assert db_book is not None
+        db_book.completed_on = datetime(2026, 6, 20, tzinfo=timezone.utc).date()
+        db.commit()
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.post(
+        f"/books/{book.id}/review/completion-date",
+        data={"completed_on": "", "return_to": "/books/review?completed_without_completion_date=true"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    with session_factory() as db:
+        updated = db.get(Book, book.id)
+        assert updated is not None
+        assert updated.completed_on is None
+        assert updated.status == "completed"
+        event = db.query(ReadingEvent).filter_by(book_id=book.id, event_type="manually_corrected").one()
+        assert event.raw_data == {"changed_fields": {"completed_on": {"from": "2026-06-20", "to": None}}}
+
+
+def test_quick_completion_date_update_shows_validation_error_without_losing_filter_context() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Invalid Completion", author="Author", metadata_source="libby")
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.post(
+        f"/books/{book.id}/review/completion-date",
+        data={"completed_on": "not-a-date", "return_to": "/books/review?missing_page_count=true"},
+    )
+
+    assert response.status_code == 200
+    assert "Completed date must be a valid date." in response.text
+    assert 'id="filter-missing_page_count" checked' in response.text
+    assert "Invalid Completion" in response.text
+    with session_factory() as db:
+        unchanged = db.get(Book, book.id)
+        assert unchanged is not None
+        assert unchanged.completed_on is None
         assert db.query(ReadingEvent).filter_by(book_id=book.id, event_type="manually_corrected").count() == 0
 
 

@@ -82,12 +82,12 @@ Derived from `docs/ROADMAP.md` MVP 3 - Import Review and Cleanup, with continuit
 
 ## Chunk 8 - Quick Completion Date Correction
 
-- [ ] Add protected quick completion date update action
-- [ ] Validate ISO date input
-- [ ] Allow clearing completion date when appropriate
-- [ ] Create a manual correction event when completion date changes
-- [ ] Consider setting status to completed only when user explicitly chooses that status
-- [ ] Return to the same filtered review page after save
+- [x] Add protected quick completion date update action
+- [x] Validate ISO date input
+- [x] Allow clearing completion date when appropriate
+- [x] Create a manual correction event when completion date changes
+- [x] Consider setting status to completed only when user explicitly chooses that status
+- [x] Return to the same filtered review page after save
 
 ## Chunk 9 - Quick Archive Or Ignore Controls
 
@@ -118,7 +118,7 @@ Derived from `docs/ROADMAP.md` MVP 3 - Import Review and Cleanup, with continuit
 - [x] Test duplicate candidate detection
 - [x] Test quick status correction creates manual correction event
 - [x] Test quick progress correction creates manual correction event
-- [ ] Test quick completion date correction creates manual correction event
+- [x] Test quick completion date correction creates manual correction event
 - [ ] Test archive/ignore controls preserve records and events
 - [ ] Test filter context is preserved after quick actions
 - [ ] Test manual edits still survive later imports
