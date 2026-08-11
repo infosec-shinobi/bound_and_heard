@@ -46,6 +46,11 @@
               <input class="form-control" id="primary_author_name" name="primary_author_name" value="{{ form.get('primary_author_name', '') }}">
             </div>
 
+            <div class="col-md-6">
+              <label class="form-label" for="isbn">ISBN</label>
+              <input class="form-control" id="isbn" name="isbn" value="{{ form.get('isbn', '') }}" inputmode="numeric" autocomplete="off" placeholder="ISBN-10 or ISBN-13">
+            </div>
+
             <div class="col-md-4">
               <label class="form-label" for="status">Status</label>
               <select class="form-select" id="status" name="status">
