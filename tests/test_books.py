@@ -89,6 +89,8 @@ def set_review_metadata(
     publisher: str | None = "Review Publisher",
     isbn13: str | None = "9781234567890",
     cover_url: str | None = "https://example.test/cover.jpg",
+    libby_title_id: str | None = "libby-title-1",
+    completed_on: datetime | None = None,
 ) -> None:
     with session_factory() as db:
         book = db.get(Book, book_id)
@@ -99,6 +101,22 @@ def set_review_metadata(
         book.publisher = publisher
         book.isbn13 = isbn13
         book.cover_url = cover_url
+        book.libby_title_id = libby_title_id
+        book.completed_on = completed_on.date() if completed_on else None
+        db.commit()
+
+
+def add_reading_event(session_factory: sessionmaker[Session], book_id: int) -> None:
+    with session_factory() as db:
+        db.add(
+            ReadingEvent(
+                user_id=DEFAULT_LOCAL_USER_ID,
+                book_id=book_id,
+                source="libby",
+                event_type="borrowed",
+                event_date=datetime(2026, 6, 20, tzinfo=timezone.utc),
+            )
+        )
         db.commit()
 
 
@@ -379,6 +397,92 @@ def test_imported_books_review_page_combines_missing_metadata_filters() -> None:
     assert 'id="filter-missing_author" checked' in response.text
 
 
+@pytest.mark.parametrize(
+    ("query_param", "matching_title", "matching_book_kwargs", "matching_metadata_kwargs"),
+    [
+        ("unknown_format", "Unknown Format", {"book_format": "unknown"}, {}),
+        ("unknown_status", "Unknown Status", {"status": "unknown"}, {}),
+        ("missing_libby_title_id", "Missing Libby Title ID", {}, {"libby_title_id": None}),
+        ("fallback_title", "Untitled Libby Book", {}, {}),
+        (
+            "completed_without_completion_date",
+            "Completed Without Date",
+            {"status": "completed"},
+            {"completed_on": None},
+        ),
+        (
+            "progress_status_mismatch",
+            "Started At 100 Percent",
+            {"status": "started", "manual_progress_percent": 100},
+            {},
+        ),
+    ],
+)
+def test_imported_books_review_page_filters_suspicious_metadata(
+    query_param: str,
+    matching_title: str,
+    matching_book_kwargs: dict[str, object],
+    matching_metadata_kwargs: dict[str, object],
+) -> None:
+    client, session_factory = make_books_client()
+    matching = add_book(
+        session_factory,
+        title=matching_title,
+        author="Review Author",
+        metadata_source="libby",
+        **matching_book_kwargs,
+    )
+    safe_status = "completed" if query_param == "completed_without_completion_date" else "started"
+    safe_completed_on = (
+        datetime(2026, 6, 20, tzinfo=timezone.utc)
+        if query_param == "completed_without_completion_date"
+        else None
+    )
+    safe = add_book(
+        session_factory,
+        title="Safe Review Book",
+        author="Review Author",
+        status=safe_status,
+        manual_progress_percent=50,
+        metadata_source="libby",
+    )
+    set_review_metadata(session_factory, matching.id, **matching_metadata_kwargs)
+    set_review_metadata(session_factory, safe.id, completed_on=safe_completed_on)
+
+    response = client.get(f"/books/review?{query_param}=true")
+
+    assert response.status_code == 200
+    assert matching_title in response.text
+    assert "Safe Review Book" not in response.text
+    assert f'id="filter-{query_param}" checked' in response.text
+
+
+def test_imported_books_review_page_filters_books_without_reading_events() -> None:
+    client, session_factory = make_books_client()
+    matching = add_book(
+        session_factory,
+        title="No Reading Events",
+        author="Review Author",
+        metadata_source="libby",
+    )
+    safe = add_book(
+        session_factory,
+        title="Has Reading Event",
+        author="Review Author",
+        metadata_source="libby",
+    )
+    set_review_metadata(session_factory, matching.id)
+    set_review_metadata(session_factory, safe.id)
+    add_reading_event(session_factory, safe.id)
+
+    response = client.get("/books/review?no_reading_events=true")
+
+    assert response.status_code == 200
+    assert "No Reading Events" in response.text
+    assert "Has Reading Event" not in response.text
+    assert 'id="filter-no_reading_events" checked' in response.text
+
+
 def test_review_nav_link_is_present() -> None:
     client, _ = make_books_client(admin_password=None)
 
@@ -417,6 +521,7 @@ def test_create_book_saves_supported_fields_and_redirects_to_detail() -> None:
             "title": "A Psalm for the Wild-Built",
             "subtitle": "Monk and Robot",
             "primary_author_name": "Becky Chambers",
+            "isbn": "978-1250236210",
             "format": "audiobook",
             "status": "started",
             "rating": "4.5",
@@ -436,6 +541,8 @@ def test_create_book_saves_supported_fields_and_redirects_to_detail() -> None:
         book = db.query(Book).filter_by(title="A Psalm for the Wild-Built").one()
         assert book.subtitle == "Monk and Robot"
         assert book.primary_author_name == "Becky Chambers"
+        assert book.isbn13 == "9781250236210"
+        assert book.isbn10 is None
         assert book.format == "audiobook"
         assert book.status == "started"
         assert book.rating == 4.5
@@ -481,6 +588,7 @@ def test_create_book_renders_validation_errors() -> None:
             "title": " ",
             "format": "ebook",
             "status": "started",
+            "isbn": "123",
             "rating": "9",
             "manual_progress_percent": "120",
         },
@@ -488,6 +596,7 @@ def test_create_book_renders_validation_errors() -> None:
 
     assert response.status_code == 400
     assert "Title is required." in response.text
+    assert "ISBN must be a valid ISBN-10 or ISBN-13." in response.text
     assert "Rating must be no more than 5." in response.text
     assert "Manual progress percent must be no more than 100." in response.text
     with session_factory() as db:
@@ -510,6 +619,7 @@ def test_book_detail_shows_metadata_progress_stats_and_events() -> None:
         assert db_book is not None
         db_book.subtitle = "The Subtitle"
         db_book.notes = "Line one\nLine two"
+        db_book.isbn10 = "123456789X"
         db_book.page_count = 320
         db_book.audio_seconds = 3660
         db.add(
@@ -541,6 +651,7 @@ def test_book_detail_shows_metadata_progress_stats_and_events() -> None:
     assert "Audiobook" in response.text
     assert "Completed" in response.text
     assert "5.0 / 5" in response.text
+    assert "123456789X" in response.text
     assert "100%" in response.text
     assert "320" in response.text
     assert "1 hr 1 min" in response.text
@@ -612,6 +723,7 @@ def test_update_book_changes_fields_and_redirects_to_detail() -> None:
             "title": "New Title",
             "subtitle": "New Subtitle",
             "primary_author_name": "New Author",
+            "isbn": "123456789X",
             "format": "physical",
             "status": "want_to_read",
             "rating": "4.2",
@@ -632,6 +744,8 @@ def test_update_book_changes_fields_and_redirects_to_detail() -> None:
         assert updated.title == "New Title"
         assert updated.subtitle == "New Subtitle"
         assert updated.primary_author_name == "New Author"
+        assert updated.isbn10 == "123456789X"
+        assert updated.isbn13 is None
         assert updated.format == "physical"
         assert updated.status == "want_to_read"
         assert updated.rating == 4.2

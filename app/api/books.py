@@ -2,7 +2,7 @@ from datetime import date, datetime, time, timezone
 
 from fastapi import APIRouter, Depends, Form, Query, Request, status
 from fastapi.responses import RedirectResponse, Response
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.orm import Session, joinedload
 from starlette.responses import HTMLResponse
 
@@ -10,7 +10,7 @@ from app.core.bootstrap import DEFAULT_LOCAL_USER_ID
 from app.core.database import get_db
 from app.core.templates import template_context, templates
 from app.core.write_protection import require_write_access
-from app.models import Book, ReadingEvent
+from app.models import Book, BookProgress, ReadingEvent
 
 
 router = APIRouter(prefix="/books", tags=["books"])
@@ -25,6 +25,16 @@ REVIEW_METADATA_FILTERS = {
     "missing_isbn": "Missing ISBN",
     "missing_cover_url": "Missing cover URL",
 }
+REVIEW_SUSPICIOUS_FILTERS = {
+    "unknown_format": "Unknown format",
+    "unknown_status": "Unknown status",
+    "missing_libby_title_id": "Missing Libby title ID",
+    "fallback_title": "Fallback title",
+    "no_reading_events": "No reading events",
+    "completed_without_completion_date": "Completed without completion date",
+    "progress_status_mismatch": "Progress/status mismatch",
+}
+TITLE_FALLBACK_VALUES = ["untitled libby book"]
 
 
 def clean_optional(value: str | None) -> str | None:
@@ -88,6 +98,21 @@ def parse_optional_int(
     return parsed
 
 
+def parse_optional_isbn(value: str | None, errors: list[str]) -> tuple[str | None, str | None]:
+    value = clean_optional(value)
+    if value is None:
+        return None, None
+
+    normalized = "".join(character for character in value if character.isdigit() or character.upper() == "X")
+    if len(normalized) == 10:
+        return normalized, None
+    if len(normalized) == 13 and normalized.isdigit():
+        return None, normalized
+
+    errors.append("ISBN must be a valid ISBN-10 or ISBN-13.")
+    return None, None
+
+
 def date_to_datetime(value: date) -> datetime:
     return datetime.combine(value, time.min, tzinfo=timezone.utc)
 
@@ -117,6 +142,10 @@ def missing_text_filter(column: object) -> object:
     return or_(column.is_(None), func.trim(column) == "")
 
 
+def review_progress_expression() -> object:
+    return func.coalesce(BookProgress.progress_percent, Book.manual_progress_percent)
+
+
 def audio_seconds_to_hours(audio_seconds: int | None) -> str:
     if audio_seconds is None:
         return ""
@@ -128,6 +157,7 @@ def book_form_values(book: Book) -> dict[str, str]:
         "title": book.title,
         "subtitle": book.subtitle or "",
         "primary_author_name": book.primary_author_name or "",
+        "isbn": book.isbn13 or book.isbn10 or "",
         "format": book.format,
         "status": book.status,
         "rating": f"{book.rating:g}" if book.rating is not None else "",
@@ -147,6 +177,7 @@ def submitted_form_values(
     title: str,
     subtitle: str | None,
     primary_author_name: str | None,
+    isbn: str | None,
     format: str,
     status_value: str,
     rating: str | None,
@@ -161,6 +192,7 @@ def submitted_form_values(
         "title": title,
         "subtitle": subtitle or "",
         "primary_author_name": primary_author_name or "",
+        "isbn": isbn or "",
         "format": format,
         "status": status_value,
         "rating": rating or "",
@@ -340,6 +372,13 @@ async def imported_books_review(
     missing_publisher: bool = Query(default=False),
     missing_isbn: bool = Query(default=False),
     missing_cover_url: bool = Query(default=False),
+    unknown_format: bool = Query(default=False),
+    unknown_status: bool = Query(default=False),
+    missing_libby_title_id: bool = Query(default=False),
+    fallback_title: bool = Query(default=False),
+    no_reading_events: bool = Query(default=False),
+    completed_without_completion_date: bool = Query(default=False),
+    progress_status_mismatch: bool = Query(default=False),
 ) -> HTMLResponse:
     active_filters = {
         "missing_page_count": missing_page_count,
@@ -348,11 +387,19 @@ async def imported_books_review(
         "missing_publisher": missing_publisher,
         "missing_isbn": missing_isbn,
         "missing_cover_url": missing_cover_url,
+        "unknown_format": unknown_format,
+        "unknown_status": unknown_status,
+        "missing_libby_title_id": missing_libby_title_id,
+        "fallback_title": fallback_title,
+        "no_reading_events": no_reading_events,
+        "completed_without_completion_date": completed_without_completion_date,
+        "progress_status_mismatch": progress_status_mismatch,
     }
 
     statement = (
         select(Book)
         .options(joinedload(Book.progress))
+        .outerjoin(BookProgress, BookProgress.book_id == Book.id)
         .where(
             Book.user_id == DEFAULT_LOCAL_USER_ID,
             Book.archived_at.is_(None),
@@ -374,6 +421,26 @@ async def imported_books_review(
         statement = statement.where(missing_text_filter(Book.isbn10), missing_text_filter(Book.isbn13))
     if missing_cover_url:
         statement = statement.where(missing_text_filter(Book.cover_url))
+    if unknown_format:
+        statement = statement.where(Book.format == "unknown")
+    if unknown_status:
+        statement = statement.where(Book.status == "unknown")
+    if missing_libby_title_id:
+        statement = statement.where(missing_text_filter(Book.libby_title_id))
+    if fallback_title:
+        statement = statement.where(func.lower(func.trim(Book.title)).in_(TITLE_FALLBACK_VALUES))
+    if no_reading_events:
+        statement = statement.where(~Book.reading_events.any())
+    if completed_without_completion_date:
+        statement = statement.where(Book.status == "completed", Book.completed_on.is_(None))
+    if progress_status_mismatch:
+        progress = review_progress_expression()
+        statement = statement.where(
+            or_(
+                and_(Book.status == "completed", progress.is_not(None), progress < 100),
+                and_(Book.status != "completed", progress >= 100),
+            )
+        )
 
     books = db.scalars(statement).unique().all()
 
@@ -384,7 +451,8 @@ async def imported_books_review(
             request,
             page_title="Import Review",
             books=books,
-            filter_options=REVIEW_METADATA_FILTERS,
+            metadata_filter_options=REVIEW_METADATA_FILTERS,
+            suspicious_filter_options=REVIEW_SUSPICIOUS_FILTERS,
             active_filters=active_filters,
             format_audio_seconds=format_audio_seconds,
         ),
@@ -423,6 +491,7 @@ async def create_book(
     title: str = Form(...),
     subtitle: str | None = Form(default=None),
     primary_author_name: str | None = Form(default=None),
+    isbn: str | None = Form(default=None),
     format: str = Form(default="unknown"),
     status_value: str = Form(default="unknown", alias="status"),
     rating: str | None = Form(default=None),
@@ -437,6 +506,7 @@ async def create_book(
         title=title,
         subtitle=subtitle,
         primary_author_name=primary_author_name,
+        isbn=isbn,
         format=format,
         status_value=status_value,
         rating=rating,
@@ -461,6 +531,7 @@ async def create_book(
     parsed_completed_on = parse_optional_date(completed_on, "Completed date", errors)
     parsed_page_count = parse_optional_int(page_count, "Page count", errors, minimum=1)
     parsed_audio_hours = parse_optional_float(audio_hours, "Audio duration", errors, minimum=0)
+    parsed_isbn10, parsed_isbn13 = parse_optional_isbn(isbn, errors)
     parsed_progress = parse_optional_float(
         manual_progress_percent,
         "Manual progress percent",
@@ -497,6 +568,8 @@ async def create_book(
         title=clean_title or "",
         subtitle=clean_optional(subtitle),
         primary_author_name=clean_optional(primary_author_name),
+        isbn10=parsed_isbn10,
+        isbn13=parsed_isbn13,
         format=format,
         status=status_value,
         rating=parsed_rating,
@@ -564,6 +637,7 @@ async def update_book(
     title: str = Form(...),
     subtitle: str | None = Form(default=None),
     primary_author_name: str | None = Form(default=None),
+    isbn: str | None = Form(default=None),
     format: str = Form(default="unknown"),
     status_value: str = Form(default="unknown", alias="status"),
     rating: str | None = Form(default=None),
@@ -587,6 +661,7 @@ async def update_book(
         title=title,
         subtitle=subtitle,
         primary_author_name=primary_author_name,
+        isbn=isbn,
         format=format,
         status_value=status_value,
         rating=rating,
@@ -611,6 +686,7 @@ async def update_book(
     parsed_completed_on = parse_optional_date(completed_on, "Completed date", errors)
     parsed_page_count = parse_optional_int(page_count, "Page count", errors, minimum=1)
     parsed_audio_hours = parse_optional_float(audio_hours, "Audio duration", errors, minimum=0)
+    parsed_isbn10, parsed_isbn13 = parse_optional_isbn(isbn, errors)
     parsed_progress = parse_optional_float(
         manual_progress_percent,
         "Manual progress percent",
@@ -648,6 +724,8 @@ async def update_book(
     book.title = clean_title or ""
     book.subtitle = clean_optional(subtitle)
     book.primary_author_name = clean_optional(primary_author_name)
+    book.isbn10 = parsed_isbn10
+    book.isbn13 = parsed_isbn13
     book.format = format
     book.status = status_value
     book.rating = parsed_rating

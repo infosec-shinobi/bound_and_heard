@@ -42,13 +42,13 @@ Derived from `docs/ROADMAP.md` MVP 3 - Import Review and Cleanup, with continuit
 
 ## Chunk 4 - Ambiguous Or Suspicious Metadata Filters
 
-- [ ] Add filter for unknown format
-- [ ] Add filter for unknown status
-- [ ] Add filter for missing Libby title ID
-- [ ] Add filter for imported books with title fallback values such as `Untitled Libby Book`
-- [ ] Add filter for books without any reading events
-- [ ] Add filter for completed status without completion date
-- [ ] Add filter for progress/status mismatch where simple to detect
+- [x] Add filter for unknown format
+- [x] Add filter for unknown status
+- [x] Add filter for missing Libby title ID
+- [x] Add filter for imported books with title fallback values such as `Untitled Libby Book`
+- [x] Add filter for books without any reading events
+- [x] Add filter for completed status without completion date
+- [x] Add filter for progress/status mismatch where simple to detect
 
 ## Chunk 5 - Duplicate Candidate Detection
 
