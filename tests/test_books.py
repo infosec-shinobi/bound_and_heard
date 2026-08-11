@@ -259,12 +259,90 @@ def test_imported_books_review_page_lists_libby_books_needing_review() -> None:
     assert "Review Author" in response.text
     assert "Audiobook" in response.text
     assert "Completed" in response.text
+    assert f'action="/books/{book.id}/review/status"' not in response.text
     assert "100%" in response.text
     assert "320" in response.text
     assert "2 hr 15 min" in response.text
     assert "2026-06-20" in response.text
     assert "Title ID libby-1" in response.text
     assert f'href="/books/{book.id}"' in response.text
+
+
+def test_imported_books_review_page_shows_quick_status_form_after_admin_login() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Status Review Book", author="Author", metadata_source="libby")
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.get("/books/review?missing_page_count=true")
+
+    assert response.status_code == 200
+    assert f'action="/books/{book.id}/review/status"' in response.text
+    assert 'name="return_to" value="/books/review?missing_page_count=true"' in response.text
+    assert 'option value="want_to_read"' in response.text
+    assert 'option value="borrowed"' in response.text
+    assert 'option value="started" selected' in response.text
+    assert 'option value="completed"' in response.text
+    assert 'option value="abandoned"' in response.text
+    assert 'option value="unknown"' in response.text
+
+
+def test_quick_status_update_requires_admin_login() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Protected Status", author="Author", metadata_source="libby")
+
+    response = client.post(
+        f"/books/{book.id}/review/status",
+        data={"status": "completed", "return_to": "/books/review?missing_page_count=true"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 403
+    with session_factory() as db:
+        unchanged = db.get(Book, book.id)
+        assert unchanged is not None
+        assert unchanged.status == "started"
+
+
+def test_quick_status_update_changes_status_creates_event_and_returns_to_filter() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Quick Status", author="Author", metadata_source="libby")
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.post(
+        f"/books/{book.id}/review/status",
+        data={"status": "completed", "return_to": "/books/review?missing_page_count=true"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/books/review?missing_page_count=true"
+    with session_factory() as db:
+        updated = db.get(Book, book.id)
+        assert updated is not None
+        assert updated.status == "completed"
+        assert updated.metadata_source == "libby"
+        event = db.query(ReadingEvent).filter_by(book_id=book.id, event_type="manually_corrected").one()
+        assert event.raw_data == {"changed_fields": {"status": {"from": "started", "to": "completed"}}}
+
+
+def test_quick_status_update_rejects_invalid_status() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Invalid Status", author="Author", metadata_source="libby")
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.post(
+        f"/books/{book.id}/review/status",
+        data={"status": "not-valid", "return_to": "https://example.test/unsafe"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/books/review"
+    with session_factory() as db:
+        unchanged = db.get(Book, book.id)
+        assert unchanged is not None
+        assert unchanged.status == "started"
+        assert db.query(ReadingEvent).filter_by(book_id=book.id, event_type="manually_corrected").count() == 0
 
 
 def test_imported_books_review_page_excludes_non_review_books() -> None:

@@ -200,6 +200,12 @@ def review_progress_expression() -> object:
     return func.coalesce(BookProgress.progress_percent, Book.manual_progress_percent)
 
 
+def safe_review_return_url(value: str | None) -> str:
+    if value and value.startswith("/books/review") and not value.startswith("//"):
+        return value
+    return "/books/review"
+
+
 def audio_seconds_to_hours(audio_seconds: int | None) -> str:
     if audio_seconds is None:
         return ""
@@ -524,10 +530,44 @@ async def imported_books_review(
             metadata_filter_options=REVIEW_METADATA_FILTERS,
             suspicious_filter_options=REVIEW_SUSPICIOUS_FILTERS,
             active_filters=active_filters,
+            book_statuses=BOOK_STATUSES,
             duplicate_reasons=duplicate_reasons,
             format_audio_seconds=format_audio_seconds,
         ),
     )
+
+
+@router.post("/{book_id}/review/status")
+async def update_review_book_status(
+    book_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_write_access),
+    status_value: str = Form(..., alias="status"),
+    return_to: str | None = Form(default=None),
+) -> Response:
+    return_url = safe_review_return_url(return_to)
+    book = db.get(Book, book_id)
+    if book is None or book.user_id != DEFAULT_LOCAL_USER_ID:
+        return RedirectResponse(return_url, status_code=status.HTTP_303_SEE_OTHER)
+    if status_value not in BOOK_STATUSES:
+        return RedirectResponse(return_url, status_code=status.HTTP_303_SEE_OTHER)
+
+    old_status = book.status
+    old_completed_on = book.completed_on
+    old_progress = book.manual_progress_percent
+    book.status = status_value
+
+    correction_event = correction_event_for_changes(
+        book,
+        old_status=old_status,
+        old_completed_on=old_completed_on,
+        old_progress=old_progress,
+    )
+    if correction_event is not None:
+        db.add(correction_event)
+
+    db.commit()
+    return RedirectResponse(return_url, status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/new", response_class=HTMLResponse)

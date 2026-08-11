@@ -63,13 +63,13 @@ Derived from `docs/ROADMAP.md` MVP 3 - Import Review and Cleanup, with continuit
 
 ## Chunk 6 - Quick Status Correction
 
-- [ ] Add protected quick status update action from review rows
-- [ ] Support want_to_read, borrowed, started, completed, abandoned, unknown
-- [ ] Validate supported statuses
-- [ ] Preserve manual overwrite protections
-- [ ] Create a manual correction event when status changes
-- [ ] Keep read-only users blocked from quick corrections
-- [ ] Return to the same filtered review page after save
+- [x] Add protected quick status update action from review rows
+- [x] Support want_to_read, borrowed, started, completed, abandoned, unknown
+- [x] Validate supported statuses
+- [x] Preserve manual overwrite protections
+- [x] Create a manual correction event when status changes
+- [x] Keep read-only users blocked from quick corrections
+- [x] Return to the same filtered review page after save
 
 ## Chunk 7 - Quick Progress Correction
 
@@ -116,7 +116,7 @@ Derived from `docs/ROADMAP.md` MVP 3 - Import Review and Cleanup, with continuit
 - [ ] Test missing audio duration filter
 - [ ] Test missing or ambiguous metadata filters
 - [x] Test duplicate candidate detection
-- [ ] Test quick status correction creates manual correction event
+- [x] Test quick status correction creates manual correction event
 - [ ] Test quick progress correction creates manual correction event
 - [ ] Test quick completion date correction creates manual correction event
 - [ ] Test archive/ignore controls preserve records and events

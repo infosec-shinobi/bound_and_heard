@@ -80,7 +80,23 @@
                 </td>
                 <td>{{ book.primary_author_name or 'Unknown' }}</td>
                 <td>{{ book.format.replace('_', ' ').title() }}</td>
-                <td>{{ book.status.replace('_', ' ').title() }}</td>
+                <td>
+                  {% if can_write %}
+                    <form class="d-flex gap-2 align-items-center" method="post" action="/books/{{ book.id }}/review/status">
+                      <input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+                      <select class="form-select form-select-sm" name="status" aria-label="Status for {{ book.title }}">
+                        {% for value in book_statuses %}
+                          <option value="{{ value }}" {% if book.status == value %}selected{% endif %}>{{ value.replace('_', ' ').title() }}</option>
+                        {% endfor %}
+                      </select>
+                      <button class="btn btn-sm btn-outline-primary" type="submit">Save</button>
+                    </form>
+                  {% else %}
+                    <span class="d-inline-block" tabindex="0" data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-content="{{ write_disabled_reason }}">
+                      <button class="btn btn-sm btn-outline-secondary" type="button" disabled>{{ book.status.replace('_', ' ').title() }}</button>
+                    </span>
+                  {% endif %}
+                </td>
                 <td>{% if progress is not none %}{{ '%.0f'|format(progress) }}%{% else %}<span class="app-muted">Unknown</span>{% endif %}</td>
                 <td>{% if book.page_count is not none %}{{ book.page_count }}{% else %}<span class="app-muted">Missing</span>{% endif %}</td>
                 <td>{% if book.audio_seconds is not none %}{{ format_audio_seconds(book.audio_seconds) }}{% else %}<span class="app-muted">Missing</span>{% endif %}</td>
@@ -105,4 +121,12 @@
       </div>
     </section>
   {% endif %}
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    document.querySelectorAll('[data-bs-toggle="popover"]').forEach((element) => {
+      new bootstrap.Popover(element);
+    });
+  </script>
 {% endblock %}
