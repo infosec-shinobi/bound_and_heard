@@ -677,6 +677,65 @@ async def update_review_book_completion_date(
     return RedirectResponse(return_url, status_code=status.HTTP_303_SEE_OTHER)
 
 
+@router.post("/{book_id}/review/archive")
+async def archive_review_book(
+    book_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_write_access),
+    return_to: str | None = Form(default=None),
+) -> Response:
+    return_url = safe_review_return_url(return_to)
+    book = db.get(Book, book_id)
+    if book is None or book.user_id != DEFAULT_LOCAL_USER_ID:
+        return RedirectResponse(return_url, status_code=status.HTTP_303_SEE_OTHER)
+
+    if book.archived_at is None:
+        book.archived_at = datetime.now(timezone.utc)
+        db.commit()
+    return RedirectResponse(return_url, status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{book_id}/review/restore")
+async def restore_review_book(
+    book_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_write_access),
+    return_to: str | None = Form(default=None),
+) -> Response:
+    return_url = safe_review_return_url(return_to)
+    book = db.get(Book, book_id)
+    if book is None or book.user_id != DEFAULT_LOCAL_USER_ID:
+        return RedirectResponse(return_url, status_code=status.HTTP_303_SEE_OTHER)
+
+    if book.archived_at is not None:
+        book.archived_at = None
+        db.commit()
+    return RedirectResponse(return_url, status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/{book_id}/review/state")
+async def update_review_book_state(
+    book_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_write_access),
+    review_status: str = Form(...),
+    return_to: str | None = Form(default=None),
+) -> Response:
+    return_url = safe_review_return_url(return_to)
+    if review_status not in {"reviewed", "ignored"}:
+        return RedirectResponse(return_url, status_code=status.HTTP_303_SEE_OTHER)
+
+    book = db.get(Book, book_id)
+    if book is None or book.user_id != DEFAULT_LOCAL_USER_ID:
+        return RedirectResponse(return_url, status_code=status.HTTP_303_SEE_OTHER)
+
+    book.review_status = review_status
+    book.reviewed_at = datetime.now(timezone.utc)
+    book.review_note = f"Marked {review_status} from import review."
+    db.commit()
+    return RedirectResponse(return_url, status_code=status.HTTP_303_SEE_OTHER)
+
+
 @router.get("/new", response_class=HTMLResponse)
 async def new_book_form(
     request: Request,

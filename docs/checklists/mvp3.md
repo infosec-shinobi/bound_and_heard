@@ -91,12 +91,12 @@ Derived from `docs/ROADMAP.md` MVP 3 - Import Review and Cleanup, with continuit
 
 ## Chunk 9 - Quick Archive Or Ignore Controls
 
-- [ ] Add protected archive action from review rows
-- [ ] Add protected restore action or link where useful
-- [ ] Add ignore/reviewed action if review state exists
-- [ ] Keep ignored books out of default review results
-- [ ] Preserve book records, events, progress, and import attribution
-- [ ] Create a manual correction event or review note where useful
+- [x] Add protected archive action from review rows
+- [x] Add protected restore action or link where useful
+- [x] Add ignore/reviewed action if review state exists
+- [x] Keep ignored books out of default review results
+- [x] Preserve book records, events, progress, and import attribution
+- [x] Create a manual correction event or review note where useful
 
 ## Chunk 10 - Review Workflow UX
 
@@ -119,7 +119,7 @@ Derived from `docs/ROADMAP.md` MVP 3 - Import Review and Cleanup, with continuit
 - [x] Test quick status correction creates manual correction event
 - [x] Test quick progress correction creates manual correction event
 - [x] Test quick completion date correction creates manual correction event
-- [ ] Test archive/ignore controls preserve records and events
+- [x] Test archive/ignore controls preserve records and events
 - [ ] Test filter context is preserved after quick actions
 - [ ] Test manual edits still survive later imports
 

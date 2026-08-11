@@ -287,6 +287,8 @@ def test_imported_books_review_page_lists_libby_books_needing_review() -> None:
     assert "2026-06-20" in response.text
     assert "Title ID libby-1" in response.text
     assert f'href="/books/{book.id}"' in response.text
+    assert f'action="/books/{book.id}/review/archive"' not in response.text
+    assert f'action="/books/{book.id}/review/state"' not in response.text
 
 
 def test_imported_books_review_page_shows_quick_status_form_after_admin_login() -> None:
@@ -522,6 +524,21 @@ def test_imported_books_review_page_shows_quick_completion_date_form_after_admin
     assert 'name="completed_on" type="date" value="2026-06-20"' in response.text
 
 
+def test_imported_books_review_page_shows_quick_archive_and_review_state_actions_after_admin_login() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Action Review Book", author="Author", metadata_source="libby")
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.get("/books/review?missing_page_count=true")
+
+    assert response.status_code == 200
+    assert f'action="/books/{book.id}/review/archive"' in response.text
+    assert f'action="/books/{book.id}/review/state"' in response.text
+    assert 'name="review_status" value="reviewed"' in response.text
+    assert 'name="review_status" value="ignored"' in response.text
+    assert 'name="return_to" value="/books/review?missing_page_count=true"' in response.text
+
+
 def test_quick_completion_date_update_requires_admin_login() -> None:
     client, session_factory = make_books_client()
     book = add_book(session_factory, title="Protected Completion", author="Author", metadata_source="libby")
@@ -607,6 +624,167 @@ def test_quick_completion_date_update_shows_validation_error_without_losing_filt
         assert unchanged is not None
         assert unchanged.completed_on is None
         assert db.query(ReadingEvent).filter_by(book_id=book.id, event_type="manually_corrected").count() == 0
+
+
+def test_quick_review_archive_requires_admin_login() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Protected Review Archive", author="Author", metadata_source="libby")
+
+    response = client.post(
+        f"/books/{book.id}/review/archive",
+        data={"return_to": "/books/review?missing_page_count=true"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 403
+    with session_factory() as db:
+        unchanged = db.get(Book, book.id)
+        assert unchanged is not None
+        assert unchanged.archived_at is None
+
+
+def test_quick_review_archive_preserves_book_data_events_progress_and_returns_to_filter() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(
+        session_factory,
+        title="Review Archive",
+        author="Author",
+        rating=4.5,
+        manual_progress_percent=50,
+        metadata_source="libby",
+        libby_title_id="libby-review-archive",
+    )
+    with session_factory() as db:
+        db.add(
+            BookProgress(
+                user_id=DEFAULT_LOCAL_USER_ID,
+                book_id=book.id,
+                source="libby",
+                progress_percent=50,
+            )
+        )
+        db.add(
+            ReadingEvent(
+                user_id=DEFAULT_LOCAL_USER_ID,
+                book_id=book.id,
+                source="libby",
+                event_type="borrowed",
+                event_date=datetime(2026, 6, 20, tzinfo=timezone.utc),
+            )
+        )
+        db.commit()
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.post(
+        f"/books/{book.id}/review/archive",
+        data={"return_to": "/books/review?missing_page_count=true"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/books/review?missing_page_count=true"
+    with session_factory() as db:
+        archived = db.get(Book, book.id)
+        assert archived is not None
+        assert archived.archived_at is not None
+        assert archived.rating == 4.5
+        assert archived.manual_progress_percent == 50
+        assert archived.metadata_source == "libby"
+        assert archived.libby_title_id == "libby-review-archive"
+        assert db.query(BookProgress).filter_by(book_id=book.id).count() == 1
+        assert db.query(ReadingEvent).filter_by(book_id=book.id).count() == 1
+
+
+def test_quick_review_restore_clears_archived_at_and_returns_to_filter() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Review Restore", author="Author", archived=True, metadata_source="libby")
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.post(
+        f"/books/{book.id}/review/restore",
+        data={"return_to": "/books/review?missing_page_count=true"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/books/review?missing_page_count=true"
+    with session_factory() as db:
+        restored = db.get(Book, book.id)
+        assert restored is not None
+        assert restored.archived_at is None
+
+
+def test_quick_review_state_marks_reviewed_and_returns_to_filter() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Mark Reviewed", author="Author", metadata_source="libby")
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.post(
+        f"/books/{book.id}/review/state",
+        data={"review_status": "reviewed", "return_to": "/books/review?missing_page_count=true"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/books/review?missing_page_count=true"
+    with session_factory() as db:
+        reviewed = db.get(Book, book.id)
+        assert reviewed is not None
+        assert reviewed.review_status == "reviewed"
+        assert reviewed.reviewed_at is not None
+        assert reviewed.review_note == "Marked reviewed from import review."
+        assert reviewed.metadata_source == "libby"
+
+
+def test_quick_review_state_marks_ignored_and_hides_from_default_review_results() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Mark Ignored", author="Author", metadata_source="libby")
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.post(
+        f"/books/{book.id}/review/state",
+        data={"review_status": "ignored", "return_to": "/books/review?missing_page_count=true"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    with session_factory() as db:
+        ignored = db.get(Book, book.id)
+        assert ignored is not None
+        assert ignored.review_status == "ignored"
+        assert ignored.reviewed_at is not None
+        assert ignored.review_note == "Marked ignored from import review."
+
+    review_response = client.get("/books/review")
+    assert review_response.status_code == 200
+    assert "Mark Ignored" not in review_response.text
+
+
+def test_quick_review_state_requires_admin_login_and_rejects_invalid_status() -> None:
+    client, session_factory = make_books_client()
+    protected_book = add_book(session_factory, title="Protected Review State", author="Author", metadata_source="libby")
+
+    protected_response = client.post(
+        f"/books/{protected_book.id}/review/state",
+        data={"review_status": "ignored", "return_to": "/books/review?missing_page_count=true"},
+        follow_redirects=False,
+    )
+
+    assert protected_response.status_code == 403
+    client.post("/admin/login", data={"password": "secret"})
+    invalid_response = client.post(
+        f"/books/{protected_book.id}/review/state",
+        data={"review_status": "duplicate_candidate", "return_to": "/books/review?missing_page_count=true"},
+        follow_redirects=False,
+    )
+
+    assert invalid_response.status_code == 303
+    assert invalid_response.headers["location"] == "/books/review?missing_page_count=true"
+    with session_factory() as db:
+        unchanged = db.get(Book, protected_book.id)
+        assert unchanged is not None
+        assert unchanged.review_status is None
+        assert unchanged.reviewed_at is None
 
 
 def test_imported_books_review_page_excludes_non_review_books() -> None:
