@@ -21,12 +21,12 @@ Derived from `docs/ROADMAP.md` MVP 4 - Libby Progress Scraping, with continuity 
 
 ## Chunk 2 - Playwright Dependency And Browser Profile
 
-- [ ] Add Playwright dependency and installation notes
-- [ ] Choose persistent browser profile directory
-- [ ] Add config for browser profile path if needed
-- [ ] Ensure profile directory stays untracked
-- [ ] Add startup or command documentation for installing browsers
-- [ ] Avoid storing Libby credentials in the application database
+- [x] Add Playwright dependency and installation notes
+- [x] Choose persistent browser profile directory
+- [x] Add config for browser profile path if needed
+- [x] Ensure profile directory stays untracked
+- [x] Add startup or command documentation for installing browsers
+- [x] Avoid storing Libby credentials in the application database
 
 ## Chunk 3 - Manual Libby Login Flow
 

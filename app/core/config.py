@@ -28,6 +28,10 @@ class Settings(BaseSettings):
         default="data/imports",
         validation_alias="BOUND_AND_HEARD_IMPORTS_DIR",
     )
+    libby_browser_profile_dir: str = Field(
+        default="data/browser/libby-profile",
+        validation_alias="BOUND_AND_HEARD_LIBBY_BROWSER_PROFILE_DIR",
+    )
 
     @property
     def writes_enabled(self) -> bool:

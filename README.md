@@ -21,6 +21,12 @@ Install the app with development dependencies:
 python -m pip install -e ".[dev]"
 ```
 
+Install Playwright browser binaries for Libby progress scraping:
+
+```powershell
+python -m playwright install chromium
+```
+
 Create a local `.env` file if you want write actions enabled:
 
 ```dotenv
@@ -64,6 +70,10 @@ Display name used only when bootstrapping the first local user. It does not over
 
 Directory used to preserve raw uploaded import files. Defaults to `data/imports`.
 
+`BOUND_AND_HEARD_LIBBY_BROWSER_PROFILE_DIR`
+
+Directory used for the persistent local Playwright browser profile for Libby. Defaults to `data/browser/libby-profile`. This directory contains local browser cookies/session state and should not be committed.
+
 `BOUND_AND_HEARD_APP_NAME`
 
 Application display name. Defaults to `Bound & Heard`.
@@ -98,6 +108,18 @@ Admin users can make quick corrections from review rows:
 - Archive, restore, reviewed, and ignored actions preserve the book record, reading events, progress rows, and import attribution.
 
 Quick status, progress, and completion-date changes create `manually_corrected` reading events. Marking a book reviewed or ignored stores review state and a review note. Ignored and reviewed books stay out of the default review results.
+
+## Libby Progress Scraping Setup
+
+MVP 4 uses Playwright with a persistent local browser profile so you can log in to Libby manually and reuse that browser session for progress scraping. The default profile directory is `data/browser/libby-profile`, which is ignored by Git through the existing `data/**` rule.
+
+Install the browser binary after installing dependencies:
+
+```powershell
+python -m playwright install chromium
+```
+
+Do not store Libby credentials in the app database or commit the browser profile directory. The profile contains local browser state such as cookies.
 
 ## Common Commands
 

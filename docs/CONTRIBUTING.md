@@ -85,6 +85,22 @@ Linux/macOS:
 
 Use the project-local `.venv` for all Python commands. Do not install project dependencies into the global Python environment.
 
+Install Playwright browser binaries when working on Libby progress scraping:
+
+Windows PowerShell:
+
+```powershell
+.\.venv\Scripts\python.exe -m playwright install chromium
+```
+
+Linux/macOS:
+
+```bash
+./.venv/bin/python -m playwright install chromium
+```
+
+The Libby browser profile defaults to `data/browser/libby-profile`. It contains local cookies/session state, is covered by the existing `data/**` ignore rule, and should not be committed or used to store credentials in the database.
+
 Configure write protection for local-network use:
 
 Windows PowerShell:

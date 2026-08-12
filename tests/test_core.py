@@ -38,6 +38,18 @@ def test_settings_enable_writes_when_admin_password_is_set() -> None:
     assert settings.writes_enabled is True
 
 
+def test_settings_default_libby_browser_profile_dir_is_local_data_path() -> None:
+    settings = Settings()
+
+    assert settings.libby_browser_profile_dir == "data/browser/libby-profile"
+
+
+def test_settings_allow_overriding_libby_browser_profile_dir() -> None:
+    settings = Settings(BOUND_AND_HEARD_LIBBY_BROWSER_PROFILE_DIR="custom/libby-profile")
+
+    assert settings.libby_browser_profile_dir == "custom/libby-profile"
+
+
 def test_ensure_default_user_creates_default_local_user() -> None:
     session_factory = make_session_factory()
 
