@@ -30,12 +30,12 @@ Derived from `docs/ROADMAP.md` MVP 4 - Libby Progress Scraping, with continuity 
 
 ## Chunk 3 - Manual Libby Login Flow
 
-- [ ] Add protected page or command to open a persistent Libby browser session
-- [ ] Let the user complete Libby login manually
-- [ ] Detect or document how to verify that the session is logged in
-- [ ] Handle missing or expired sessions with a clear error
-- [ ] Keep read-only users blocked from starting login/session actions
-- [ ] Document that browser profile cookies are local machine state
+- [x] Add protected page or command to open a persistent Libby browser session
+- [x] Let the user complete Libby login manually
+- [x] Detect or document how to verify that the session is logged in
+- [x] Handle missing or expired sessions with a clear error
+- [x] Keep read-only users blocked from starting login/session actions
+- [x] Document that browser profile cookies are local machine state
 
 ## Chunk 4 - Scrape Job Creation UI
 

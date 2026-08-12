@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <div class="row justify-content-center">
+    <div class="col-xl-8">
+      <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
+        <div>
+          <p class="app-kicker small fw-semibold mb-2">Libby scraping</p>
+          <h1 class="display-6 mb-1">Libby Browser Session</h1>
+          <p class="app-muted mb-0">Open a persistent local browser profile and complete Libby login manually.</p>
+        </div>
+        <a class="btn btn-outline-secondary" href="/books/review">Back to Review</a>
+      </div>
+
+      {% if launched %}
+        <div class="alert alert-success" role="status">Libby browser session opened. Complete login in the browser window. Once Libby shows you are logged in, you can close the new window and return here.</div>
+      {% endif %}
+      {% if error %}
+        <div class="alert alert-danger" role="alert">{{ error }}</div>
+      {% endif %}
+
+      <section class="card">
+        <div class="card-body">
+          <h2 class="h5 mb-3">Manual Login</h2>
+          <p>Click the button below to open Chromium using the local Libby profile. Sign in to Libby in that browser window. The app reuses that local browser state for later scraping.</p>
+          <dl class="row app-detail-list mb-4">
+            <dt class="col-sm-4">Profile directory</dt>
+            <dd class="col-sm-8"><code>{{ profile_dir }}</code></dd>
+            <dt class="col-sm-4">Session storage</dt>
+            <dd class="col-sm-8">Local browser cookies/profile files. Credentials are not stored in the app database.</dd>
+            <dt class="col-sm-4">Verification</dt>
+            <dd class="col-sm-8">After login, the browser should show your Libby shelves or loans without asking you to sign in again.</dd>
+          </dl>
+          <form method="post" action="/scraping/libby/session/open">
+            <button class="btn btn-primary" type="submit">Open Libby Browser</button>
+          </form>
+        </div>
+      </section>
+    </div>
+  </div>
+{% endblock %}
