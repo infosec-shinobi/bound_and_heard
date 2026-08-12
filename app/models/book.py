@@ -11,6 +11,7 @@ from app.core.database import Base
 if TYPE_CHECKING:
     from app.models.progress import BookProgress
     from app.models.reading_event import ReadingEvent
+    from app.models.scrape import ScrapeJobItem
     from app.models.user import User
 
 
@@ -60,3 +61,4 @@ class Book(Base):
     user: Mapped[User] = relationship(back_populates="books")
     reading_events: Mapped[list[ReadingEvent]] = relationship(back_populates="book")
     progress: Mapped[BookProgress | None] = relationship(back_populates="book")
+    scrape_items: Mapped[list[ScrapeJobItem]] = relationship(back_populates="book")
