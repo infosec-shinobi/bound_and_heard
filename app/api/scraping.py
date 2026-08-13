@@ -233,7 +233,10 @@ async def libby_scrape_job_detail(
 ) -> HTMLResponse:
     job = db.scalars(
         select(ScrapeJob)
-        .options(joinedload(ScrapeJob.items).joinedload(ScrapeJobItem.book))
+        .options(
+            joinedload(ScrapeJob.items).joinedload(ScrapeJobItem.book),
+            joinedload(ScrapeJob.items).joinedload(ScrapeJobItem.snapshots),
+        )
         .where(
             ScrapeJob.id == job_id,
             ScrapeJob.user_id == DEFAULT_LOCAL_USER_ID,
@@ -262,6 +265,7 @@ async def libby_scrape_job_detail(
             can_cancel=job.status in ACTIVE_SCRAPE_JOB_STATUSES,
             can_start=job.status == "pending" and bool(items),
             safety=scrape_safety_summary(),
+            snapshot_dir=request.app.state.settings.scraped_dir,
             message=message,
         ),
     )

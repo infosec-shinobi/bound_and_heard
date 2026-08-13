@@ -79,12 +79,12 @@ Derived from `docs/ROADMAP.md` MVP 4 - Libby Progress Scraping, with continuity 
 
 ## Chunk 8 - Raw Snapshot Preservation
 
-- [ ] Save raw page HTML, extracted text, or structured scrape payload per item
-- [ ] Store snapshot checksum/path/reference on scrape item
-- [ ] Keep snapshots under a configured local data directory
-- [ ] Preserve failed-item snapshots when useful
-- [ ] Avoid committing raw snapshots
-- [ ] Show snapshot reference on scrape job detail page
+- [x] Save raw page HTML, extracted text, or structured scrape payload per item
+- [x] Store snapshot checksum/path/reference on scrape item
+- [x] Keep snapshots under a configured local data directory
+- [x] Preserve failed-item snapshots when useful
+- [x] Avoid committing raw snapshots
+- [x] Show snapshot reference on scrape job detail page
 
 ## Chunk 9 - Progress Parsing
 

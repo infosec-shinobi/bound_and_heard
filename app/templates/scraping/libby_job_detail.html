@@ -84,6 +84,8 @@
         <dd class="col-sm-8">{{ safety.selector_timeout_ms }} ms</dd>
         <dt class="col-sm-4">Automatic retries</dt>
         <dd class="col-sm-8">Disabled to avoid tight retry loops</dd>
+        <dt class="col-sm-4">Snapshot directory</dt>
+        <dd class="col-sm-8"><code>{{ snapshot_dir }}/libby</code></dd>
       </dl>
     </div>
   </section>
@@ -116,6 +118,7 @@
               <th scope="col">Attempts</th>
               <th scope="col">Latest Borrow</th>
               <th scope="col">Last Scraped Borrow</th>
+              <th scope="col">Snapshots</th>
               <th scope="col">Last Error</th>
             </tr>
           </thead>
@@ -130,6 +133,18 @@
                 <td>{{ item.attempts }}</td>
                 <td>{{ item.latest_borrowed_at or 'Unknown' }}</td>
                 <td>{{ item.last_scraped_borrowed_at or 'Never' }}</td>
+                <td>
+                  {% if item.snapshots %}
+                    {% for snapshot in item.snapshots %}
+                      <div class="small">
+                        <code>{{ snapshot.file_path }}</code>
+                        <div class="app-muted">{{ snapshot.snapshot_type }}{% if snapshot.checksum %} / {{ snapshot.checksum[:12] }}{% endif %}</div>
+                      </div>
+                    {% endfor %}
+                  {% else %}
+                    <span class="app-muted">None</span>
+                  {% endif %}
+                </td>
                 <td>
                   {% if item.error_message %}
                     <div>{{ item.error_message }}</div>

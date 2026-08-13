@@ -32,6 +32,10 @@ class Settings(BaseSettings):
         default="data/browser/libby-profile",
         validation_alias="BOUND_AND_HEARD_LIBBY_BROWSER_PROFILE_DIR",
     )
+    scraped_dir: str = Field(
+        default="data/scraped",
+        validation_alias="BOUND_AND_HEARD_SCRAPED_DIR",
+    )
 
     @property
     def writes_enabled(self) -> bool:

@@ -11,7 +11,7 @@ from app.core.bootstrap import DEFAULT_LOCAL_USER_ID
 from app.core.config import Settings
 from app.core.database import Base, get_db
 from app.main import create_app
-from app.models import Book, BookProgress, ReadingEvent, ScrapeJob, ScrapeJobItem, User
+from app.models import Book, BookProgress, ReadingEvent, ScrapeJob, ScrapeJobItem, ScrapeSnapshot, User
 from app.services.libby_browser_worker import DESKTOP_CHROME_USER_AGENT
 from app.services.scrape_safety import polite_delay_seconds, should_attempt_item, wait_polite_delay
 
@@ -36,6 +36,7 @@ def make_scraping_client(admin_password: str | None = "secret") -> tuple[TestCli
             session_secret="test-session-secret",
             database_url="sqlite:///:memory:",
             libby_browser_profile_dir="data/browser/test-libby-profile",
+            scraped_dir="data/scraped/test",
         )
     )
 
@@ -508,6 +509,17 @@ def test_libby_scrape_job_detail_shows_item_statuses_and_errors() -> None:
                 error_message="Progress selector was not found.",
             )
         )
+        db.flush()
+        failed_item = db.query(ScrapeJobItem).filter_by(book_id=failed_book_id).one()
+        db.add(
+            ScrapeSnapshot(
+                item_id=failed_item.id,
+                snapshot_type="html",
+                file_path="data/scraped/test/libby/job-1/item-2/failure.html",
+                checksum="abc123def456",
+                content_type="text/html",
+            )
+        )
         db.commit()
         job_id = job.id
 
@@ -519,6 +531,8 @@ def test_libby_scrape_job_detail_shows_item_statuses_and_errors() -> None:
     assert "Failed Book" in response.text
     assert "Progress selector was not found." in response.text
     assert "Each book has an independent item" in response.text
+    assert "data/scraped/test/libby/job-1/item-2/failure.html" in response.text
+    assert "abc123def456" in response.text
 
 
 def test_libby_scrape_job_detail_shows_summary_and_cancel_action_for_active_job() -> None:
@@ -543,6 +557,7 @@ def test_libby_scrape_job_detail_shows_summary_and_cancel_action_for_active_job(
     assert "Delay between pages" in response.text
     assert "5-15 seconds, randomized" in response.text
     assert "Automatic retries" in response.text
+    assert "data/scraped/test/libby" in response.text
     assert f'action="/scraping/libby/jobs/{job_id}/cancel"' in response.text
 
 

@@ -7,6 +7,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.bootstrap import DEFAULT_LOCAL_USER_ID
 from app.core.database import Base
 from app.models import Book, ScrapeJob, ScrapeJobItem, ScrapeSnapshot, User
+from app.services.scrape_snapshots import preserve_scrape_snapshot, snapshot_checksum
 
 
 def make_session_factory() -> sessionmaker[Session]:
@@ -129,3 +130,42 @@ def test_scrape_snapshot_stores_raw_snapshot_reference_and_parsed_progress() -> 
     assert snapshots[0].content_type == "text/html"
     assert snapshots[0].progress_percent == 42.5
     assert snapshots[0].raw_data == {"progress_text": "42%"}
+
+
+def test_preserve_scrape_snapshot_writes_file_and_creates_snapshot_record(tmp_path) -> None:
+    session_factory = make_session_factory()
+    content = "<html><body>Progress 42%</body></html>"
+
+    with session_factory() as db:
+        book = add_user_and_book(db)
+        job = ScrapeJob(user_id=DEFAULT_LOCAL_USER_ID, source="libby", status="running")
+        db.add(job)
+        db.flush()
+        item = ScrapeJobItem(job_id=job.id, book_id=book.id, status="failed")
+        db.add(item)
+        db.flush()
+
+        preserved = preserve_scrape_snapshot(
+            db,
+            item=item,
+            base_dir=tmp_path.as_posix(),
+            snapshot_type="html",
+            content=content,
+            content_type="text/html",
+            raw_data={"selector": "progress"},
+        )
+        db.commit()
+        db.refresh(item)
+        snapshots = list(item.snapshots)
+
+    assert preserved.content == content.encode("utf-8")
+    assert len(snapshots) == 1
+    snapshot = snapshots[0]
+    assert snapshot.snapshot_type == "html"
+    assert snapshot.content_type == "text/html"
+    assert snapshot.checksum == snapshot_checksum(content.encode("utf-8"))
+    assert snapshot.raw_data == {"selector": "progress"}
+    snapshot_path = tmp_path / "libby" / f"job-{job.id}" / f"item-{item.id}"
+    assert snapshot.file_path.startswith(snapshot_path.as_posix())
+    assert snapshot.file_path.endswith(".html")
+    assert snapshot_path.exists()
