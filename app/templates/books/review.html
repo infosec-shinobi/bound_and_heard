@@ -7,7 +7,10 @@
       <h1 class="display-6 mb-1">Imported Books Needing Review</h1>
       <p class="app-muted mb-0">Scan Libby-imported records before relying on them for scraping, analytics, and recaps.</p>
     </div>
-    <a class="btn btn-outline-secondary" href="/imports">View Imports</a>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-primary" href="/scraping/libby/jobs/new">Create Scrape Job</a>
+      <a class="btn btn-outline-secondary" href="/imports">View Imports</a>
+    </div>
   </div>
 
   <form class="card mb-4" method="get" action="/books/review">

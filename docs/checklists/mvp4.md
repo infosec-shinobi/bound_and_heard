@@ -39,13 +39,13 @@ Derived from `docs/ROADMAP.md` MVP 4 - Libby Progress Scraping, with continuity 
 
 ## Chunk 4 - Scrape Job Creation UI
 
-- [ ] Add protected route to create a Libby progress scrape job
-- [ ] Let the user preview candidate books before creating a job
-- [ ] Include only imported Libby books with enough source context to scrape
-- [ ] Exclude archived, ignored, or reviewed-out records where appropriate
-- [ ] Show count of queued, skipped, and ineligible books
-- [ ] Add navigation entry or review-page action for scraping
-- [ ] Return useful feedback when no books are eligible
+- [x] Add protected route to create a Libby progress scrape job
+- [x] Let the user preview candidate books before creating a job
+- [x] Include only imported Libby books with enough source context to scrape
+- [x] Exclude archived, ignored, or reviewed-out records where appropriate
+- [x] Show count of queued, skipped, and ineligible books
+- [x] Add navigation entry or review-page action for scraping
+- [x] Return useful feedback when no books are eligible
 
 ## Chunk 5 - Scrape Queue And Job Items
 
