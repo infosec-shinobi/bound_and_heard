@@ -38,9 +38,16 @@
         </div>
         {% if can_cancel %}
           <div class="col-md-12 text-md-end">
-            <form method="post" action="/scraping/libby/jobs/{{ job.id }}/cancel">
-              <button class="btn btn-outline-danger" type="submit">Cancel Job</button>
-            </form>
+            <div class="d-flex flex-column flex-md-row gap-2 justify-content-md-end">
+              {% if can_start %}
+                <form method="post" action="/scraping/libby/jobs/{{ job.id }}/start">
+                  <button class="btn btn-primary" type="submit">Start Job</button>
+                </form>
+              {% endif %}
+              <form method="post" action="/scraping/libby/jobs/{{ job.id }}/cancel">
+                <button class="btn btn-outline-danger" type="submit">Cancel Job</button>
+              </form>
+            </div>
           </div>
         {% endif %}
       </div>
@@ -64,6 +71,22 @@
       </div>
     </section>
   {% endif %}
+
+  <section class="card mb-4">
+    <div class="card-body">
+      <h2 class="h5 mb-3">Scrape Safety</h2>
+      <dl class="row app-detail-list mb-0">
+        <dt class="col-sm-4">Delay between pages</dt>
+        <dd class="col-sm-8">{{ safety.min_delay_seconds }}-{{ safety.max_delay_seconds }} seconds, randomized</dd>
+        <dt class="col-sm-4">Page load timeout</dt>
+        <dd class="col-sm-8">{{ safety.page_load_timeout_ms }} ms</dd>
+        <dt class="col-sm-4">Selector timeout</dt>
+        <dd class="col-sm-8">{{ safety.selector_timeout_ms }} ms</dd>
+        <dt class="col-sm-4">Automatic retries</dt>
+        <dd class="col-sm-8">Disabled to avoid tight retry loops</dd>
+      </dl>
+    </div>
+  </section>
 
   <div class="row g-3 mb-4">
     {% for item_status in item_statuses %}

@@ -13,6 +13,7 @@ from app.core.database import Base, get_db
 from app.main import create_app
 from app.models import Book, BookProgress, ReadingEvent, ScrapeJob, ScrapeJobItem, User
 from app.services.libby_browser_worker import DESKTOP_CHROME_USER_AGENT
+from app.services.scrape_safety import polite_delay_seconds, should_attempt_item, wait_polite_delay
 
 
 def make_scraping_client(admin_password: str | None = "secret") -> tuple[TestClient, sessionmaker[Session]]:
@@ -217,6 +218,27 @@ def test_libby_browser_worker_uses_desktop_chrome_user_agent() -> None:
     assert "Windows NT 10.0" in DESKTOP_CHROME_USER_AGENT
     assert "Chrome/" in DESKTOP_CHROME_USER_AGENT
     assert "Safari/537.36" in DESKTOP_CHROME_USER_AGENT
+
+
+def test_polite_delay_seconds_is_between_five_and_fifteen_seconds() -> None:
+    delays = [polite_delay_seconds() for _ in range(100)]
+
+    assert all(5 <= delay <= 15 for delay in delays)
+    assert len(set(delays)) > 1
+
+
+def test_wait_polite_delay_is_testable_without_real_sleep() -> None:
+    slept: list[float] = []
+
+    delay = wait_polite_delay(sleeper=slept.append)
+
+    assert slept == [delay]
+    assert 5 <= delay <= 15
+
+
+def test_should_attempt_item_avoids_tight_retry_loops() -> None:
+    assert should_attempt_item(0) is True
+    assert should_attempt_item(1) is False
 
 
 def test_new_libby_scrape_job_page_requires_admin_login() -> None:
@@ -518,7 +540,57 @@ def test_libby_scrape_job_detail_shows_summary_and_cancel_action_for_active_job(
     assert response.status_code == 200
     assert "Skipped at creation" in response.text
     assert "Force re-scrape" in response.text
+    assert "Delay between pages" in response.text
+    assert "5-15 seconds, randomized" in response.text
+    assert "Automatic retries" in response.text
     assert f'action="/scraping/libby/jobs/{job_id}/cancel"' in response.text
+
+
+def test_start_libby_scrape_job_requires_admin_login() -> None:
+    client, session_factory = make_scraping_client()
+    job_id = add_scrape_job(session_factory, status="pending", with_items=True)
+
+    response = client.post(f"/scraping/libby/jobs/{job_id}/start", follow_redirects=False)
+
+    assert response.status_code == 403
+
+
+def test_start_libby_scrape_job_marks_pending_job_running_with_safety_summary() -> None:
+    client, session_factory = make_scraping_client()
+    client.post("/admin/login", data={"password": "secret"})
+    job_id = add_scrape_job(session_factory, status="pending", with_items=True)
+
+    response = client.post(f"/scraping/libby/jobs/{job_id}/start", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"].startswith(f"/scraping/libby/jobs/{job_id}?")
+    with session_factory() as db:
+        job = db.get(ScrapeJob, job_id)
+        assert job is not None
+        assert job.status == "running"
+        assert job.started_at is not None
+        assert job.summary["automatic_retries"] is False
+        assert job.summary["safety"] == {
+            "min_delay_seconds": 5,
+            "max_delay_seconds": 15,
+            "page_load_timeout_ms": 30000,
+            "selector_timeout_ms": 10000,
+            "max_attempts_per_run": 1,
+        }
+
+
+def test_start_libby_scrape_job_does_not_start_completed_job() -> None:
+    client, session_factory = make_scraping_client()
+    client.post("/admin/login", data={"password": "secret"})
+    job_id = add_scrape_job(session_factory, status="completed", with_items=True)
+
+    response = client.post(f"/scraping/libby/jobs/{job_id}/start", follow_redirects=False)
+
+    assert response.status_code == 303
+    with session_factory() as db:
+        job = db.get(ScrapeJob, job_id)
+        assert job is not None
+        assert job.status == "completed"
 
 
 def test_cancel_libby_scrape_job_marks_active_job_cancelled_and_open_items_skipped() -> None:

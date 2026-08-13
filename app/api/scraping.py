@@ -1,6 +1,5 @@
-from urllib.parse import urlencode
-
 from datetime import datetime, timezone
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Form, Query, Request, status
 from fastapi.responses import RedirectResponse, Response
@@ -14,6 +13,7 @@ from app.core.templates import template_context, templates
 from app.core.write_protection import require_write_access
 from app.models import Book, ReadingEvent, ScrapeJob, ScrapeJobItem
 from app.services.libby_browser import LibbyBrowserError, open_libby_browser_session
+from app.services.scrape_safety import scrape_safety_summary
 
 
 router = APIRouter(prefix="/scraping", tags=["scraping"])
@@ -260,8 +260,49 @@ async def libby_scrape_job_detail(
             status_counts=scrape_item_status_counts(items),
             item_statuses=SCRAPE_JOB_ITEM_STATUSES,
             can_cancel=job.status in ACTIVE_SCRAPE_JOB_STATUSES,
+            can_start=job.status == "pending" and bool(items),
+            safety=scrape_safety_summary(),
             message=message,
         ),
+    )
+
+
+@router.post("/libby/jobs/{job_id}/start", dependencies=[Depends(require_write_access)])
+async def start_libby_scrape_job(job_id: int, db: Session = Depends(get_db)) -> Response:
+    job = db.scalars(
+        select(ScrapeJob)
+        .options(joinedload(ScrapeJob.items))
+        .where(
+            ScrapeJob.id == job_id,
+            ScrapeJob.user_id == DEFAULT_LOCAL_USER_ID,
+            ScrapeJob.source == "libby",
+        )
+    ).unique().first()
+    if job is None:
+        return RedirectResponse("/scraping/libby/jobs/new", status_code=status.HTTP_303_SEE_OTHER)
+    if job.status != "pending":
+        return RedirectResponse(
+            f"/scraping/libby/jobs/{job.id}?{urlencode({'message': 'Only pending jobs can be started.'})}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+    if not job.items:
+        return RedirectResponse(
+            f"/scraping/libby/jobs/{job.id}?{urlencode({'message': 'This job has no queued items to start.'})}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    now = datetime.now(timezone.utc)
+    job.status = "running"
+    job.started_at = job.started_at or now
+    summary = dict(job.summary or {})
+    summary["started_by_user_at"] = now.isoformat()
+    summary["safety"] = scrape_safety_summary()
+    summary["automatic_retries"] = False
+    job.summary = summary
+    db.commit()
+    return RedirectResponse(
+        f"/scraping/libby/jobs/{job.id}?{urlencode({'message': 'Scrape job started. Item processing is prepared for the next scraper chunk.'})}",
+        status_code=status.HTTP_303_SEE_OTHER,
     )
 
 

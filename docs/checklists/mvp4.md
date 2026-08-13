@@ -70,12 +70,12 @@ Derived from `docs/ROADMAP.md` MVP 4 - Libby Progress Scraping, with continuity 
 
 ## Chunk 7 - Polite Scraping Delays And Safety
 
-- [ ] Add randomized 5-15 second delay between book pages
-- [ ] Keep delay logic testable without slowing tests
-- [ ] Limit scraping to user-triggered jobs
-- [ ] Add timeout handling for page loads/selectors
-- [ ] Capture enough failure detail to diagnose selector/session problems
-- [ ] Avoid tight retry loops
+- [x] Add randomized 5-15 second delay between book pages
+- [x] Keep delay logic testable without slowing tests
+- [x] Limit scraping to user-triggered jobs
+- [x] Add timeout handling for page loads/selectors
+- [x] Capture enough failure detail to diagnose selector/session problems
+- [x] Avoid tight retry loops
 
 ## Chunk 8 - Raw Snapshot Preservation
 
