@@ -59,12 +59,14 @@ Derived from `docs/ROADMAP.md` MVP 4 - Libby Progress Scraping, with continuity 
 
 ## Chunk 6 - Skip Logic
 
-- [ ] Define latest borrow timestamp source for each book
-- [ ] Store last scraped borrow timestamp or equivalent marker
-- [ ] Skip books whose latest borrow timestamp has already been scraped
-- [ ] Allow force re-scrape when explicitly requested
-- [ ] Show skipped items in job summary
-- [ ] Test unchanged books are not re-scraped
+- [x] Define latest borrow timestamp source for each book
+- [x] Store last scraped borrow timestamp or equivalent marker
+- [x] Skip books whose latest borrow timestamp has already been scraped
+- [x] Allow force re-scrape when explicitly requested
+- [x] Show skipped items in job summary
+- [x] Test unchanged books are not re-scraped
+- [x] Allow cancelling pending or running scrape jobs
+- [x] add ability to configure scrape job on specific books
 
 ## Chunk 7 - Polite Scraping Delays And Safety
 

@@ -19,7 +19,7 @@
 
   <section class="card mb-4">
     <div class="card-body">
-      <div class="row g-3">
+      <div class="row g-3 align-items-center">
         <div class="col-md-3">
           <p class="app-kicker small fw-semibold mb-2">Status</p>
           <div class="h4 mb-0">{{ job.status.replace('_', ' ').title() }}</div>
@@ -36,9 +36,34 @@
           <p class="app-kicker small fw-semibold mb-2">Finished</p>
           <div>{{ job.finished_at or 'Not finished' }}</div>
         </div>
+        {% if can_cancel %}
+          <div class="col-md-12 text-md-end">
+            <form method="post" action="/scraping/libby/jobs/{{ job.id }}/cancel">
+              <button class="btn btn-outline-danger" type="submit">Cancel Job</button>
+            </form>
+          </div>
+        {% endif %}
       </div>
     </div>
   </section>
+
+  {% if job.summary %}
+    <section class="card mb-4">
+      <div class="card-body">
+        <h2 class="h5 mb-3">Summary</h2>
+        <dl class="row app-detail-list mb-0">
+          <dt class="col-sm-4">Queued at creation</dt>
+          <dd class="col-sm-8">{{ job.summary.queued_count or 0 }}</dd>
+          <dt class="col-sm-4">Skipped at creation</dt>
+          <dd class="col-sm-8">{{ job.summary.skipped_count or 0 }}</dd>
+          <dt class="col-sm-4">Ineligible at creation</dt>
+          <dd class="col-sm-8">{{ job.summary.ineligible_count or 0 }}</dd>
+          <dt class="col-sm-4">Force re-scrape</dt>
+          <dd class="col-sm-8">{{ 'Yes' if job.summary.force else 'No' }}</dd>
+        </dl>
+      </div>
+    </section>
+  {% endif %}
 
   <div class="row g-3 mb-4">
     {% for item_status in item_statuses %}

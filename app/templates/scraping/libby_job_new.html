@@ -53,12 +53,13 @@
     </div>
   </div>
 
+  <form method="post" action="/scraping/libby/jobs">
   <section class="card mb-4">
     <div class="card-body d-flex flex-column flex-lg-row justify-content-between gap-3 align-items-lg-center">
       <div>
         <h2 class="h5 mb-1">Create Job</h2>
         {% if queued %}
-          <p class="app-muted mb-0">This creates a pending job for {{ queued|length }} candidate books. Queue item processing is handled in the next MVP 4 chunk.</p>
+          <p class="app-muted mb-0">This creates a pending job for {{ queued|length }} candidate books. Unchanged books are skipped unless force re-scrape is enabled.</p>
         {% else %}
           <p class="app-muted mb-0">No books are currently eligible. Import Libby books, keep them unarchived, and ensure they have Libby source context and borrow events.</p>
         {% endif %}
@@ -66,9 +67,8 @@
       {% if active_job %}
         <a class="btn btn-outline-primary" href="/scraping/libby/jobs/{{ active_job.id }}">View Active Job</a>
       {% elif queued %}
-        <form method="post" action="/scraping/libby/jobs">
-          <button class="btn btn-primary" type="submit">Create Scrape Job</button>
-        </form>
+        {% if force %}<input type="hidden" name="force" value="true">{% endif %}
+        <button class="btn btn-primary" type="submit">Create Scrape Job</button>
       {% else %}
         <button class="btn btn-outline-secondary" type="button" disabled>No Eligible Books</button>
       {% endif %}
@@ -76,9 +76,33 @@
   </section>
 
   <section class="card mb-4">
+    <div class="card-body d-flex flex-column flex-lg-row justify-content-between gap-3 align-items-lg-center">
+      <div>
+        <h2 class="h5 mb-1">Skip Logic</h2>
+        <p class="app-muted mb-0">Books are skipped when their latest Libby borrow timestamp is less than or equal to the last scraped borrow timestamp.</p>
+      </div>
+      {% if force %}
+        <a class="btn btn-outline-warning" href="/scraping/libby/jobs/new">Disable Force Re-Scrape</a>
+      {% else %}
+        <a class="btn btn-outline-primary" href="/scraping/libby/jobs/new?force=true">Force Re-Scrape</a>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="card mb-4">
     <div class="card-body border-bottom">
-      <h2 class="h5 mb-1">Queued Books</h2>
-      <p class="app-muted mb-0">Imported Libby books with source context and at least one Libby borrow event.</p>
+      <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 align-items-lg-center">
+        <div>
+          <h2 class="h5 mb-1">Queued Books</h2>
+          <p class="app-muted mb-0">Imported Libby books with source context and at least one Libby borrow event.</p>
+        </div>
+        {% if queued %}
+          <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-primary" type="button" data-select-book-ids="all">Select All</button>
+            <button class="btn btn-sm btn-outline-secondary" type="button" data-select-book-ids="none">Unselect All</button>
+          </div>
+        {% endif %}
+      </div>
     </div>
     {% if queued %}
       <div class="table-responsive">
@@ -86,9 +110,11 @@
           <thead>
             <tr>
               <th scope="col">Title</th>
+              <th scope="col">Include</th>
               <th scope="col">Author</th>
               <th scope="col">Format</th>
               <th scope="col">Latest Borrow</th>
+              <th scope="col">Last Scraped Borrow</th>
               <th scope="col">Libby Context</th>
             </tr>
           </thead>
@@ -97,9 +123,13 @@
               {% set book = row.book %}
               <tr>
                 <td><a class="fw-semibold app-link" href="/books/{{ book.id }}">{{ book.title }}</a></td>
+                <td>
+                  <input class="form-check-input" type="checkbox" name="book_ids" value="{{ book.id }}" checked data-book-id-checkbox aria-label="Include {{ book.title }} in scrape job">
+                </td>
                 <td>{{ book.primary_author_name or 'Unknown' }}</td>
                 <td>{{ book.format.replace('_', ' ').title() }}</td>
                 <td>{{ row.latest_borrowed_at }}</td>
+                <td>{{ row.last_scraped_borrowed_at or 'Never' }}</td>
                 <td>{% if book.libby_title_id %}Title ID {{ book.libby_title_id }}{% else %}Share URL{% endif %}</td>
               </tr>
             {% endfor %}
@@ -110,6 +140,7 @@
       <div class="card-body"><p class="app-muted mb-0">No queued books.</p></div>
     {% endif %}
   </section>
+  </form>
 
   {% if skipped or ineligible %}
     <section class="card">
@@ -125,6 +156,7 @@
               <th scope="col">Author</th>
               <th scope="col">Category</th>
               <th scope="col">Reason</th>
+              <th scope="col">Borrow Markers</th>
             </tr>
           </thead>
           <tbody>
@@ -135,6 +167,7 @@
                 <td>{{ book.primary_author_name or 'Unknown' }}</td>
                 <td><span class="badge app-badge-muted">Skipped</span></td>
                 <td>{{ row.reason }}</td>
+                <td>Latest: {{ row.latest_borrowed_at or 'Unknown' }}<br>Last scraped: {{ row.last_scraped_borrowed_at or 'Never' }}</td>
               </tr>
             {% endfor %}
             {% for row in ineligible %}
@@ -144,6 +177,7 @@
                 <td>{{ book.primary_author_name or 'Unknown' }}</td>
                 <td><span class="badge app-badge-warning">Ineligible</span></td>
                 <td>{{ row.reason }}</td>
+                <td>Latest: {{ row.latest_borrowed_at or 'Unknown' }}<br>Last scraped: {{ row.last_scraped_borrowed_at or 'Never' }}</td>
               </tr>
             {% endfor %}
           </tbody>
@@ -151,4 +185,17 @@
       </div>
     </section>
   {% endif %}
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    document.querySelectorAll('[data-select-book-ids]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const shouldSelect = button.dataset.selectBookIds === 'all';
+        document.querySelectorAll('[data-book-id-checkbox]').forEach((checkbox) => {
+          checkbox.checked = shouldSelect;
+        });
+      });
+    });
+  </script>
 {% endblock %}

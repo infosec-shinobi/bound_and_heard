@@ -1,6 +1,8 @@
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, Request, status
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, Form, Query, Request, status
 from fastapi.responses import RedirectResponse, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
@@ -32,7 +34,13 @@ def latest_libby_borrowed_dates(db: Session) -> dict[int, object]:
     return {book_id: borrowed_at for book_id, borrowed_at in rows}
 
 
-def libby_scrape_candidate_context(db: Session) -> dict[str, object]:
+def should_skip_unchanged_book(book: Book, latest_borrowed_at: object) -> bool:
+    if book.progress is None or book.progress.last_scraped_borrowed_at is None:
+        return False
+    return latest_borrowed_at <= book.progress.last_scraped_borrowed_at
+
+
+def libby_scrape_candidate_context(db: Session, *, force: bool = False) -> dict[str, object]:
     books = db.scalars(
         select(Book)
         .options(joinedload(Book.progress))
@@ -51,7 +59,12 @@ def libby_scrape_candidate_context(db: Session) -> dict[str, object]:
     for book in books:
         latest_borrowed_at = latest_borrowed_by_book_id.get(book.id)
         has_source_context = bool(book.libby_title_id or book.libby_share_url)
-        row = {"book": book, "latest_borrowed_at": latest_borrowed_at}
+        last_scraped_borrowed_at = book.progress.last_scraped_borrowed_at if book.progress else None
+        row = {
+            "book": book,
+            "latest_borrowed_at": latest_borrowed_at,
+            "last_scraped_borrowed_at": last_scraped_borrowed_at,
+        }
 
         if book.archived_at is not None:
             skipped.append({**row, "reason": "Archived"})
@@ -61,6 +74,8 @@ def libby_scrape_candidate_context(db: Session) -> dict[str, object]:
             ineligible.append({**row, "reason": "Missing Libby title ID or share URL"})
         elif latest_borrowed_at is None:
             ineligible.append({**row, "reason": "Missing Libby borrow event"})
+        elif not force and should_skip_unchanged_book(book, latest_borrowed_at):
+            skipped.append({**row, "reason": "Latest borrow already scraped"})
         else:
             queued.append(row)
 
@@ -127,8 +142,9 @@ async def new_libby_scrape_job(
     request: Request,
     db: Session = Depends(get_db),
     created_job_id: int | None = None,
+    force: bool = Query(default=False),
 ) -> HTMLResponse:
-    candidate_context = libby_scrape_candidate_context(db)
+    candidate_context = libby_scrape_candidate_context(db, force=force)
     active_job = active_libby_scrape_job(db)
     return templates.TemplateResponse(
         request,
@@ -141,12 +157,17 @@ async def new_libby_scrape_job(
             skipped=candidate_context["skipped"],
             ineligible=candidate_context["ineligible"],
             active_job=active_job,
+            force=force,
         ),
     )
 
 
 @router.post("/libby/jobs", dependencies=[Depends(require_write_access)])
-async def create_libby_scrape_job(db: Session = Depends(get_db)) -> Response:
+async def create_libby_scrape_job(
+    db: Session = Depends(get_db),
+    force: bool = Form(default=False),
+    selected_book_ids: list[int] | None = Form(default=None, alias="book_ids"),
+) -> Response:
     active_job = active_libby_scrape_job(db)
     if active_job is not None:
         return RedirectResponse(
@@ -154,10 +175,18 @@ async def create_libby_scrape_job(db: Session = Depends(get_db)) -> Response:
             status_code=status.HTTP_303_SEE_OTHER,
         )
 
-    candidate_context = libby_scrape_candidate_context(db)
+    candidate_context = libby_scrape_candidate_context(db, force=force)
     queued = candidate_context["queued"]
     skipped = candidate_context["skipped"]
     ineligible = candidate_context["ineligible"]
+    if selected_book_ids:
+        selected_book_id_set = set(selected_book_ids)
+        skipped.extend(
+            {**row, "reason": "Not selected for this job"}
+            for row in queued
+            if row["book"].id not in selected_book_id_set
+        )
+        queued = [row for row in queued if row["book"].id in selected_book_id_set]
     if not queued:
         return RedirectResponse("/scraping/libby/jobs/new", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -171,6 +200,8 @@ async def create_libby_scrape_job(db: Session = Depends(get_db)) -> Response:
             "ineligible_count": len(ineligible),
             "queued_book_ids": [row["book"].id for row in queued],
             "process_mode": "one_item_at_a_time",
+            "force": force,
+            "selected_book_ids": selected_book_ids or [],
         },
     )
     db.add(job)
@@ -183,7 +214,7 @@ async def create_libby_scrape_job(db: Session = Depends(get_db)) -> Response:
                 book_id=book.id,
                 status="queued",
                 latest_borrowed_at=row["latest_borrowed_at"],
-                last_scraped_borrowed_at=book.progress.last_scraped_borrowed_at if book.progress else None,
+                last_scraped_borrowed_at=row["last_scraped_borrowed_at"],
             )
         )
     db.commit()
@@ -228,6 +259,45 @@ async def libby_scrape_job_detail(
             items=items,
             status_counts=scrape_item_status_counts(items),
             item_statuses=SCRAPE_JOB_ITEM_STATUSES,
+            can_cancel=job.status in ACTIVE_SCRAPE_JOB_STATUSES,
             message=message,
         ),
+    )
+
+
+@router.post("/libby/jobs/{job_id}/cancel", dependencies=[Depends(require_write_access)])
+async def cancel_libby_scrape_job(job_id: int, db: Session = Depends(get_db)) -> Response:
+    job = db.scalars(
+        select(ScrapeJob)
+        .options(joinedload(ScrapeJob.items))
+        .where(
+            ScrapeJob.id == job_id,
+            ScrapeJob.user_id == DEFAULT_LOCAL_USER_ID,
+            ScrapeJob.source == "libby",
+        )
+    ).unique().first()
+    if job is None:
+        return RedirectResponse("/scraping/libby/jobs/new", status_code=status.HTTP_303_SEE_OTHER)
+    if job.status not in ACTIVE_SCRAPE_JOB_STATUSES:
+        return RedirectResponse(
+            f"/scraping/libby/jobs/{job.id}?{urlencode({'message': 'Only pending or running jobs can be cancelled.'})}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    now = datetime.now(timezone.utc)
+    job.status = "cancelled"
+    job.finished_at = now
+    summary = dict(job.summary or {})
+    summary["cancelled_at"] = now.isoformat()
+    job.summary = summary
+    for item in job.items:
+        if item.status in {"queued", "running"}:
+            item.status = "skipped"
+            item.finished_at = now
+            item.error_code = "job_cancelled"
+            item.error_message = "Scrape job was cancelled before this item completed."
+    db.commit()
+    return RedirectResponse(
+        f"/scraping/libby/jobs/{job.id}?{urlencode({'message': 'Scrape job cancelled.'})}",
+        status_code=status.HTTP_303_SEE_OTHER,
     )
