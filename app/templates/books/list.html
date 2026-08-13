@@ -90,6 +90,7 @@
                 <td>
                   {% if book.metadata_source == 'libby' %}
                     <span class="badge app-badge-success">Libby</span>
+                    {% if book.libby_title_id %}<div class="small app-muted mt-1">ID {{ book.libby_title_id }}</div>{% endif %}
                   {% elif book.metadata_source == 'manual' %}
                     <span class="badge app-badge-muted">Manual</span>
                   {% elif book.metadata_source %}

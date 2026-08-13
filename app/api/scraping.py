@@ -3,7 +3,7 @@ from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Form, Query, Request, status
 from fastapi.responses import RedirectResponse, Response
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, joinedload
 from starlette.responses import HTMLResponse
 
@@ -11,7 +11,8 @@ from app.core.bootstrap import DEFAULT_LOCAL_USER_ID
 from app.core.database import get_db
 from app.core.templates import template_context, templates
 from app.core.write_protection import require_write_access
-from app.models import Book, ReadingEvent, ScrapeJob, ScrapeJobItem
+from app.models import Book, BookProgress, ReadingEvent, ScrapeJob, ScrapeJobItem, ScrapeSnapshot
+from app.services import libby_scrape_runner
 from app.services.libby_browser import LibbyBrowserError, open_libby_browser_session
 from app.services.scrape_safety import scrape_safety_summary
 
@@ -19,6 +20,7 @@ from app.services.scrape_safety import scrape_safety_summary
 router = APIRouter(prefix="/scraping", tags=["scraping"])
 ACTIVE_SCRAPE_JOB_STATUSES = {"pending", "running"}
 SCRAPE_JOB_ITEM_STATUSES = ["queued", "running", "succeeded", "failed", "skipped"]
+RECOVERABLE_JOB_STATUSES = {"failed", "cancelled", "completed"}
 
 
 def latest_libby_borrowed_dates(db: Session) -> dict[int, object]:
@@ -40,6 +42,24 @@ def should_skip_unchanged_book(book: Book, latest_borrowed_at: object) -> bool:
     return latest_borrowed_at <= book.progress.last_scraped_borrowed_at
 
 
+def parsed_snapshot_has_progress(raw_data: dict | None) -> bool:
+    parsed = (raw_data or {}).get("parsed_progress") or {}
+    return any(parsed.get(field_name) is not None for field_name in ("progress_percent", "position_pages", "position_seconds"))
+
+
+def item_has_parseable_progress_snapshot(item: ScrapeJobItem) -> bool:
+    return any(parsed_snapshot_has_progress(snapshot.raw_data) for snapshot in item.snapshots)
+
+
+def empty_scraped_progress(progress: BookProgress | None) -> bool:
+    if progress is None or progress.source != "scraped":
+        return False
+    return all(
+        getattr(progress, field_name) is None
+        for field_name in ("progress_percent", "position_pages", "total_pages", "position_seconds", "total_seconds", "status_inferred")
+    )
+
+
 def libby_scrape_candidate_context(db: Session, *, force: bool = False) -> dict[str, object]:
     books = db.scalars(
         select(Book)
@@ -58,7 +78,7 @@ def libby_scrape_candidate_context(db: Session, *, force: bool = False) -> dict[
 
     for book in books:
         latest_borrowed_at = latest_borrowed_by_book_id.get(book.id)
-        has_source_context = bool(book.libby_title_id or book.libby_share_url)
+        has_source_context = bool(book.libby_title_id)
         last_scraped_borrowed_at = book.progress.last_scraped_borrowed_at if book.progress else None
         row = {
             "book": book,
@@ -71,7 +91,7 @@ def libby_scrape_candidate_context(db: Session, *, force: bool = False) -> dict[
         elif book.review_status == "ignored":
             skipped.append({**row, "reason": "Marked ignored"})
         elif not has_source_context:
-            ineligible.append({**row, "reason": "Missing Libby title ID or share URL"})
+            ineligible.append({**row, "reason": "Missing Libby title ID"})
         elif latest_borrowed_at is None:
             ineligible.append({**row, "reason": "Missing Libby borrow event"})
         elif not force and should_skip_unchanged_book(book, latest_borrowed_at):
@@ -105,6 +125,15 @@ def scrape_item_status_counts(items: list[ScrapeJobItem]) -> dict[str, int]:
     return counts
 
 
+def retryable_libby_scrape_item_ids(items: list[ScrapeJobItem]) -> set[int]:
+    return {
+        item.id
+        for item in items
+        if item.status in {"failed", "skipped"}
+        or (item.status == "succeeded" and not item_has_parseable_progress_snapshot(item))
+    }
+
+
 @router.get("/libby/session", response_class=HTMLResponse, dependencies=[Depends(require_write_access)])
 async def libby_session_page(
     request: Request,
@@ -135,6 +164,47 @@ async def open_libby_session(request: Request) -> Response:
             status_code=status.HTTP_303_SEE_OTHER,
         )
     return RedirectResponse("/scraping/libby/session?launched=true", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/libby/jobs", response_class=HTMLResponse, dependencies=[Depends(require_write_access)])
+async def libby_scrape_jobs_index(
+    request: Request,
+    db: Session = Depends(get_db),
+    message: str | None = None,
+) -> HTMLResponse:
+    jobs = db.scalars(
+        select(ScrapeJob)
+        .options(joinedload(ScrapeJob.items).joinedload(ScrapeJobItem.snapshots))
+        .where(
+            ScrapeJob.user_id == DEFAULT_LOCAL_USER_ID,
+            ScrapeJob.source == "libby",
+        )
+        .order_by(ScrapeJob.created_at.desc(), ScrapeJob.id.desc())
+    ).unique().all()
+    job_rows = []
+    for job in jobs:
+        items = list(job.items)
+        counts = scrape_item_status_counts(items)
+        retryable_count = len(retryable_libby_scrape_item_ids(items))
+        job_rows.append(
+            {
+                "job": job,
+                "item_count": len(items),
+                "status_counts": counts,
+                "retryable_count": retryable_count,
+            }
+        )
+    return templates.TemplateResponse(
+        request,
+        "scraping/libby_jobs_index.html",
+        template_context(
+            request,
+            page_title="Libby Scrape Jobs",
+            job_rows=job_rows,
+            active_job=active_libby_scrape_job(db),
+            message=message,
+        ),
+    )
 
 
 @router.get("/libby/jobs/new", response_class=HTMLResponse, dependencies=[Depends(require_write_access)])
@@ -252,6 +322,7 @@ async def libby_scrape_job_detail(
         )
 
     items = sorted(job.items, key=lambda item: (item.queued_at, item.id))
+    retryable_item_ids = retryable_libby_scrape_item_ids(items)
     return templates.TemplateResponse(
         request,
         "scraping/libby_job_detail.html",
@@ -264,6 +335,8 @@ async def libby_scrape_job_detail(
             item_statuses=SCRAPE_JOB_ITEM_STATUSES,
             can_cancel=job.status in ACTIVE_SCRAPE_JOB_STATUSES,
             can_start=job.status == "pending" and bool(items),
+            can_recover=job.status in RECOVERABLE_JOB_STATUSES and any(item.status in {"queued", "running", "failed", "skipped"} for item in items),
+            retryable_item_ids=retryable_item_ids,
             safety=scrape_safety_summary(),
             snapshot_dir=request.app.state.settings.scraped_dir,
             message=message,
@@ -272,10 +345,10 @@ async def libby_scrape_job_detail(
 
 
 @router.post("/libby/jobs/{job_id}/start", dependencies=[Depends(require_write_access)])
-async def start_libby_scrape_job(job_id: int, db: Session = Depends(get_db)) -> Response:
+def start_libby_scrape_job(job_id: int, request: Request, db: Session = Depends(get_db)) -> Response:
     job = db.scalars(
         select(ScrapeJob)
-        .options(joinedload(ScrapeJob.items))
+        .options(joinedload(ScrapeJob.items).joinedload(ScrapeJobItem.book))
         .where(
             ScrapeJob.id == job_id,
             ScrapeJob.user_id == DEFAULT_LOCAL_USER_ID,
@@ -304,8 +377,41 @@ async def start_libby_scrape_job(job_id: int, db: Session = Depends(get_db)) -> 
     summary["automatic_retries"] = False
     job.summary = summary
     db.commit()
+
+    try:
+        run_summary = libby_scrape_runner.run_libby_scrape_job(
+            db,
+            job=job,
+            profile_dir=request.app.state.settings.libby_browser_profile_dir,
+            scraped_dir=request.app.state.settings.scraped_dir,
+        )
+    except Exception as exc:
+        now = datetime.now(timezone.utc)
+        job.status = "failed"
+        job.finished_at = now
+        for item in job.items:
+            if item.status == "running":
+                item.status = "failed"
+                item.finished_at = now
+                item.error_code = exc.__class__.__name__
+                item.error_message = str(exc)
+        summary = dict(job.summary or {})
+        summary["runner_error"] = str(exc)
+        job.summary = summary
+        db.commit()
+        return RedirectResponse(
+            f"/scraping/libby/jobs/{job.id}?{urlencode({'message': 'Scrape job failed to start.'})}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    job.status = "completed" if job.status == "running" else job.status
+    job.finished_at = datetime.now(timezone.utc) if job.status == "completed" else job.finished_at
+    summary = dict(job.summary or {})
+    summary["run"] = run_summary
+    job.summary = summary
+    db.commit()
     return RedirectResponse(
-        f"/scraping/libby/jobs/{job.id}?{urlencode({'message': 'Scrape job started. Item processing is prepared for the next scraper chunk.'})}",
+        f"/scraping/libby/jobs/{job.id}?{urlencode({'message': 'Scrape job completed.'})}",
         status_code=status.HTTP_303_SEE_OTHER,
     )
 
@@ -344,5 +450,119 @@ async def cancel_libby_scrape_job(job_id: int, db: Session = Depends(get_db)) ->
     db.commit()
     return RedirectResponse(
         f"/scraping/libby/jobs/{job.id}?{urlencode({'message': 'Scrape job cancelled.'})}",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+@router.post("/libby/jobs/{job_id}/recover", dependencies=[Depends(require_write_access)])
+async def recover_libby_scrape_job(job_id: int, db: Session = Depends(get_db)) -> Response:
+    job = db.scalars(
+        select(ScrapeJob)
+        .options(joinedload(ScrapeJob.items))
+        .where(
+            ScrapeJob.id == job_id,
+            ScrapeJob.user_id == DEFAULT_LOCAL_USER_ID,
+            ScrapeJob.source == "libby",
+        )
+    ).unique().first()
+    if job is None:
+        return RedirectResponse("/scraping/libby/jobs", status_code=status.HTTP_303_SEE_OTHER)
+    if job.status == "running":
+        return RedirectResponse(
+            f"/scraping/libby/jobs/{job.id}?{urlencode({'message': 'Running jobs must be cancelled before recovery.'})}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    recovered_count = 0
+    for item in job.items:
+        if item.status in {"queued", "running", "failed", "skipped"}:
+            item.status = "queued"
+            item.error_code = None
+            item.error_message = None
+            item.started_at = None
+            item.finished_at = None
+            recovered_count += 1
+    if recovered_count:
+        job.status = "pending"
+        job.finished_at = None
+        summary = dict(job.summary or {})
+        summary.pop("runner_error", None)
+        summary["recovered_at"] = datetime.now(timezone.utc).isoformat()
+        summary["recovered_item_count"] = recovered_count
+        job.summary = summary
+        db.commit()
+        message = f"Recovered {recovered_count} item{'s' if recovered_count != 1 else ''}."
+    else:
+        message = "No recoverable items found."
+    return RedirectResponse(
+        f"/scraping/libby/jobs/{job.id}?{urlencode({'message': message})}",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+@router.post("/libby/jobs/{job_id}/delete", dependencies=[Depends(require_write_access)])
+async def delete_libby_scrape_job(job_id: int, db: Session = Depends(get_db)) -> Response:
+    job = db.scalars(
+        select(ScrapeJob)
+        .options(joinedload(ScrapeJob.items))
+        .where(
+            ScrapeJob.id == job_id,
+            ScrapeJob.user_id == DEFAULT_LOCAL_USER_ID,
+            ScrapeJob.source == "libby",
+        )
+    ).unique().first()
+    if job is None:
+        return RedirectResponse("/scraping/libby/jobs", status_code=status.HTTP_303_SEE_OTHER)
+    if job.status == "running":
+        return RedirectResponse(
+            f"/scraping/libby/jobs/{job.id}?{urlencode({'message': 'Running jobs must be cancelled before deletion.'})}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    item_ids = [item.id for item in job.items]
+    if item_ids:
+        db.execute(delete(ScrapeSnapshot).where(ScrapeSnapshot.item_id.in_(item_ids)))
+        db.execute(delete(ScrapeJobItem).where(ScrapeJobItem.id.in_(item_ids)))
+    db.delete(job)
+    db.commit()
+    return RedirectResponse(
+        f"/scraping/libby/jobs?{urlencode({'message': f'Scrape job #{job_id} deleted.'})}",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+@router.post("/libby/jobs/{job_id}/items/{item_id}/requeue", dependencies=[Depends(require_write_access)])
+async def requeue_skipped_libby_scrape_item(job_id: int, item_id: int, db: Session = Depends(get_db)) -> Response:
+    item = db.scalars(
+        select(ScrapeJobItem)
+        .options(joinedload(ScrapeJobItem.book).joinedload(Book.progress), joinedload(ScrapeJobItem.snapshots))
+        .join(ScrapeJob)
+        .where(
+            ScrapeJobItem.id == item_id,
+            ScrapeJobItem.job_id == job_id,
+            ScrapeJob.user_id == DEFAULT_LOCAL_USER_ID,
+            ScrapeJob.source == "libby",
+        )
+    ).first()
+    if item is None:
+        return RedirectResponse(f"/scraping/libby/jobs/{job_id}", status_code=status.HTTP_303_SEE_OTHER)
+    can_requeue = item.status in {"skipped", "failed"} or (item.status == "succeeded" and not item_has_parseable_progress_snapshot(item))
+    if can_requeue:
+        item.status = "queued"
+        item.error_code = None
+        item.error_message = None
+        item.started_at = None
+        item.finished_at = None
+        if empty_scraped_progress(item.book.progress):
+            item.book.progress.last_scraped_borrowed_at = None
+        if item.job.status in {"completed", "cancelled"}:
+            item.job.status = "pending"
+            item.job.finished_at = None
+        db.commit()
+        message = "Item requeued."
+    else:
+        message = "Only skipped, failed, or empty successful items can be requeued."
+    return RedirectResponse(
+        f"/scraping/libby/jobs/{job_id}?{urlencode({'message': message})}",
         status_code=status.HTTP_303_SEE_OTHER,
     )

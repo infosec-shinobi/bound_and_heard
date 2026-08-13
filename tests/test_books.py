@@ -153,6 +153,7 @@ def test_books_page_lists_core_book_fields() -> None:
                 book_id=book.id,
                 source="manual",
                 progress_percent=100,
+                enjoyed_seconds=3660,
             )
         )
         db.commit()
@@ -219,6 +220,138 @@ def test_books_page_filters_by_search_status_format_and_source() -> None:
     assert "Other Book" not in response.text
     assert 'id="source" name="source"' in response.text
     assert 'option value="libby" selected' in response.text
+
+
+def test_books_page_shows_libby_title_id_for_libby_source_books() -> None:
+    client, session_factory = make_books_client()
+    add_book(
+        session_factory,
+        title="Libby ID Book",
+        author="Author",
+        metadata_source="libby",
+        libby_title_id="libby-title-123",
+    )
+
+    response = client.get("/books")
+
+    assert response.status_code == 200
+    assert "Libby ID Book" in response.text
+    assert "ID libby-title-123" in response.text
+
+
+def test_book_detail_shows_libby_title_id_in_core_metadata() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(
+        session_factory,
+        title="Libby Detail ID Book",
+        author="Author",
+        metadata_source="libby",
+        libby_title_id="libby-detail-123",
+    )
+
+    response = client.get(f"/books/{book.id}")
+
+    assert response.status_code == 200
+    assert "Libby Title ID" in response.text
+    assert "libby-detail-123" in response.text
+    assert "<code>libby-detail-123</code>" not in response.text
+
+
+def test_clear_scraped_progress_requires_admin_login() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Protected Clear", author="Author")
+
+    response = client.post(f"/books/{book.id}/scraped-progress/clear", follow_redirects=False)
+
+    assert response.status_code == 403
+
+
+def test_book_detail_shows_clear_scraped_progress_action_for_scraped_progress() -> None:
+    client, session_factory = make_books_client()
+    client.post("/admin/login", data={"password": "secret"})
+    book = add_book(session_factory, title="Scraped Progress Book", author="Author")
+    with session_factory() as db:
+        db.add(BookProgress(user_id=DEFAULT_LOCAL_USER_ID, book_id=book.id, source="scraped", progress_percent=25))
+        db.commit()
+
+    response = client.get(f"/books/{book.id}")
+
+    assert response.status_code == 200
+    assert "Clear Scraped Progress" in response.text
+    assert f'action="/books/{book.id}/scraped-progress/clear"' in response.text
+
+
+def test_book_detail_shows_enjoyed_for_and_read_count_in_progress_stats() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Enjoyed Stats Book", author="Author")
+    with session_factory() as db:
+        db.add(
+            BookProgress(
+                user_id=DEFAULT_LOCAL_USER_ID,
+                book_id=book.id,
+                source="scraped",
+                progress_percent=50,
+                enjoyed_seconds=20520,
+                read_count=2,
+            )
+        )
+        db.commit()
+
+    response = client.get(f"/books/{book.id}")
+
+    assert response.status_code == 200
+    assert "Enjoyed For" in response.text
+    assert "5 hr 42 min" in response.text
+    assert "Read Count" in response.text
+    assert "2" in response.text
+
+
+def test_clear_scraped_progress_removes_scraped_progress_and_scraped_events_only() -> None:
+    client, session_factory = make_books_client()
+    client.post("/admin/login", data={"password": "secret"})
+    book = add_book(session_factory, title="Bad Scrape Book", author="Author", manual_progress_percent=15)
+    with session_factory() as db:
+        db.add(BookProgress(user_id=DEFAULT_LOCAL_USER_ID, book_id=book.id, source="scraped", progress_percent=80))
+        db.add_all(
+            [
+                ReadingEvent(
+                    user_id=DEFAULT_LOCAL_USER_ID,
+                    book_id=book.id,
+                    source="scraped",
+                    event_type="progress_observed",
+                    event_date=datetime.now(timezone.utc),
+                    progress_percent=80,
+                ),
+                ReadingEvent(
+                    user_id=DEFAULT_LOCAL_USER_ID,
+                    book_id=book.id,
+                    source="libby",
+                    event_type="borrowed",
+                    event_date=datetime.now(timezone.utc),
+                ),
+                ReadingEvent(
+                    user_id=DEFAULT_LOCAL_USER_ID,
+                    book_id=book.id,
+                    source="manual",
+                    event_type="manually_corrected",
+                    event_date=datetime.now(timezone.utc),
+                    progress_percent=15,
+                ),
+            ]
+        )
+        db.commit()
+
+    response = client.post(f"/books/{book.id}/scraped-progress/clear", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"].startswith(f"/books/{book.id}?")
+    with session_factory() as db:
+        updated = db.get(Book, book.id)
+        assert updated is not None
+        assert updated.manual_progress_percent == 15
+        assert db.query(BookProgress).filter_by(book_id=book.id).count() == 0
+        events = db.query(ReadingEvent).filter_by(book_id=book.id).order_by(ReadingEvent.source).all()
+        assert [event.source for event in events] == ["libby", "manual"]
 
 
 def test_books_page_filters_by_missing_source() -> None:
@@ -1289,6 +1422,7 @@ def test_book_detail_shows_metadata_progress_stats_and_events() -> None:
                 book_id=book.id,
                 source="manual",
                 progress_percent=100,
+                enjoyed_seconds=3660,
             )
         )
         db.add(
@@ -1314,7 +1448,7 @@ def test_book_detail_shows_metadata_progress_stats_and_events() -> None:
     assert "5.0 / 5" in response.text
     assert "123456789X" in response.text
     assert "100%" in response.text
-    assert "320" in response.text
+    assert "Enjoyed For" in response.text
     assert "1 hr 1 min" in response.text
     assert "Line one" in response.text
     assert "Manually Completed" in response.text

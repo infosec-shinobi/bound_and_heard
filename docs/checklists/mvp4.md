@@ -98,13 +98,13 @@ Derived from `docs/ROADMAP.md` MVP 4 - Libby Progress Scraping, with continuity 
 
 ## Chunk 10 - Completion Inference And Manual Protection
 
-- [ ] Infer approximate completion date only when exact completion date is unavailable
-- [ ] Do not overwrite manually corrected completion dates
-- [ ] Do not overwrite manually corrected progress unless explicitly requested later
-- [ ] Update completion status only when it does not conflict with manual corrections
-- [ ] Create manual or scrape-attributed events where appropriate
-- [ ] Preserve existing Libby import events and manual correction events
-- [ ] Test manual corrections survive scraping updates
+- [x] Infer approximate completion date only when exact completion date is unavailable
+- [x] Do not overwrite manually corrected completion dates
+- [x] Do not overwrite manually corrected progress unless explicitly requested later
+- [x] Update completion status only when it does not conflict with manual corrections
+- [x] Create manual or scrape-attributed events where appropriate
+- [x] Preserve existing Libby import events and manual correction events
+- [x] Test manual corrections survive scraping updates
 
 ## Chunk 11 - Failure Handling And Retry
 
@@ -153,3 +153,10 @@ Derived from `docs/ROADMAP.md` MVP 4 - Libby Progress Scraping, with continuity 
 - [ ] Failed book scrape items do not fail the entire job
 - [ ] Failed items can be retried or skipped
 - [ ] Basic tests pass
+
+## Future MVP - Read Count And Lifetime Enjoyment
+
+- [ ] Let users manually record prior reads/listens so `read_count` is useful beyond current imported/scraped state
+- [ ] Decide how to distinguish Libby "picked up" session count from true completed read/listen count
+- [ ] Investigate title timeline + duration heuristics for repeat reads, e.g. Storm Front / Libby title ID 220325 where journey duration can exceed title duration
+- [ ] Surface lifetime enjoyed time separately from current-loan progress when repeat-read detection is available

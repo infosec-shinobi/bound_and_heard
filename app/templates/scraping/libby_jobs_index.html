@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
+    <div>
+      <p class="app-kicker small fw-semibold mb-2">Libby scraping</p>
+      <h1 class="display-6 mb-1">Libby Scrape Jobs</h1>
+      <p class="app-muted mb-0">View previous scrape jobs, inspect snapshots, retry failed items, and start pending work.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-primary" href="/scraping/libby/jobs/new">New Job</a>
+      <a class="btn btn-outline-secondary" href="/scraping/libby/session">Libby Session</a>
+    </div>
+  </div>
+
+  {% if message %}
+    <div class="alert alert-success" role="status">{{ message }}</div>
+  {% endif %}
+
+  {% if active_job %}
+    <div class="alert app-status-alert" role="status">
+      Active Libby scrape job #{{ active_job.id }} is {{ active_job.status }}.
+      <a class="app-link" href="/scraping/libby/jobs/{{ active_job.id }}">Open active job</a>.
+    </div>
+  {% endif %}
+
+  <section class="card">
+    <div class="card-body border-bottom">
+      <h2 class="h5 mb-1">Job History</h2>
+      <p class="app-muted mb-0">Newest jobs are shown first.</p>
+    </div>
+    {% if job_rows %}
+      <div class="table-responsive">
+        <table class="table table-sm table-dark table-hover align-middle mb-0 app-table">
+          <thead>
+            <tr>
+              <th scope="col">Job</th>
+              <th scope="col">Status</th>
+              <th scope="col">Created</th>
+              <th scope="col">Finished</th>
+              <th scope="col">Items</th>
+              <th scope="col">Results</th>
+              <th scope="col">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in job_rows %}
+              {% set job = row.job %}
+              {% set counts = row.status_counts %}
+              <tr>
+                <td><a class="fw-semibold app-link" href="/scraping/libby/jobs/{{ job.id }}">Job #{{ job.id }}</a></td>
+                <td><span class="badge app-badge-muted">{{ job.status.replace('_', ' ').title() }}</span></td>
+                <td>{{ job.created_at }}</td>
+                <td>{{ job.finished_at or 'Not finished' }}</td>
+                <td>{{ row.item_count }}</td>
+                <td>
+                  <div class="small">Succeeded: {{ counts.succeeded }} / Failed: {{ counts.failed }} / Skipped: {{ counts.skipped }}</div>
+                  {% if row.retryable_count %}
+                    <div class="small text-warning">{{ row.retryable_count }} item{{ '' if row.retryable_count == 1 else 's' }} retryable</div>
+                  {% endif %}
+                </td>
+                <td>
+                  <div class="d-flex gap-2">
+                    <a class="btn btn-sm btn-outline-primary" href="/scraping/libby/jobs/{{ job.id }}">Open</a>
+                    {% if job.status != 'running' %}
+                      <form method="post" action="/scraping/libby/jobs/{{ job.id }}/delete" onsubmit="return confirm('Delete scrape job #{{ job.id }}? Snapshot files on disk are not removed.');">
+                        <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+                      </form>
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="card-body">
+        <p class="app-muted mb-3">No Libby scrape jobs have been created yet.</p>
+        <a class="btn btn-primary" href="/scraping/libby/jobs/new">Create First Job</a>
+      </div>
+    {% endif %}
+  </section>
+{% endblock %}

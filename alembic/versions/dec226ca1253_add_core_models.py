@@ -78,6 +78,8 @@ def upgrade() -> None:
     sa.Column('position_pages', sa.Integer(), nullable=True),
     sa.Column('total_seconds', sa.Integer(), nullable=True),
     sa.Column('total_pages', sa.Integer(), nullable=True),
+    sa.Column('enjoyed_seconds', sa.Integer(), nullable=True),
+    sa.Column('read_count', sa.Integer(), nullable=True),
     sa.Column('last_borrowed_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('last_scraped_borrowed_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('observed_at', sa.DateTime(timezone=True), nullable=True),

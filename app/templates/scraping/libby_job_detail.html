@@ -8,7 +8,18 @@
       <p class="app-muted mb-0">Track queued per-book scrape work. Browser processing is intentionally one item at a time.</p>
     </div>
     <div class="d-flex gap-2">
+      <a class="btn btn-outline-primary" href="/scraping/libby/jobs">Job History</a>
       <a class="btn btn-outline-primary" href="/scraping/libby/jobs/new">New Job</a>
+      {% if can_recover %}
+        <form method="post" action="/scraping/libby/jobs/{{ job.id }}/recover">
+          <button class="btn btn-outline-warning" type="submit">Recover Job</button>
+        </form>
+      {% endif %}
+      {% if job.status != 'running' %}
+        <form method="post" action="/scraping/libby/jobs/{{ job.id }}/delete" onsubmit="return confirm('Delete scrape job #{{ job.id }}? Snapshot files on disk are not removed.');">
+          <button class="btn btn-outline-danger" type="submit">Delete Job</button>
+        </form>
+      {% endif %}
       <a class="btn btn-outline-secondary" href="/books/review">Back to Review</a>
     </div>
   </div>
@@ -48,6 +59,12 @@
                 <button class="btn btn-outline-danger" type="submit">Cancel Job</button>
               </form>
             </div>
+          </div>
+        {% elif can_start %}
+          <div class="col-md-12 text-md-end">
+            <form method="post" action="/scraping/libby/jobs/{{ job.id }}/start">
+              <button class="btn btn-primary" type="submit">Start Job</button>
+            </form>
           </div>
         {% endif %}
       </div>
@@ -120,6 +137,7 @@
               <th scope="col">Last Scraped Borrow</th>
               <th scope="col">Snapshots</th>
               <th scope="col">Last Error</th>
+              <th scope="col">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -129,7 +147,12 @@
                   <a class="fw-semibold app-link" href="/books/{{ item.book.id }}">{{ item.book.title }}</a>
                   <div class="small app-muted">{{ item.book.primary_author_name or 'Unknown' }}</div>
                 </td>
-                <td><span class="badge app-badge-muted">{{ item.status.replace('_', ' ').title() }}</span></td>
+                <td>
+                  <span class="badge app-badge-muted">{{ item.status.replace('_', ' ').title() }}</span>
+                  {% if item.status == 'succeeded' and item.id in retryable_item_ids %}
+                    <div class="small text-warning mt-1">No progress parsed</div>
+                  {% endif %}
+                </td>
                 <td>{{ item.attempts }}</td>
                 <td>{{ item.latest_borrowed_at or 'Unknown' }}</td>
                 <td>{{ item.last_scraped_borrowed_at or 'Never' }}</td>
@@ -149,6 +172,15 @@
                   {% if item.error_message %}
                     <div>{{ item.error_message }}</div>
                     {% if item.error_code %}<div class="small app-muted">{{ item.error_code }}</div>{% endif %}
+                  {% else %}
+                    <span class="app-muted">None</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if item.id in retryable_item_ids %}
+                    <form method="post" action="/scraping/libby/jobs/{{ job.id }}/items/{{ item.id }}/requeue">
+                      <button class="btn btn-sm btn-outline-primary" type="submit">{{ 'Retry' if item.status in ['failed', 'succeeded'] else 'Requeue' }}</button>
+                    </form>
                   {% else %}
                     <span class="app-muted">None</span>
                   {% endif %}

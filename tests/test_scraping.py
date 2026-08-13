@@ -164,7 +164,7 @@ def test_libby_scrape_job_nav_link_is_present() -> None:
     response = client.get("/")
 
     assert response.status_code == 200
-    assert 'href="/scraping/libby/jobs/new"' in response.text
+    assert 'href="/scraping/libby/jobs"' in response.text
 
 
 def test_open_libby_session_requires_admin_login() -> None:
@@ -250,6 +250,148 @@ def test_new_libby_scrape_job_page_requires_admin_login() -> None:
     assert response.status_code == 403
 
 
+def test_libby_scrape_jobs_index_requires_admin_login() -> None:
+    client, _ = make_scraping_client()
+
+    response = client.get("/scraping/libby/jobs")
+
+    assert response.status_code == 403
+
+
+def test_libby_scrape_jobs_index_lists_old_jobs_and_links_to_detail() -> None:
+    client, session_factory = make_scraping_client()
+    client.post("/admin/login", data={"password": "secret"})
+    book_id = add_libby_book(session_factory, title="History Book", libby_title_id="history-title")
+    with session_factory() as db:
+        completed_job = ScrapeJob(user_id=DEFAULT_LOCAL_USER_ID, source="libby", status="completed", finished_at=datetime.now(timezone.utc))
+        pending_job = ScrapeJob(user_id=DEFAULT_LOCAL_USER_ID, source="libby", status="pending")
+        db.add_all([completed_job, pending_job])
+        db.flush()
+        retryable_item = ScrapeJobItem(job_id=completed_job.id, book_id=book_id, status="succeeded")
+        queued_item = ScrapeJobItem(job_id=pending_job.id, book_id=book_id, status="queued")
+        db.add_all([retryable_item, queued_item])
+        db.flush()
+        db.add(
+            ScrapeSnapshot(
+                item_id=retryable_item.id,
+                snapshot_type="text",
+                file_path="data/scraped/test/libby/job-1/item-1/loading.txt",
+                raw_data={"parsed_progress": {"progress_percent": None, "position_pages": None, "position_seconds": None}},
+            )
+        )
+        db.commit()
+        completed_job_id = completed_job.id
+        pending_job_id = pending_job.id
+
+    response = client.get("/scraping/libby/jobs")
+
+    assert response.status_code == 200
+    assert "Libby Scrape Jobs" in response.text
+    assert f"Job #{completed_job_id}" in response.text
+    assert f"/scraping/libby/jobs/{completed_job_id}" in response.text
+    assert f"Job #{pending_job_id}" in response.text
+    assert "1 item retryable" in response.text
+    assert "Open active job" in response.text
+
+
+def test_delete_libby_scrape_job_removes_items_and_snapshot_records() -> None:
+    client, session_factory = make_scraping_client()
+    client.post("/admin/login", data={"password": "secret"})
+    book_id = add_libby_book(session_factory, title="Delete Job Book", libby_title_id="delete-job-title")
+    with session_factory() as db:
+        job = ScrapeJob(user_id=DEFAULT_LOCAL_USER_ID, source="libby", status="completed", finished_at=datetime.now(timezone.utc))
+        db.add(job)
+        db.flush()
+        item = ScrapeJobItem(job_id=job.id, book_id=book_id, status="succeeded")
+        db.add(item)
+        db.flush()
+        snapshot = ScrapeSnapshot(item_id=item.id, snapshot_type="text", file_path="data/scraped/test/file.txt")
+        db.add(snapshot)
+        db.commit()
+        job_id = job.id
+        item_id = item.id
+        snapshot_id = snapshot.id
+
+    response = client.post(f"/scraping/libby/jobs/{job_id}/delete", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"].startswith("/scraping/libby/jobs?")
+    with session_factory() as db:
+        assert db.get(ScrapeJob, job_id) is None
+        assert db.get(ScrapeJobItem, item_id) is None
+        assert db.get(ScrapeSnapshot, snapshot_id) is None
+
+
+def test_delete_libby_scrape_job_blocks_running_jobs() -> None:
+    client, session_factory = make_scraping_client()
+    client.post("/admin/login", data={"password": "secret"})
+    job_id = add_scrape_job(session_factory, status="running", with_items=False)
+
+    response = client.post(f"/scraping/libby/jobs/{job_id}/delete", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"].startswith(f"/scraping/libby/jobs/{job_id}?")
+    with session_factory() as db:
+        assert db.get(ScrapeJob, job_id) is not None
+
+
+def test_recover_failed_libby_scrape_job_reopens_stuck_items() -> None:
+    client, session_factory = make_scraping_client()
+    client.post("/admin/login", data={"password": "secret"})
+    book_id = add_libby_book(session_factory, title="Recover Job Book", libby_title_id="recover-job-title")
+    with session_factory() as db:
+        job = ScrapeJob(
+            user_id=DEFAULT_LOCAL_USER_ID,
+            source="libby",
+            status="failed",
+            finished_at=datetime.now(timezone.utc),
+            summary={"runner_error": "Connection closed"},
+        )
+        db.add(job)
+        db.flush()
+        db.add_all(
+            [
+                ScrapeJobItem(job_id=job.id, book_id=book_id, status="queued"),
+                ScrapeJobItem(job_id=job.id, book_id=book_id, status="running", error_code="RuntimeError", error_message="Connection closed"),
+                ScrapeJobItem(job_id=job.id, book_id=book_id, status="failed", error_code="ValueError", error_message="No progress"),
+            ]
+        )
+        db.commit()
+        job_id = job.id
+
+    detail_response = client.get(f"/scraping/libby/jobs/{job_id}")
+
+    assert detail_response.status_code == 200
+    assert "Recover Job" in detail_response.text
+
+    response = client.post(f"/scraping/libby/jobs/{job_id}/recover", follow_redirects=False)
+
+    assert response.status_code == 303
+    with session_factory() as db:
+        job = db.get(ScrapeJob, job_id)
+        assert job is not None
+        assert job.status == "pending"
+        assert job.finished_at is None
+        assert "runner_error" not in job.summary
+        assert job.summary["recovered_item_count"] == 3
+        assert {item.status for item in job.items} == {"queued"}
+        assert all(item.error_code is None for item in job.items)
+
+
+def test_recover_running_libby_scrape_job_is_blocked() -> None:
+    client, session_factory = make_scraping_client()
+    client.post("/admin/login", data={"password": "secret"})
+    job_id = add_scrape_job(session_factory, status="running", with_items=True)
+
+    response = client.post(f"/scraping/libby/jobs/{job_id}/recover", follow_redirects=False)
+
+    assert response.status_code == 303
+    with session_factory() as db:
+        job = db.get(ScrapeJob, job_id)
+        assert job is not None
+        assert job.status == "running"
+
+
 def test_new_libby_scrape_job_page_previews_candidate_counts() -> None:
     client, session_factory = make_scraping_client()
     client.post("/admin/login", data={"password": "secret"})
@@ -267,12 +409,13 @@ def test_new_libby_scrape_job_page_previews_candidate_counts() -> None:
     assert "Queued Book" in response.text
     assert "Archived" in response.text
     assert "Marked ignored" in response.text
-    assert "Missing Libby title ID or share URL" in response.text
+    assert "Missing Libby title ID" in response.text
     assert "Missing Libby borrow event" in response.text
     assert "Manual Book" not in response.text
     assert 'name="book_ids"' in response.text
     assert 'data-select-book-ids="all"' in response.text
     assert 'data-select-book-ids="none"' in response.text
+    assert 'href="/scraping/libby/jobs"' in response.text
 
 
 def test_new_libby_scrape_job_page_skips_unchanged_books() -> None:
@@ -535,6 +678,119 @@ def test_libby_scrape_job_detail_shows_item_statuses_and_errors() -> None:
     assert "abc123def456" in response.text
 
 
+def test_requeue_skipped_libby_scrape_item_clears_skipped_status() -> None:
+    client, session_factory = make_scraping_client()
+    client.post("/admin/login", data={"password": "secret"})
+    book_id = add_libby_book(session_factory, title="Skipped Book", libby_title_id="skipped-title")
+    with session_factory() as db:
+        job = ScrapeJob(user_id=DEFAULT_LOCAL_USER_ID, source="libby", status="pending")
+        db.add(job)
+        db.flush()
+        item = ScrapeJobItem(
+            job_id=job.id,
+            book_id=book_id,
+            status="skipped",
+            error_code="job_cancelled",
+            error_message="Skipped earlier.",
+        )
+        db.add(item)
+        db.commit()
+        job_id = job.id
+        item_id = item.id
+
+    response = client.post(f"/scraping/libby/jobs/{job_id}/items/{item_id}/requeue", follow_redirects=False)
+
+    assert response.status_code == 303
+    with session_factory() as db:
+        item = db.get(ScrapeJobItem, item_id)
+        assert item is not None
+        assert item.status == "queued"
+        assert item.error_code is None
+        assert item.error_message is None
+
+
+def test_requeue_skipped_item_from_completed_job_reopens_job() -> None:
+    client, session_factory = make_scraping_client()
+    client.post("/admin/login", data={"password": "secret"})
+    book_id = add_libby_book(session_factory, title="Skipped Book", libby_title_id="skipped-title")
+    with session_factory() as db:
+        job = ScrapeJob(user_id=DEFAULT_LOCAL_USER_ID, source="libby", status="completed", finished_at=datetime.now(timezone.utc))
+        db.add(job)
+        db.flush()
+        item = ScrapeJobItem(job_id=job.id, book_id=book_id, status="skipped")
+        db.add(item)
+        db.commit()
+        job_id = job.id
+        item_id = item.id
+
+    response = client.post(f"/scraping/libby/jobs/{job_id}/items/{item_id}/requeue", follow_redirects=False)
+
+    assert response.status_code == 303
+    with session_factory() as db:
+        job = db.get(ScrapeJob, job_id)
+        item = db.get(ScrapeJobItem, item_id)
+        assert job is not None
+        assert item is not None
+        assert job.status == "pending"
+        assert job.finished_at is None
+        assert item.status == "queued"
+
+
+def test_completed_empty_progress_item_can_be_retried_and_clears_scraped_borrow_gate() -> None:
+    client, session_factory = make_scraping_client()
+    client.post("/admin/login", data={"password": "secret"})
+    book_id = add_libby_book(session_factory, title="Empty Success Book", libby_title_id="empty-title")
+    with session_factory() as db:
+        book = db.get(Book, book_id)
+        assert book is not None
+        progress = BookProgress(
+            user_id=DEFAULT_LOCAL_USER_ID,
+            book_id=book_id,
+            source="scraped",
+            last_scraped_borrowed_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+        job = ScrapeJob(user_id=DEFAULT_LOCAL_USER_ID, source="libby", status="completed", finished_at=datetime.now(timezone.utc))
+        db.add_all([progress, job])
+        db.flush()
+        item = ScrapeJobItem(job_id=job.id, book_id=book_id, status="succeeded")
+        db.add(item)
+        db.flush()
+        db.add(
+            ScrapeSnapshot(
+                item_id=item.id,
+                snapshot_type="text",
+                file_path="data/scraped/test/libby/job-1/item-1/loading.txt",
+                checksum="f822fe5c8b62",
+                content_type="text/plain",
+                raw_data={"parsed_progress": {"progress_percent": None, "position_pages": None, "position_seconds": None}},
+            )
+        )
+        db.commit()
+        job_id = job.id
+        item_id = item.id
+
+    detail_response = client.get(f"/scraping/libby/jobs/{job_id}")
+
+    assert detail_response.status_code == 200
+    assert "No progress parsed" in detail_response.text
+    assert "Retry" in detail_response.text
+
+    response = client.post(f"/scraping/libby/jobs/{job_id}/items/{item_id}/requeue", follow_redirects=False)
+
+    assert response.status_code == 303
+    with session_factory() as db:
+        job = db.get(ScrapeJob, job_id)
+        item = db.get(ScrapeJobItem, item_id)
+        progress = db.get(BookProgress, book_id)
+        assert job is not None
+        assert item is not None
+        assert progress is not None
+        assert job.status == "pending"
+        assert job.finished_at is None
+        assert item.status == "queued"
+        assert progress.last_scraped_borrowed_at is None
+
+
 def test_libby_scrape_job_detail_shows_summary_and_cancel_action_for_active_job() -> None:
     client, session_factory = make_scraping_client()
     client.post("/admin/login", data={"password": "secret"})
@@ -575,16 +831,30 @@ def test_start_libby_scrape_job_marks_pending_job_running_with_safety_summary() 
     client.post("/admin/login", data={"password": "secret"})
     job_id = add_scrape_job(session_factory, status="pending", with_items=True)
 
-    response = client.post(f"/scraping/libby/jobs/{job_id}/start", follow_redirects=False)
+    def fake_runner(db: Session, *, job: ScrapeJob, profile_dir: str, scraped_dir: str) -> dict[str, int]:
+        assert profile_dir == "data/browser/test-libby-profile"
+        assert scraped_dir == "data/scraped/test"
+        return {"succeeded": 1, "failed": 0, "skipped": 0}
+
+    from app.api import scraping
+
+    original_runner = scraping.libby_scrape_runner.run_libby_scrape_job
+    scraping.libby_scrape_runner.run_libby_scrape_job = fake_runner
+    try:
+        response = client.post(f"/scraping/libby/jobs/{job_id}/start", follow_redirects=False)
+    finally:
+        scraping.libby_scrape_runner.run_libby_scrape_job = original_runner
 
     assert response.status_code == 303
     assert response.headers["location"].startswith(f"/scraping/libby/jobs/{job_id}?")
     with session_factory() as db:
         job = db.get(ScrapeJob, job_id)
         assert job is not None
-        assert job.status == "running"
+        assert job.status == "completed"
         assert job.started_at is not None
+        assert job.finished_at is not None
         assert job.summary["automatic_retries"] is False
+        assert job.summary["run"] == {"succeeded": 1, "failed": 0, "skipped": 0}
         assert job.summary["safety"] == {
             "min_delay_seconds": 5,
             "max_delay_seconds": 15,
@@ -592,6 +862,37 @@ def test_start_libby_scrape_job_marks_pending_job_running_with_safety_summary() 
             "selector_timeout_ms": 10000,
             "max_attempts_per_run": 1,
         }
+
+
+def test_start_libby_scrape_job_marks_running_items_failed_on_runner_crash() -> None:
+    client, session_factory = make_scraping_client()
+    client.post("/admin/login", data={"password": "secret"})
+    job_id = add_scrape_job(session_factory, status="pending", with_items=True)
+
+    def crashing_runner(db: Session, *, job: ScrapeJob, profile_dir: str, scraped_dir: str) -> dict[str, int]:
+        item = job.items[0]
+        item.status = "running"
+        db.flush()
+        raise RuntimeError("Browser driver disconnected")
+
+    from app.api import scraping
+
+    original_runner = scraping.libby_scrape_runner.run_libby_scrape_job
+    scraping.libby_scrape_runner.run_libby_scrape_job = crashing_runner
+    try:
+        response = client.post(f"/scraping/libby/jobs/{job_id}/start", follow_redirects=False)
+    finally:
+        scraping.libby_scrape_runner.run_libby_scrape_job = original_runner
+
+    assert response.status_code == 303
+    with session_factory() as db:
+        job = db.get(ScrapeJob, job_id)
+        assert job is not None
+        assert job.status == "failed"
+        item = db.query(ScrapeJobItem).filter_by(job_id=job_id).one()
+        assert item.status == "failed"
+        assert item.error_code == "RuntimeError"
+        assert item.error_message == "Browser driver disconnected"
 
 
 def test_start_libby_scrape_job_does_not_start_completed_job() -> None:

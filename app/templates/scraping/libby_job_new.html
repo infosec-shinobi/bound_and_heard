@@ -8,6 +8,7 @@
       <p class="app-muted mb-0">Preview eligible imported Libby books before creating a queued scrape job.</p>
     </div>
     <div class="d-flex gap-2">
+      <a class="btn btn-outline-primary" href="/scraping/libby/jobs">Job History</a>
       <a class="btn btn-outline-secondary" href="/scraping/libby/session">Libby Session</a>
       <a class="btn btn-outline-secondary" href="/books/review">Back to Review</a>
     </div>
@@ -61,7 +62,7 @@
         {% if queued %}
           <p class="app-muted mb-0">This creates a pending job for {{ queued|length }} candidate books. Unchanged books are skipped unless force re-scrape is enabled.</p>
         {% else %}
-          <p class="app-muted mb-0">No books are currently eligible. Import Libby books, keep them unarchived, and ensure they have Libby source context and borrow events.</p>
+          <p class="app-muted mb-0">No books are currently eligible. Import Libby books, keep them unarchived, and ensure they have Libby title IDs and borrow events.</p>
         {% endif %}
       </div>
       {% if active_job %}
@@ -94,7 +95,7 @@
       <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 align-items-lg-center">
         <div>
           <h2 class="h5 mb-1">Queued Books</h2>
-          <p class="app-muted mb-0">Imported Libby books with source context and at least one Libby borrow event.</p>
+      <p class="app-muted mb-0">Imported Libby books with a Libby title ID and at least one Libby borrow event.</p>
         </div>
         {% if queued %}
           <div class="d-flex gap-2">
@@ -130,7 +131,7 @@
                 <td>{{ book.format.replace('_', ' ').title() }}</td>
                 <td>{{ row.latest_borrowed_at }}</td>
                 <td>{{ row.last_scraped_borrowed_at or 'Never' }}</td>
-                <td>{% if book.libby_title_id %}Title ID {{ book.libby_title_id }}{% else %}Share URL{% endif %}</td>
+                <td>Title ID {{ book.libby_title_id }}</td>
               </tr>
             {% endfor %}
           </tbody>

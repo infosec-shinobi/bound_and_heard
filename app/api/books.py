@@ -4,7 +4,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from fastapi import APIRouter, Depends, Form, Query, Request, status
 from fastapi.responses import RedirectResponse, Response
-from sqlalchemy import Select, and_, func, or_, select
+from sqlalchemy import Select, and_, delete, func, or_, select
 from sqlalchemy.orm import Session, joinedload
 from starlette.responses import HTMLResponse
 
@@ -190,6 +190,10 @@ def format_audio_seconds(audio_seconds: int | None) -> str | None:
     if hours:
         return f"{hours} hr"
     return f"{minutes} min"
+
+
+def format_enjoyed_seconds(enjoyed_seconds: int | None) -> str | None:
+    return format_audio_seconds(enjoyed_seconds)
 
 
 def display_progress(book: Book) -> float | None:
@@ -1110,11 +1114,52 @@ async def restore_book(
     return RedirectResponse(f"/books/{book.id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
+@router.post("/{book_id}/scraped-progress/clear")
+async def clear_book_scraped_progress(
+    book_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_write_access),
+) -> Response:
+    book = db.scalars(
+        select(Book)
+        .options(joinedload(Book.progress))
+        .where(Book.id == book_id, Book.user_id == DEFAULT_LOCAL_USER_ID)
+    ).first()
+    if book is None:
+        return templates.TemplateResponse(
+            request,
+            "books/not_found.html",
+            template_context(request, page_title="Book Not Found"),
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+
+    cleared = False
+    if book.progress is not None and book.progress.source == "scraped":
+        db.delete(book.progress)
+        cleared = True
+    result = db.execute(
+        delete(ReadingEvent).where(
+            ReadingEvent.book_id == book.id,
+            ReadingEvent.user_id == DEFAULT_LOCAL_USER_ID,
+            ReadingEvent.source == "scraped",
+        )
+    )
+    cleared = cleared or bool(result.rowcount)
+    db.commit()
+    message = "Scraped progress cleared." if cleared else "No scraped progress found to clear."
+    return RedirectResponse(
+        f"/books/{book.id}?{urlencode({'message': message})}",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
 @router.get("/{book_id}", response_class=HTMLResponse)
 async def book_detail(
     book_id: int,
     request: Request,
     db: Session = Depends(get_db),
+    message: str | None = None,
 ) -> HTMLResponse:
     book = db.scalars(
         select(Book)
@@ -1145,5 +1190,7 @@ async def book_detail(
             events=events,
             progress_percent=display_progress(book),
             audio_duration=format_audio_seconds(book.audio_seconds),
+            enjoyed_duration=format_enjoyed_seconds(book.progress.enjoyed_seconds if book.progress else None),
+            message=message,
         ),
     )

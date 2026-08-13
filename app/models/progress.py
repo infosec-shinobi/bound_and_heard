@@ -26,6 +26,8 @@ class BookProgress(Base):
     position_pages: Mapped[int | None] = mapped_column(Integer)
     total_seconds: Mapped[int | None] = mapped_column(Integer)
     total_pages: Mapped[int | None] = mapped_column(Integer)
+    enjoyed_seconds: Mapped[int | None] = mapped_column(Integer)
+    read_count: Mapped[int | None] = mapped_column(Integer)
     last_borrowed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_scraped_borrowed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     observed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -36,6 +36,9 @@
       This book is archived. Its notes, ratings, progress, and reading events are preserved.
     </div>
   {% endif %}
+  {% if message %}
+    <div class="alert alert-success" role="status">{{ message }}</div>
+  {% endif %}
 
   <div class="row g-4">
     <div class="col-lg-7">
@@ -59,6 +62,10 @@
             <dd class="col-sm-8">{{ book.isbn13 or 'Not set' }}</dd>
             <dt class="col-sm-4">ISBN-10</dt>
             <dd class="col-sm-8">{{ book.isbn10 or 'Not set' }}</dd>
+            {% if book.metadata_source == 'libby' and book.libby_title_id %}
+              <dt class="col-sm-4">Libby Title ID</dt>
+              <dd class="col-sm-8">{{ book.libby_title_id }}</dd>
+            {% endif %}
           </dl>
         </div>
       </section>
@@ -78,13 +85,18 @@
             </div>
           </div>
           <dl class="row mb-0 app-detail-list">
-            <dt class="col-6">Pages</dt>
-            <dd class="col-6">{{ book.page_count or 'Not set' }}</dd>
-            <dt class="col-6">Audio</dt>
-            <dd class="col-6">{{ audio_duration or 'Not set' }}</dd>
+            <dt class="col-6">Enjoyed For</dt>
+            <dd class="col-6">{{ enjoyed_duration or 'Not set' }}</dd>
+            <dt class="col-6">Read Count</dt>
+            <dd class="col-6">{{ book.progress.read_count if book.progress and book.progress.read_count is not none else 'Not set' }}</dd>
             <dt class="col-6">Progress Source</dt>
             <dd class="col-6">{% if book.progress %}{{ book.progress.source.title() }}{% elif book.manual_progress_percent is not none %}Manual{% else %}Not set{% endif %}</dd>
           </dl>
+          {% if can_write and book.progress and book.progress.source == 'scraped' %}
+            <form class="mt-3" method="post" action="/books/{{ book.id }}/scraped-progress/clear" onsubmit="return confirm('Clear scraped progress and scraped progress events for this book? Manual data and Libby borrow events are preserved.');">
+              <button class="btn btn-sm btn-outline-danger" type="submit">Clear Scraped Progress</button>
+            </form>
+          {% endif %}
         </div>
       </section>
     </div>
