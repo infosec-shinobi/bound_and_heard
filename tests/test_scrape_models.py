@@ -7,6 +7,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.bootstrap import DEFAULT_LOCAL_USER_ID
 from app.core.database import Base
 from app.models import Book, ScrapeJob, ScrapeJobItem, ScrapeSnapshot, User
+from app.scrapers.libby_progress import parse_libby_progress
 from app.services.scrape_snapshots import preserve_scrape_snapshot, snapshot_checksum
 
 
@@ -153,6 +154,7 @@ def test_preserve_scrape_snapshot_writes_file_and_creates_snapshot_record(tmp_pa
             content=content,
             content_type="text/html",
             raw_data={"selector": "progress"},
+            parsed_progress=parse_libby_progress(content, content_type="text/html"),
         )
         db.commit()
         db.refresh(item)
@@ -164,7 +166,10 @@ def test_preserve_scrape_snapshot_writes_file_and_creates_snapshot_record(tmp_pa
     assert snapshot.snapshot_type == "html"
     assert snapshot.content_type == "text/html"
     assert snapshot.checksum == snapshot_checksum(content.encode("utf-8"))
-    assert snapshot.raw_data == {"selector": "progress"}
+    assert snapshot.progress_percent == 42
+    assert snapshot.raw_data["selector"] == "progress"
+    assert snapshot.raw_data["parsed_progress"]["source"] == "scraped"
+    assert snapshot.raw_data["parsed_progress"]["progress_percent"] == 42
     snapshot_path = tmp_path / "libby" / f"job-{job.id}" / f"item-{item.id}"
     assert snapshot.file_path.startswith(snapshot_path.as_posix())
     assert snapshot.file_path.endswith(".html")

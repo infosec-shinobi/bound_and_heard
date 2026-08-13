@@ -88,13 +88,13 @@ Derived from `docs/ROADMAP.md` MVP 4 - Libby Progress Scraping, with continuity 
 
 ## Chunk 9 - Progress Parsing
 
-- [ ] Identify Libby progress text/selectors for ebooks and audiobooks
-- [ ] Parse partial progress percent when available
-- [ ] Parse completed progress when available
-- [ ] Parse page or duration progress if available
-- [ ] Normalize parsed values into `BookProgress` or equivalent fields
-- [ ] Preserve source attribution as `libby` or scrape-specific source
-- [ ] Add parser tests using saved fixture snippets
+- [x] Identify Libby progress text/selectors for ebooks and audiobooks
+- [x] Parse partial progress percent when available
+- [x] Parse completed progress when available
+- [x] Parse page or duration progress if available
+- [x] Normalize parsed values into `BookProgress` or equivalent fields
+- [x] Preserve source attribution as `libby` or scrape-specific source
+- [x] Add parser tests using saved fixture snippets
 
 ## Chunk 10 - Completion Inference And Manual Protection
 

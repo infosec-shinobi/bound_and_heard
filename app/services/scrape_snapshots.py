@@ -8,6 +8,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from app.models import ScrapeJobItem, ScrapeSnapshot
+from app.scrapers.libby_progress import LibbyProgressParseResult
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,7 @@ def preserve_scrape_snapshot(
     content: str | bytes,
     content_type: str | None = None,
     raw_data: dict | None = None,
+    parsed_progress: LibbyProgressParseResult | None = None,
 ) -> PreservedSnapshot:
     content_bytes = content.encode("utf-8") if isinstance(content, str) else content
     checksum = snapshot_checksum(content_bytes)
@@ -55,7 +57,10 @@ def preserve_scrape_snapshot(
         file_path=target_path.as_posix(),
         checksum=checksum,
         content_type=content_type,
-        raw_data=raw_data,
+        progress_percent=parsed_progress.progress_percent if parsed_progress else None,
+        raw_data={**(raw_data or {}), "parsed_progress": parsed_progress.as_snapshot_raw_data()}
+        if parsed_progress
+        else raw_data,
     )
     db.add(snapshot)
     return PreservedSnapshot(snapshot=snapshot, content=content_bytes)
