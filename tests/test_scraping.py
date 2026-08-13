@@ -11,7 +11,7 @@ from app.core.bootstrap import DEFAULT_LOCAL_USER_ID
 from app.core.config import Settings
 from app.core.database import Base, get_db
 from app.main import create_app
-from app.models import Book, ReadingEvent, ScrapeJob, User
+from app.models import Book, BookProgress, ReadingEvent, ScrapeJob, ScrapeJobItem, User
 from app.services.libby_browser_worker import DESKTOP_CHROME_USER_AGENT
 
 
@@ -59,6 +59,7 @@ def add_libby_book(
     review_status: str | None = None,
     archived: bool = False,
     add_borrow: bool = True,
+    last_scraped_borrowed_at: datetime | None = None,
 ) -> int:
     with session_factory() as db:
         book = Book(
@@ -85,8 +86,29 @@ def add_libby_book(
                     event_date=datetime(2026, 6, 20, tzinfo=timezone.utc),
                 )
             )
+        if last_scraped_borrowed_at is not None:
+            db.add(
+                BookProgress(
+                    user_id=DEFAULT_LOCAL_USER_ID,
+                    book_id=book.id,
+                    source="libby",
+                    last_scraped_borrowed_at=last_scraped_borrowed_at,
+                )
+            )
         db.commit()
         return book.id
+
+
+def add_scrape_job(
+    session_factory: sessionmaker[Session],
+    *,
+    status: str = "pending",
+) -> int:
+    with session_factory() as db:
+        job = ScrapeJob(user_id=DEFAULT_LOCAL_USER_ID, source="libby", status=status)
+        db.add(job)
+        db.commit()
+        return job.id
 
 
 def test_libby_session_page_requires_admin_login() -> None:
@@ -220,17 +242,23 @@ def test_create_libby_scrape_job_requires_admin_login() -> None:
     assert response.status_code == 403
 
 
-def test_create_libby_scrape_job_persists_pending_job_summary() -> None:
+def test_create_libby_scrape_job_persists_pending_job_and_items() -> None:
     client, session_factory = make_scraping_client()
     client.post("/admin/login", data={"password": "secret"})
-    queued_book_id = add_libby_book(session_factory, title="Queued Book", libby_title_id="queued-title")
+    last_scraped_borrowed_at = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    queued_book_id = add_libby_book(
+        session_factory,
+        title="Queued Book",
+        libby_title_id="queued-title",
+        last_scraped_borrowed_at=last_scraped_borrowed_at,
+    )
     add_libby_book(session_factory, title="Archived Book", libby_title_id="archived-title", archived=True)
     add_libby_book(session_factory, title="No Context Book", libby_title_id=None)
 
     response = client.post("/scraping/libby/jobs", follow_redirects=False)
 
     assert response.status_code == 303
-    assert response.headers["location"].startswith("/scraping/libby/jobs/new?created_job_id=")
+    assert response.headers["location"].startswith("/scraping/libby/jobs/")
     with session_factory() as db:
         job = db.query(ScrapeJob).one()
         assert job.source == "libby"
@@ -240,8 +268,15 @@ def test_create_libby_scrape_job_persists_pending_job_summary() -> None:
             "skipped_count": 1,
             "ineligible_count": 1,
             "queued_book_ids": [queued_book_id],
-            "note": "Per-book scrape items are created when queue processing is implemented.",
+            "process_mode": "one_item_at_a_time",
         }
+        item = db.query(ScrapeJobItem).one()
+        assert item.job_id == job.id
+        assert item.book_id == queued_book_id
+        assert item.status == "queued"
+        assert item.attempts == 0
+        assert item.latest_borrowed_at == datetime(2026, 6, 20)
+        assert item.last_scraped_borrowed_at == last_scraped_borrowed_at.replace(tzinfo=None)
 
 
 def test_create_libby_scrape_job_with_no_eligible_books_redirects_without_job() -> None:
@@ -255,3 +290,90 @@ def test_create_libby_scrape_job_with_no_eligible_books_redirects_without_job() 
     assert response.headers["location"] == "/scraping/libby/jobs/new"
     with session_factory() as db:
         assert db.query(ScrapeJob).count() == 0
+
+
+def test_create_libby_scrape_job_redirects_to_existing_active_job() -> None:
+    client, session_factory = make_scraping_client()
+    client.post("/admin/login", data={"password": "secret"})
+    add_libby_book(session_factory, title="Queued Book", libby_title_id="queued-title")
+    existing_job_id = add_scrape_job(session_factory, status="running")
+
+    response = client.post("/scraping/libby/jobs", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"].startswith(f"/scraping/libby/jobs/{existing_job_id}?")
+    with session_factory() as db:
+        assert db.query(ScrapeJob).count() == 1
+        assert db.query(ScrapeJobItem).count() == 0
+
+
+def test_new_libby_scrape_job_page_shows_active_job_protection() -> None:
+    client, session_factory = make_scraping_client()
+    client.post("/admin/login", data={"password": "secret"})
+    existing_job_id = add_scrape_job(session_factory, status="pending")
+
+    response = client.get("/scraping/libby/jobs/new")
+
+    assert response.status_code == 200
+    assert f"Active Libby scrape job #{existing_job_id}" in response.text
+    assert f'href="/scraping/libby/jobs/{existing_job_id}"' in response.text
+
+
+def test_libby_scrape_job_detail_shows_item_statuses_and_errors() -> None:
+    client, session_factory = make_scraping_client()
+    client.post("/admin/login", data={"password": "secret"})
+    queued_book_id = add_libby_book(session_factory, title="Queued Book", libby_title_id="queued-title")
+    failed_book_id = add_libby_book(session_factory, title="Failed Book", libby_title_id="failed-title")
+    with session_factory() as db:
+        job = ScrapeJob(user_id=DEFAULT_LOCAL_USER_ID, source="libby", status="running")
+        db.add(job)
+        db.flush()
+        db.add(
+            ScrapeJobItem(
+                job_id=job.id,
+                book_id=queued_book_id,
+                status="queued",
+                latest_borrowed_at=datetime(2026, 6, 20, tzinfo=timezone.utc),
+            )
+        )
+        db.add(
+            ScrapeJobItem(
+                job_id=job.id,
+                book_id=failed_book_id,
+                status="failed",
+                attempts=1,
+                latest_borrowed_at=datetime(2026, 6, 20, tzinfo=timezone.utc),
+                error_code="selector_missing",
+                error_message="Progress selector was not found.",
+            )
+        )
+        db.commit()
+        job_id = job.id
+
+    response = client.get(f"/scraping/libby/jobs/{job_id}")
+
+    assert response.status_code == 200
+    assert f"Scrape Job #{job_id}" in response.text
+    assert "Queued Book" in response.text
+    assert "Failed Book" in response.text
+    assert "Progress selector was not found." in response.text
+    assert "Each book has an independent item" in response.text
+
+
+def test_libby_scrape_job_detail_requires_admin_login() -> None:
+    client, session_factory = make_scraping_client()
+    job_id = add_scrape_job(session_factory)
+
+    response = client.get(f"/scraping/libby/jobs/{job_id}")
+
+    assert response.status_code == 403
+
+
+def test_libby_scrape_job_detail_returns_not_found_for_missing_job() -> None:
+    client, _ = make_scraping_client()
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.get("/scraping/libby/jobs/999")
+
+    assert response.status_code == 404
+    assert "Scrape job not found" in response.text

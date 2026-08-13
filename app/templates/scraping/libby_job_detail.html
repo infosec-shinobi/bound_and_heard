@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
+    <div>
+      <p class="app-kicker small fw-semibold mb-2">Libby scraping</p>
+      <h1 class="display-6 mb-1">Scrape Job #{{ job.id }}</h1>
+      <p class="app-muted mb-0">Track queued per-book scrape work. Browser processing is intentionally one item at a time.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-primary" href="/scraping/libby/jobs/new">New Job</a>
+      <a class="btn btn-outline-secondary" href="/books/review">Back to Review</a>
+    </div>
+  </div>
+
+  {% if message %}
+    <div class="alert alert-success" role="status">{{ message }}</div>
+  {% endif %}
+
+  <section class="card mb-4">
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-3">
+          <p class="app-kicker small fw-semibold mb-2">Status</p>
+          <div class="h4 mb-0">{{ job.status.replace('_', ' ').title() }}</div>
+        </div>
+        <div class="col-md-3">
+          <p class="app-kicker small fw-semibold mb-2">Created</p>
+          <div>{{ job.created_at }}</div>
+        </div>
+        <div class="col-md-3">
+          <p class="app-kicker small fw-semibold mb-2">Started</p>
+          <div>{{ job.started_at or 'Not started' }}</div>
+        </div>
+        <div class="col-md-3">
+          <p class="app-kicker small fw-semibold mb-2">Finished</p>
+          <div>{{ job.finished_at or 'Not finished' }}</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="row g-3 mb-4">
+    {% for item_status in item_statuses %}
+      <div class="col-sm-6 col-lg">
+        <section class="card h-100">
+          <div class="card-body">
+            <p class="app-kicker small fw-semibold mb-2">{{ item_status.replace('_', ' ').title() }}</p>
+            <div class="display-6">{{ status_counts[item_status] }}</div>
+          </div>
+        </section>
+      </div>
+    {% endfor %}
+  </div>
+
+  <section class="card">
+    <div class="card-body border-bottom">
+      <h2 class="h5 mb-1">Job Items</h2>
+      <p class="app-muted mb-0">Each book has an independent item so a failed book can stay failed while the rest of the job continues.</p>
+    </div>
+    {% if items %}
+      <div class="table-responsive">
+        <table class="table table-sm table-dark table-hover align-middle mb-0 app-table">
+          <thead>
+            <tr>
+              <th scope="col">Book</th>
+              <th scope="col">Status</th>
+              <th scope="col">Attempts</th>
+              <th scope="col">Latest Borrow</th>
+              <th scope="col">Last Scraped Borrow</th>
+              <th scope="col">Last Error</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in items %}
+              <tr>
+                <td>
+                  <a class="fw-semibold app-link" href="/books/{{ item.book.id }}">{{ item.book.title }}</a>
+                  <div class="small app-muted">{{ item.book.primary_author_name or 'Unknown' }}</div>
+                </td>
+                <td><span class="badge app-badge-muted">{{ item.status.replace('_', ' ').title() }}</span></td>
+                <td>{{ item.attempts }}</td>
+                <td>{{ item.latest_borrowed_at or 'Unknown' }}</td>
+                <td>{{ item.last_scraped_borrowed_at or 'Never' }}</td>
+                <td>
+                  {% if item.error_message %}
+                    <div>{{ item.error_message }}</div>
+                    {% if item.error_code %}<div class="small app-muted">{{ item.error_code }}</div>{% endif %}
+                  {% else %}
+                    <span class="app-muted">None</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="card-body"><p class="app-muted mb-0">This job has no items.</p></div>
+    {% endif %}
+  </section>
+{% endblock %}

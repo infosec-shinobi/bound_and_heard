@@ -49,13 +49,13 @@ Derived from `docs/ROADMAP.md` MVP 4 - Libby Progress Scraping, with continuity 
 
 ## Chunk 5 - Scrape Queue And Job Items
 
-- [ ] Create per-book scrape job items when a job starts
-- [ ] Track item statuses: queued, running, succeeded, failed, skipped
-- [ ] Process one item at a time by default
-- [ ] Prevent duplicate active scrape jobs when unsafe
-- [ ] Preserve job progress if the process stops mid-job
-- [ ] Allow viewing job detail and item statuses
-- [ ] Ensure one failed item does not fail the entire job
+- [x] Create per-book scrape job items when a job starts
+- [x] Track item statuses: queued, running, succeeded, failed, skipped
+- [x] Process one item at a time by default
+- [x] Prevent duplicate active scrape jobs when unsafe
+- [x] Preserve job progress if the process stops mid-job
+- [x] Allow viewing job detail and item statuses
+- [x] Ensure one failed item does not fail the entire job
 
 ## Chunk 6 - Skip Logic
 

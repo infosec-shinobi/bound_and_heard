@@ -16,6 +16,12 @@
   {% if created_job_id %}
     <div class="alert alert-success" role="status">Scrape job #{{ created_job_id }} created.</div>
   {% endif %}
+  {% if active_job %}
+    <div class="alert app-status-alert" role="status">
+      Active Libby scrape job #{{ active_job.id }} is {{ active_job.status }}. Finish, fail, or cancel that job before creating another.
+      <a class="app-link" href="/scraping/libby/jobs/{{ active_job.id }}">View active job</a>.
+    </div>
+  {% endif %}
 
   <div class="row g-3 mb-4">
     <div class="col-md-4">
@@ -57,7 +63,9 @@
           <p class="app-muted mb-0">No books are currently eligible. Import Libby books, keep them unarchived, and ensure they have Libby source context and borrow events.</p>
         {% endif %}
       </div>
-      {% if queued %}
+      {% if active_job %}
+        <a class="btn btn-outline-primary" href="/scraping/libby/jobs/{{ active_job.id }}">View Active Job</a>
+      {% elif queued %}
         <form method="post" action="/scraping/libby/jobs">
           <button class="btn btn-primary" type="submit">Create Scrape Job</button>
         </form>

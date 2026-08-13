@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="card text-center py-5">
+    <div class="card-body">
+      <p class="app-kicker small fw-semibold mb-2">Missing job</p>
+      <h1 class="h3">Scrape job not found</h1>
+      <p class="app-muted mb-4">The requested Libby scrape job does not exist.</p>
+      <a class="btn btn-outline-secondary" href="/scraping/libby/jobs/new">Back to Scrape Jobs</a>
+    </div>
+  </section>
+{% endblock %}
