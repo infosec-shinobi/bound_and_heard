@@ -4,7 +4,7 @@
 
 Libby Timeline JSON provides borrowing history, but it does not provide reliable per-title completion data.
 
-Bound & Heard will use Playwright to retrieve progress information from Libby or Libby share/reading journey pages where available.
+Bound & Heard uses Playwright to retrieve progress information from authenticated Libby reading journey pages where available.
 
 This is a high-value feature because historical Libby libraries may contain hundreds of books that would be painful to manually classify.
 
@@ -26,7 +26,7 @@ Use Playwright persistent browser context.
 
 The user logs into Libby manually once.
 
-Example future implementation:
+Implementation shape:
 
 ```python
 browser = await chromium.launch_persistent_context(
@@ -35,7 +35,7 @@ browser = await chromium.launch_persistent_context(
 )
 ```
 
-The app should not require the user to manually copy cookies.
+The app does not require the user to manually copy cookies. Credentials are never stored in the application database; browser cookies/session state remain in the configured local profile directory.
 
 ## Scrape Inputs
 
@@ -44,10 +44,10 @@ Potential scrape candidates come from imported books.
 Required fields:
 
 - libby_title_id
-- libby_share_url
 - latest_borrowed_at
 - format
-- library key, if needed
+
+Public `share.libbyapp.com/title/...` URLs are catalog pages and are not used for personal progress. Scraping uses `https://libbyapp.com/shelf/journey/{libby_title_id}` from the authenticated browser session.
 
 ## Scrape Queue Logic
 
@@ -113,17 +113,15 @@ Store raw scrape results under:
 data/scraped/libby/
 ```
 
-Suggested filename pattern:
+Current filename pattern:
 
 ```text
-{user_id}_{book_id}_{libby_title_id}_{timestamp}.html
+data/scraped/libby/job-{job_id}/item-{item_id}/{timestamp}-{snapshot_type}-{checksum}.{ext}
 ```
 
-or
+Both HTML and extracted text snapshots may be preserved. Snapshot database records store the file path, checksum, content type, parsed progress percent, and parser raw data.
 
-```text
-{user_id}_{book_id}_{libby_title_id}_{timestamp}.json
-```
+Snapshots can contain private account data, including titles, journey statements, libraries, availability, and progress. They live under `data/**`, which should remain untracked.
 
 ## Parser Strategy
 
@@ -149,8 +147,11 @@ Manual status should be able to override inferred status.
 
 When available, preserve more than percentage:
 
+- Libby's progress needle width from HTML
 - position in seconds for audiobooks
 - total seconds for audiobooks
+- enjoyed/listened/read seconds exposed by journey text
+- read count when user-entered or future-derived
 - position in pages for ebooks or physical books
 - total pages for ebooks or physical books
 - observed timestamp
@@ -170,6 +171,8 @@ Store:
 - retry count
 
 A single failed book should not fail the entire scrape job.
+
+Failed items can be retried or explicitly skipped. Jobs with failed, skipped, queued, or stuck running items can be recovered back to pending. Running jobs must be cancelled before deletion.
 
 ## Future Enhancements
 

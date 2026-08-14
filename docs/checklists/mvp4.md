@@ -132,12 +132,12 @@ Derived from `docs/ROADMAP.md` MVP 4 - Libby Progress Scraping, with continuity 
 
 ## Chunk 13 - Documentation
 
-- [ ] Update README with Libby progress scraping workflow
-- [ ] Document Playwright installation and browser profile setup
-- [ ] Document manual Libby login expectations
-- [ ] Document skip logic and force re-scrape behavior
-- [ ] Document raw snapshot storage and privacy considerations
-- [ ] Update database documentation for scrape job/item/snapshot fields
+- [x] Update README with Libby progress scraping workflow
+- [x] Document Playwright installation and browser profile setup
+- [x] Document manual Libby login expectations
+- [x] Document skip logic and force re-scrape behavior
+- [x] Document raw snapshot storage and privacy considerations
+- [x] Update database documentation for scrape job/item/snapshot fields
 
 ## MVP 4 Done Criteria
 

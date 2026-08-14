@@ -74,6 +74,10 @@ Directory used to preserve raw uploaded import files. Defaults to `data/imports`
 
 Directory used for the persistent local Playwright browser profile for Libby. Defaults to `data/browser/libby-profile`. This directory contains local browser cookies/session state and should not be committed.
 
+`BOUND_AND_HEARD_SCRAPED_DIR`
+
+Directory used to preserve Libby scrape snapshots. Defaults to `data/scraped`. Snapshot files can contain private reading activity and should not be committed.
+
 `BOUND_AND_HEARD_APP_NAME`
 
 Application display name. Defaults to `Bound & Heard`.
@@ -120,6 +124,26 @@ python -m playwright install chromium
 ```
 
 Do not store Libby credentials in the app database or commit the browser profile directory. The profile contains local browser state such as cookies.
+
+### Libby Progress Scraping Workflow
+
+Libby progress scraping requires write access.
+
+1. Set `BOUND_AND_HEARD_ADMIN_PASSWORD` in `.env`, restart the app, and log in at `/admin/login`.
+2. Open `Libby Session` from the navigation and launch the persistent browser.
+3. Log in to Libby manually in that browser window. Credentials and cookies stay in the local browser profile, not the app database.
+4. Import Libby JSON and review imported books so scrape candidates have a Libby title ID and borrow event.
+5. Open `Scrape Jobs` from the navigation, then create a new job.
+6. Review queued, skipped, and ineligible books. Use force re-scrape if you intentionally want to ignore the last scraped borrow marker.
+7. Start the job. The app opens Libby journey pages one at a time, waits between items, preserves raw snapshots, parses progress, and records per-item success or failure.
+
+Scraping uses authenticated journey URLs like `https://libbyapp.com/shelf/journey/{libby_title_id}`. Public `share.libbyapp.com/title/...` pages are catalog pages and do not contain personal reading progress.
+
+Books are skipped when their latest Libby borrow timestamp is less than or equal to `BookProgress.last_scraped_borrowed_at`. Force re-scrape bypasses that skip logic for a new job.
+
+Failed items can be retried or skipped from the job detail page. Failed, cancelled, or completed jobs with open items can be recovered and restarted. Old jobs can be deleted from job history; deleting a job removes database job/item/snapshot records but does not delete snapshot files already written to disk.
+
+Raw scrape snapshots are stored under `data/scraped/libby/job-{job_id}/item-{item_id}/` by default. These files may contain titles, library information, reading journey text, progress, and other private account state. Keep `data/**` untracked and avoid sharing snapshots unless you have reviewed them.
 
 ## Common Commands
 

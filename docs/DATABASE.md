@@ -30,11 +30,12 @@ users
   |     |
   |     +-- reading_events
   |     +-- book_progress
+  |     +-- scrape_job_items
   |     +-- book_genres
   |     +-- series_books
   |
   +-- imports
-  +-- jobs
+  +-- scrape_jobs
   +-- recaps
   +-- recommendations
 ```
@@ -216,6 +217,8 @@ Fields:
 - position_pages
 - total_seconds
 - total_pages
+- enjoyed_seconds
+- read_count
 - last_borrowed_at
 - last_scraped_borrowed_at
 - observed_at
@@ -224,20 +227,85 @@ Fields:
 - created_at
 - updated_at
 
-### progress_snapshots
+`progress_percent` stores the latest known percentage where available. `position_seconds`/`position_pages` and totals preserve lower-level parser data. `enjoyed_seconds` stores how much time Libby reports the user has read/listened/enjoyed the title. `read_count` is reserved for user-entered or future-derived completed read/listen counts and is not inferred from Libby's "picked up" session count.
+
+`last_scraped_borrowed_at` is used by Libby scrape skip logic: if the latest Libby borrow event is less than or equal to this value, normal scrape job creation skips the book unless force re-scrape is selected.
+
+### scrape_jobs
+
+Stores Libby scraping job metadata.
+
+Fields:
+
+- id
+- user_id
+- source
+- status
+- started_at
+- finished_at
+- summary
+- created_at
+- updated_at
+
+Recommended status values:
+
+- pending
+- running
+- completed
+- failed
+- cancelled
+
+`summary` stores job-level counts, selected book IDs, safety settings, run results, runner errors, and recovery metadata.
+
+### scrape_job_items
+
+Stores per-book scrape work so one failed book does not fail the entire job.
+
+Fields:
+
+- id
+- job_id
+- book_id
+- status
+- attempts
+- latest_borrowed_at
+- last_scraped_borrowed_at
+- queued_at
+- started_at
+- finished_at
+- last_attempted_at
+- error_code
+- error_message
+- created_at
+- updated_at
+
+Recommended status values:
+
+- queued
+- running
+- succeeded
+- failed
+- skipped
+
+Failed items can be retried or skipped. Requeued items move back to `queued`; user-skipped failed items move to `skipped` with `error_code = user_skipped`.
+
+### scrape_snapshots
 
 Stores references to raw scraped snapshots.
 
 Fields:
 
 - id
-- user_id
-- book_id
-- book_progress_id
-- source
-- snapshot_path
-- captured_at
-- parser_version
+- item_id
+- snapshot_type
+- file_path
+- checksum
+- content_type
+- progress_percent
+- raw_data
+- created_at
+
+Snapshot files are written under the configured scraped directory, usually `data/scraped/libby/job-{job_id}/item-{item_id}/`. Records may point to HTML, text, JSON, or binary content. `raw_data` can include parser output and the source URL. Snapshot files are private local data and should stay untracked.
 
 ### series
 
