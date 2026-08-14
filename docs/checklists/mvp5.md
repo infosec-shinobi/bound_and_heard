@@ -10,14 +10,14 @@ Derived from `docs/ROADMAP.md` MVP 5 - Series Tracking, with continuity from MVP
 
 ## Chunk 1 - Series Data Model
 
-- [ ] Decide table shape for `series` and `series_books`
-- [ ] Add user-scoped `series` model with name, description, status, continuation intent, timestamps
-- [ ] Add `series_books` model for existing-book assignments and planned/unowned entries
-- [ ] Support series order/position with nullable numeric or text ordering where appropriate
-- [ ] Support planned title/author/format fields for books not yet in the user's library
-- [ ] Add indexes for user, status, series order, book lookup, and next-unread queries
-- [ ] Add Alembic migration
-- [ ] Verify `alembic upgrade head`
+- [x] Decide table shape for `series` and `series_books`
+- [x] Add user-scoped `series` model with name, description, status, continuation intent, timestamps
+- [x] Add `series_books` model for existing-book assignments and planned/unowned entries
+- [x] Support series order/position with nullable numeric or text ordering where appropriate
+- [x] Support planned title/author/format fields for books not yet in the user's library
+- [x] Add indexes for user, status, series order, book lookup, and next-unread queries
+- [x] Add Alembic migration
+- [x] Verify `alembic upgrade head`
 
 ## Chunk 2 - Series List Page
 

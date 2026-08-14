@@ -5,6 +5,7 @@ from app.models.import_record import Import, ImportFile
 from app.models.progress import BookProgress
 from app.models.reading_event import ReadingEvent
 from app.models.scrape import ScrapeJob, ScrapeJobItem, ScrapeSnapshot
+from app.models.series import Series, SeriesBook
 from app.models.user import User
 
 __all__ = [
@@ -16,5 +17,7 @@ __all__ = [
     "ScrapeJob",
     "ScrapeJobItem",
     "ScrapeSnapshot",
+    "Series",
+    "SeriesBook",
     "User",
 ]
