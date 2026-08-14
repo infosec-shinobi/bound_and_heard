@@ -1,7 +1,7 @@
 from collections.abc import Generator
 
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -111,6 +111,11 @@ def add_series_entry(
         db.commit()
 
 
+def login_as_admin(client: TestClient) -> None:
+    response = client.post("/admin/login", data={"password": "secret"})
+    assert response.status_code == 200
+
+
 def test_series_page_shows_empty_state_for_read_only_user() -> None:
     client, _ = make_series_client(admin_password=None)
 
@@ -200,3 +205,148 @@ def test_series_nav_link_appears_on_dashboard() -> None:
 
     assert response.status_code == 200
     assert 'href="/series"' in response.text
+
+
+def test_create_series_form_requires_admin_login() -> None:
+    client, _ = make_series_client()
+
+    response = client.get("/series/new", follow_redirects=False)
+
+    assert response.status_code == 403
+    assert "Admin login is required for write actions." in response.text
+
+
+def test_create_series_form_renders_for_admin() -> None:
+    client, _ = make_series_client()
+    login_as_admin(client)
+
+    response = client.get("/series/new")
+
+    assert response.status_code == 200
+    assert "Create Series" in response.text
+    assert "Series name" in response.text
+    assert "Want to continue?" in response.text
+
+
+def test_create_series_validates_required_name_and_choices() -> None:
+    client, _ = make_series_client()
+    login_as_admin(client)
+
+    response = client.post(
+        "/series/new",
+        data={"name": "   ", "status": "bad", "wants_to_continue": "maybe"},
+    )
+
+    assert response.status_code == 400
+    assert "Series name is required." in response.text
+    assert "Status is invalid." in response.text
+    assert "Continuation intent is invalid." in response.text
+
+
+def test_create_series_persists_and_shows_success_message() -> None:
+    client, session_factory = make_series_client()
+    login_as_admin(client)
+
+    response = client.post(
+        "/series/new",
+        data={
+            "name": " The Expanse ",
+            "description": " Space politics ",
+            "status": "active",
+            "wants_to_continue": "yes",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/series?message=Series+created%3A+The+Expanse"
+    with session_factory() as db:
+        series = db.scalars(select(Series).where(Series.name == "The Expanse")).one()
+        assert series.description == "Space politics"
+        assert series.status == "active"
+        assert series.wants_to_continue == "yes"
+
+    follow_response = client.get(response.headers["location"])
+    assert follow_response.status_code == 200
+    assert "Series created: The Expanse" in follow_response.text
+
+
+def test_edit_series_form_renders_existing_values_for_admin() -> None:
+    client, session_factory = make_series_client()
+    login_as_admin(client)
+    series = add_series(
+        session_factory,
+        name="Old Kingdom",
+        status="paused",
+        wants_to_continue="unknown",
+        description="Necromancer bells",
+    )
+
+    response = client.get(f"/series/{series.id}/edit")
+
+    assert response.status_code == 200
+    assert "Edit Series" in response.text
+    assert "Old Kingdom" in response.text
+    assert "Necromancer bells" in response.text
+    assert 'value="paused" selected' in response.text
+
+
+def test_update_series_validates_and_preserves_submitted_values() -> None:
+    client, session_factory = make_series_client()
+    login_as_admin(client)
+    series = add_series(session_factory, name="Original", status="active")
+
+    response = client.post(
+        f"/series/{series.id}/edit",
+        data={
+            "name": "",
+            "description": "Keep me visible",
+            "status": "invalid",
+            "wants_to_continue": "no",
+        },
+    )
+
+    assert response.status_code == 400
+    assert "Series name is required." in response.text
+    assert "Status is invalid." in response.text
+    assert "Keep me visible" in response.text
+
+
+def test_update_series_persists_without_replacing_created_at() -> None:
+    client, session_factory = make_series_client()
+    login_as_admin(client)
+    series = add_series(session_factory, name="Before", status="active", wants_to_continue="yes")
+    with session_factory() as db:
+        original_created_at = db.get(Series, series.id).created_at  # type: ignore[union-attr]
+
+    response = client.post(
+        f"/series/{series.id}/edit",
+        data={
+            "name": "After",
+            "description": "Updated description",
+            "status": "abandoned",
+            "wants_to_continue": "no",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/series?message=Series+updated%3A+After"
+    with session_factory() as db:
+        updated = db.get(Series, series.id)
+        assert updated is not None
+        assert updated.name == "After"
+        assert updated.description == "Updated description"
+        assert updated.status == "abandoned"
+        assert updated.wants_to_continue == "no"
+        assert updated.created_at == original_created_at
+
+
+def test_edit_missing_series_redirects_with_error_message() -> None:
+    client, _ = make_series_client()
+    login_as_admin(client)
+
+    response = client.get("/series/999/edit", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/series?error=Series+not+found."

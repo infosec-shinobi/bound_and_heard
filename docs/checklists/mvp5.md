@@ -31,13 +31,13 @@ Derived from `docs/ROADMAP.md` MVP 5 - Series Tracking, with continuity from MVP
 
 ## Chunk 3 - Create And Edit Series
 
-- [ ] Add protected create series form
-- [ ] Add protected edit series form
-- [ ] Validate required series name
-- [ ] Support status values: active, paused, completed, abandoned, unknown
-- [ ] Track whether the user wants to continue the series
-- [ ] Preserve created_at and updated_at behavior
-- [ ] Return clear success/error messages
+- [x] Add protected create series form
+- [x] Add protected edit series form
+- [x] Validate required series name
+- [x] Support status values: active, paused, completed, abandoned, unknown
+- [x] Track whether the user wants to continue the series
+- [x] Preserve created_at and updated_at behavior
+- [x] Return clear success/error messages
 
 ## Chunk 4 - Series Detail Page
 

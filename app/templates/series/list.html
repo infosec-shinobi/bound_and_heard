@@ -36,6 +36,13 @@
     </div>
   </form>
 
+  {% if message %}
+    <div class="alert alert-success" role="status">{{ message }}</div>
+  {% endif %}
+  {% if error %}
+    <div class="alert alert-danger" role="alert">{{ error }}</div>
+  {% endif %}
+
   {% if series_items %}
     <div class="card">
       <div class="table-responsive">
@@ -55,6 +62,7 @@
                 <td>
                   <a class="fw-semibold app-link" href="/series/{{ item.series.id }}">{{ item.series.name }}</a>
                   {% if item.series.description %}<div class="small app-muted">{{ item.series.description }}</div>{% endif %}
+                  {{ protected_link('Edit', '/series/' ~ item.series.id ~ '/edit', can_write, write_disabled_reason, 'btn btn-sm btn-outline-primary mt-2') }}
                 </td>
                 <td>{{ item.series.status.replace('_', ' ').title() }}</td>
                 <td>{{ item.series.wants_to_continue.replace('_', ' ').title() }}</td>

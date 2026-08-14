@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <div class="row justify-content-center">
+    <div class="col-xl-8">
+      <div class="d-flex align-items-center justify-content-between gap-3 mb-4">
+        <div>
+          <p class="app-kicker small fw-semibold mb-2">Manual series</p>
+          <h1 class="display-6 mb-1">{{ heading }}</h1>
+          <p class="app-muted mb-0">{{ description }}</p>
+        </div>
+        <a class="btn btn-outline-secondary" href="{{ cancel_href }}">Cancel</a>
+      </div>
+
+      {% if errors %}
+        <div class="alert alert-danger" role="alert">
+          <p class="fw-semibold mb-2">Fix these fields:</p>
+          <ul class="mb-0">
+            {% for error in errors %}<li>{{ error }}</li>{% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+
+      <form class="card" method="post" action="{{ form_action }}">
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label" for="name">Series name</label>
+              <input class="form-control" id="name" name="name" value="{{ form.get('name', '') }}" required autofocus>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label" for="status">Status</label>
+              <select class="form-select" id="status" name="status">
+                {% for value in series_statuses %}
+                  <option value="{{ value }}" {% if form.get('status', 'unknown') == value %}selected{% endif %}>{{ value.replace('_', ' ').title() }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="wants_to_continue">Want to continue?</label>
+              <select class="form-select" id="wants_to_continue" name="wants_to_continue">
+                {% for value in continuation_intents %}
+                  <option value="{{ value }}" {% if form.get('wants_to_continue', 'unknown') == value %}selected{% endif %}>{{ value.replace('_', ' ').title() }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="col-12">
+              <label class="form-label" for="description">Description</label>
+              <textarea class="form-control" id="description" name="description" rows="5">{{ form.get('description', '') }}</textarea>
+            </div>
+          </div>
+        </div>
+        <div class="card-footer d-flex justify-content-end gap-2">
+          <a class="btn btn-outline-secondary" href="{{ cancel_href }}">Cancel</a>
+          <button class="btn btn-primary" type="submit">{{ submit_label }}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}
