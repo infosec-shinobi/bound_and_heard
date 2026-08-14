@@ -190,6 +190,10 @@ Show trends in reading and listening behavior and generate fun recap pages.
 - Pages read, when known
 - Partial progress summaries
 - Re-read and re-listen counts derived from completed events
+- Prior read/listen entry workflow for books consumed before tracking began
+- Lifetime enjoyed time, separate from current-loan progress
+- Repeat-read/listen heuristics using title timeline and duration signals when available
+- Clear distinction between Libby "picked up" session count and true completed read/listen count
 - Series activity
 - Quarterly recap page
 - Yearly recap page

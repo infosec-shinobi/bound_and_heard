@@ -141,22 +141,15 @@ Derived from `docs/ROADMAP.md` MVP 4 - Libby Progress Scraping, with continuity 
 
 ## MVP 4 Done Criteria
 
-- [ ] User can authenticate Libby in a persistent local browser profile
-- [ ] User can create a progress scrape job for eligible imported Libby books
-- [ ] Scrape jobs create per-book items and process them independently
-- [ ] The scraper waits 5-15 seconds between pages
-- [ ] Unchanged books are skipped using latest borrow timestamp logic
-- [ ] Raw scrape snapshots are preserved locally
-- [ ] Partial progress is captured where Libby exposes it
-- [ ] Approximate completion dates are inferred only when safe
-- [ ] Completion status updates respect manual corrections
-- [ ] Failed book scrape items do not fail the entire job
-- [ ] Failed items can be retried or skipped
-- [ ] Basic tests pass
-
-## Future MVP - Read Count And Lifetime Enjoyment
-
-- [ ] Let users manually record prior reads/listens so `read_count` is useful beyond current imported/scraped state
-- [ ] Decide how to distinguish Libby "picked up" session count from true completed read/listen count
-- [ ] Investigate title timeline + duration heuristics for repeat reads, e.g. Storm Front / Libby title ID 220325 where journey duration can exceed title duration
-- [ ] Surface lifetime enjoyed time separately from current-loan progress when repeat-read detection is available
+- [x] User can authenticate Libby in a persistent local browser profile
+- [x] User can create a progress scrape job for eligible imported Libby books
+- [x] Scrape jobs create per-book items and process them independently
+- [x] The scraper waits 5-15 seconds between pages
+- [x] Unchanged books are skipped using latest borrow timestamp logic
+- [x] Raw scrape snapshots are preserved locally
+- [x] Partial progress is captured where Libby exposes it
+- [x] Approximate completion dates are inferred only when safe
+- [x] Completion status updates respect manual corrections
+- [x] Failed book scrape items do not fail the entire job
+- [x] Failed items can be retried or skipped
+- [x] Basic tests pass
