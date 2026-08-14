@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import date
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Form, Query, Request, status as http_status
@@ -29,6 +30,21 @@ class SeriesListItem:
     next_unread_author: str | None
 
 
+@dataclass(frozen=True)
+class SeriesDetailEntry:
+    entry: SeriesBook
+    title: str
+    author: str | None
+    entry_type: str
+    book_format: str | None
+    status: str
+    completed_on: date | None
+    progress_percent: float | None
+    source: str | None
+    is_completed: bool
+    is_next_unread: bool
+
+
 def is_series_entry_completed(entry: SeriesBook) -> bool:
     if entry.book is None:
         return False
@@ -49,6 +65,26 @@ def series_entry_author(entry: SeriesBook) -> str | None:
     return entry.planned_author_name
 
 
+def series_entry_format(entry: SeriesBook) -> str | None:
+    if entry.book is not None:
+        return entry.book.format
+    return entry.planned_format
+
+
+def series_entry_progress(entry: SeriesBook) -> float | None:
+    if entry.book is None:
+        return None
+    if entry.book.progress and entry.book.progress.progress_percent is not None:
+        return entry.book.progress.progress_percent
+    return entry.book.manual_progress_percent
+
+
+def series_entry_source(entry: SeriesBook) -> str | None:
+    if entry.book is None:
+        return "planned"
+    return entry.book.metadata_source
+
+
 def series_entry_sort_key(entry: SeriesBook) -> tuple[int, float, str]:
     if entry.position is None:
         return (1, 0, series_entry_title(entry).casefold())
@@ -67,6 +103,32 @@ def build_series_list_item(series: Series) -> SeriesListItem:
         next_unread_title=series_entry_title(next_unread) if next_unread else None,
         next_unread_author=series_entry_author(next_unread) if next_unread else None,
     )
+
+
+def build_series_detail_entries(series: Series) -> list[SeriesDetailEntry]:
+    entries = sorted(series.books, key=series_entry_sort_key)
+    next_unread = next((entry for entry in entries if not is_series_entry_completed(entry)), None)
+    detail_entries: list[SeriesDetailEntry] = []
+
+    for entry in entries:
+        is_planned = entry.book is None
+        detail_entries.append(
+            SeriesDetailEntry(
+                entry=entry,
+                title=series_entry_title(entry),
+                author=series_entry_author(entry),
+                entry_type="planned" if is_planned else "owned",
+                book_format=series_entry_format(entry),
+                status="planned" if is_planned else entry.book.status,
+                completed_on=None if is_planned else entry.book.completed_on,
+                progress_percent=series_entry_progress(entry),
+                source=series_entry_source(entry),
+                is_completed=is_series_entry_completed(entry),
+                is_next_unread=entry is next_unread,
+            )
+        )
+
+    return detail_entries
 
 
 def clean_optional(value: str | None) -> str | None:
@@ -116,6 +178,16 @@ def series_redirect(**params: str) -> RedirectResponse:
     return RedirectResponse(
         f"/series?{urlencode(params)}",
         status_code=http_status.HTTP_303_SEE_OTHER,
+    )
+
+
+def get_local_series_statement(series_id: int):
+    return (
+        select(Series)
+        .options(
+            joinedload(Series.books).joinedload(SeriesBook.book).joinedload(Book.progress),
+        )
+        .where(Series.id == series_id, Series.user_id == DEFAULT_LOCAL_USER_ID)
     )
 
 
@@ -321,3 +393,37 @@ async def update_series(
     series.wants_to_continue = wants_to_continue
     db.commit()
     return series_redirect(message=f"Series updated: {series.name}")
+
+
+@router.get("/{series_id}", response_class=HTMLResponse)
+async def series_detail(
+    series_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    series = db.scalars(get_local_series_statement(series_id)).unique().one_or_none()
+    if series is None:
+        return templates.TemplateResponse(
+            request,
+            "series/not_found.html",
+            template_context(request, page_title="Series Not Found"),
+            status_code=http_status.HTTP_404_NOT_FOUND,
+        )
+
+    entries = build_series_detail_entries(series)
+    completed_count = sum(1 for entry in entries if entry.is_completed)
+    next_unread = next((entry for entry in entries if entry.is_next_unread), None)
+
+    return templates.TemplateResponse(
+        request,
+        "series/detail.html",
+        template_context(
+            request,
+            page_title=series.name,
+            series=series,
+            entries=entries,
+            completed_count=completed_count,
+            total_count=len(entries),
+            next_unread=next_unread,
+        ),
+    )

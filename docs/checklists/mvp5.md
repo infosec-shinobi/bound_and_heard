@@ -41,13 +41,13 @@ Derived from `docs/ROADMAP.md` MVP 5 - Series Tracking, with continuity from MVP
 
 ## Chunk 4 - Series Detail Page
 
-- [ ] Add series detail route
-- [ ] Show name, description, status, continuation intent, and progress summary
-- [ ] Show assigned existing books in series order
-- [ ] Show planned/unowned books in series order
-- [ ] Show book format, status, completion date, progress, and source context where useful
-- [ ] Link existing books to book detail pages
-- [ ] Highlight next unread book
+- [x] Add series detail route
+- [x] Show name, description, status, continuation intent, and progress summary
+- [x] Show assigned existing books in series order
+- [x] Show planned/unowned books in series order
+- [x] Show book format, status, completion date, progress, and source context where useful
+- [x] Link existing books to book detail pages
+- [x] Highlight next unread book
 
 ## Chunk 5 - Assign Existing Books To Series
 

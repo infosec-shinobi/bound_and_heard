@@ -1,4 +1,5 @@
 from collections.abc import Generator
+from datetime import date
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
@@ -72,15 +73,22 @@ def add_book(
     *,
     title: str,
     author: str | None,
+    book_format: str = "ebook",
     status: str = "started",
+    completed_on: date | None = None,
+    manual_progress_percent: float | None = None,
+    metadata_source: str | None = None,
 ) -> Book:
     with session_factory() as db:
         book = Book(
             user_id=DEFAULT_LOCAL_USER_ID,
             title=title,
             primary_author_name=author,
-            format="ebook",
+            format=book_format,
             status=status,
+            completed_on=completed_on,
+            manual_progress_percent=manual_progress_percent,
+            metadata_source=metadata_source,
         )
         db.add(book)
         db.commit()
@@ -96,6 +104,7 @@ def add_series_entry(
     book_id: int | None = None,
     planned_title: str | None = None,
     planned_author_name: str | None = None,
+    planned_format: str = "ebook",
 ) -> None:
     with session_factory() as db:
         db.add(
@@ -105,7 +114,7 @@ def add_series_entry(
                 position=position,
                 planned_title=planned_title,
                 planned_author_name=planned_author_name,
-                planned_format="ebook" if book_id is None else None,
+                planned_format=planned_format if book_id is None else None,
             )
         )
         db.commit()
@@ -350,3 +359,120 @@ def test_edit_missing_series_redirects_with_error_message() -> None:
 
     assert response.status_code == 303
     assert response.headers["location"] == "/series?error=Series+not+found."
+
+
+def test_series_detail_returns_not_found_for_missing_series() -> None:
+    client, _ = make_series_client()
+
+    response = client.get("/series/999")
+
+    assert response.status_code == 404
+    assert "Series not found" in response.text
+    assert "Back to Series" in response.text
+
+
+def test_series_detail_shows_empty_entries_state() -> None:
+    client, session_factory = make_series_client(admin_password=None)
+    series = add_series(
+        session_factory,
+        name="Empty Series",
+        status="unknown",
+        wants_to_continue="unknown",
+        description="No books yet",
+    )
+
+    response = client.get(f"/series/{series.id}")
+
+    assert response.status_code == 200
+    assert "Empty Series" in response.text
+    assert "No books or planned entries have been added" in response.text
+    assert "0 / 0" in response.text
+    assert "Read-only mode" in response.text
+
+
+def test_series_detail_shows_metadata_ordering_and_next_unread() -> None:
+    client, session_factory = make_series_client()
+    series = add_series(
+        session_factory,
+        name="The Locked Tomb",
+        status="active",
+        wants_to_continue="yes",
+        description="Necromancers in space",
+    )
+    first = add_book(
+        session_factory,
+        title="Gideon the Ninth",
+        author="Tamsyn Muir",
+        book_format="audiobook",
+        status="completed",
+        completed_on=date(2026, 1, 3),
+        metadata_source="libby",
+    )
+    second = add_book(
+        session_factory,
+        title="Harrow the Ninth",
+        author="Tamsyn Muir",
+        book_format="ebook",
+        status="started",
+        manual_progress_percent=42,
+        metadata_source="manual",
+    )
+    add_series_entry(session_factory, series.id, position=2, book_id=second.id)
+    add_series_entry(session_factory, series.id, position=1, book_id=first.id)
+    add_series_entry(
+        session_factory,
+        series.id,
+        position=3,
+        planned_title="Nona the Ninth",
+        planned_author_name="Tamsyn Muir",
+        planned_format="physical",
+    )
+
+    response = client.get(f"/series/{series.id}")
+
+    assert response.status_code == 200
+    assert "The Locked Tomb" in response.text
+    assert "Necromancers in space" in response.text
+    assert "Active" in response.text
+    assert "Yes" in response.text
+    assert "1 / 3" in response.text
+    assert "Harrow the Ninth" in response.text
+    assert "Next unread" in response.text
+    assert f'href="/books/{first.id}"' in response.text
+    assert f'href="/books/{second.id}"' in response.text
+    assert "Audiobook" in response.text
+    assert "2026-01-03" in response.text
+    assert "42%" in response.text
+    assert "Libby" in response.text
+    assert "Manual" in response.text
+    assert "Nona the Ninth" in response.text
+    assert "Physical" in response.text
+    table_html = response.text[response.text.find("Books In Series") :]
+    assert table_html.find("Gideon the Ninth") < table_html.find("Harrow the Ninth")
+    assert table_html.find("Harrow the Ninth") < table_html.find("Nona the Ninth")
+
+
+def test_series_detail_treats_progress_100_as_completed_before_next_unread() -> None:
+    client, session_factory = make_series_client()
+    series = add_series(session_factory, name="Progress Detail")
+    first = add_book(session_factory, title="Fully Scraped", author="Author", status="started")
+    second = add_book(session_factory, title="Actual Next", author="Author", status="want_to_read")
+    add_series_entry(session_factory, series.id, position=1, book_id=first.id)
+    add_series_entry(session_factory, series.id, position=2, book_id=second.id)
+    with session_factory() as db:
+        db.add(
+            BookProgress(
+                user_id=DEFAULT_LOCAL_USER_ID,
+                book_id=first.id,
+                source="scraped",
+                progress_percent=100,
+            )
+        )
+        db.commit()
+
+    response = client.get(f"/series/{series.id}")
+
+    assert response.status_code == 200
+    assert "1 / 2" in response.text
+    assert "Actual Next" in response.text
+    assert "Fully Scraped" in response.text

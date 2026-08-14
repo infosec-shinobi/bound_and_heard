@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% from "components/actions.html" import protected_link %}
+
+{% block content %}
+  <div class="d-flex flex-column flex-lg-row align-items-lg-start justify-content-between gap-3 mb-4">
+    <div>
+      <p class="app-kicker small fw-semibold mb-2">Series detail</p>
+      <h1 class="display-6 mb-2">{{ series.name }}</h1>
+      {% if series.description %}<p class="lead app-muted mb-0">{{ series.description }}</p>{% endif %}
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      {{ protected_link('Edit', '/series/' ~ series.id ~ '/edit', can_write, write_disabled_reason, 'btn btn-outline-primary') }}
+      <a class="btn btn-outline-secondary" href="/series">Back to Series</a>
+    </div>
+  </div>
+
+  <div class="row g-4 mb-4">
+    <div class="col-lg-7">
+      <section class="card h-100">
+        <div class="card-body">
+          <h2 class="h5 mb-3">Series State</h2>
+          <dl class="row mb-0 app-detail-list">
+            <dt class="col-sm-4">Status</dt>
+            <dd class="col-sm-8">{{ series.status.replace('_', ' ').title() }}</dd>
+            <dt class="col-sm-4">Want To Continue</dt>
+            <dd class="col-sm-8">{{ series.wants_to_continue.replace('_', ' ').title() }}</dd>
+            <dt class="col-sm-4">Progress</dt>
+            <dd class="col-sm-8">{{ completed_count }} / {{ total_count }}</dd>
+            <dt class="col-sm-4">Next Unread</dt>
+            <dd class="col-sm-8">
+              {% if next_unread %}
+                {{ next_unread.title }}{% if next_unread.author %}<div class="small app-muted">{{ next_unread.author }}</div>{% endif %}
+              {% else %}
+                <span class="app-muted">None</span>
+              {% endif %}
+            </dd>
+          </dl>
+        </div>
+      </section>
+    </div>
+    <div class="col-lg-5">
+      <section class="card h-100">
+        <div class="card-body">
+          <h2 class="h5 mb-3">What Counts Here</h2>
+          <p class="app-muted mb-0">Existing books count as complete when their status is Completed or their progress is 100%. Planned books remain unread until linked to a book later.</p>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <section class="card">
+    <div class="card-body">
+      <h2 class="h5 mb-3">Books In Series</h2>
+      {% if entries %}
+        <div class="table-responsive">
+          <table class="table table-dark table-hover align-middle mb-0 app-table">
+            <thead>
+              <tr>
+                <th scope="col">Order</th>
+                <th scope="col">Title</th>
+                <th scope="col">Type</th>
+                <th scope="col">Format</th>
+                <th scope="col">Status</th>
+                <th scope="col">Completed</th>
+                <th scope="col">Progress</th>
+                <th scope="col">Source</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in entries %}
+                <tr {% if item.is_next_unread %}class="table-primary"{% endif %}>
+                  <td>{% if item.entry.position is not none %}{{ '%g'|format(item.entry.position) }}{% else %}<span class="app-muted">Unknown</span>{% endif %}</td>
+                  <td>
+                    {% if item.entry.book %}
+                      <a class="fw-semibold app-link" href="/books/{{ item.entry.book.id }}">{{ item.title }}</a>
+                    {% else %}
+                      <span class="fw-semibold">{{ item.title }}</span>
+                    {% endif %}
+                    {% if item.author %}<div class="small app-muted">{{ item.author }}</div>{% endif %}
+                    {% if item.is_next_unread %}<span class="badge app-badge-success mt-1">Next unread</span>{% endif %}
+                  </td>
+                  <td>{{ item.entry_type.title() }}</td>
+                  <td>{% if item.book_format %}{{ item.book_format.replace('_', ' ').title() }}{% else %}<span class="app-muted">Unknown</span>{% endif %}</td>
+                  <td>{{ item.status.replace('_', ' ').title() }}</td>
+                  <td>{% if item.completed_on %}{{ item.completed_on }}{% elif item.is_completed %}Complete{% else %}<span class="app-muted">Not complete</span>{% endif %}</td>
+                  <td>{% if item.progress_percent is not none %}{{ '%.0f'|format(item.progress_percent) }}%{% else %}<span class="app-muted">Unknown</span>{% endif %}</td>
+                  <td>{% if item.source %}{{ item.source.replace('_', ' ').title() }}{% else %}<span class="app-muted">Missing</span>{% endif %}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="app-muted mb-0">No books or planned entries have been added to this series yet.</p>
+      {% endif %}
+    </div>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    document.querySelectorAll('[data-bs-toggle="popover"]').forEach((element) => {
+      new bootstrap.Popover(element);
+    });
+  </script>
+{% endblock %}
