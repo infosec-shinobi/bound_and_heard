@@ -60,12 +60,12 @@ Derived from `docs/ROADMAP.md` MVP 5 - Series Tracking, with continuity from MVP
 
 ## Chunk 6 - Planned Series Books
 
-- [ ] Add protected action to create planned series entries without a local book record
-- [ ] Store planned title, author, format, order/position, and notes if useful
-- [ ] Allow editing planned entries
-- [ ] Allow removing planned entries
-- [ ] Allow converting a planned entry to an existing book assignment when the book is added/imported later
-- [ ] Keep planned entries separate from real book records until explicitly linked
+- [x] Add protected action to create planned series entries without a local book record
+- [x] Store planned title, author, format, order/position, and notes if useful
+- [x] Allow editing planned entries
+- [x] Allow removing planned entries
+- [x] Allow converting a planned entry to an existing book assignment when the book is added/imported later
+- [x] Keep planned entries separate from real book records until explicitly linked
 
 ## Chunk 7 - Ordering And Position UX
 

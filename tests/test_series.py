@@ -643,3 +643,203 @@ def test_remove_existing_book_from_series_preserves_book_history_and_progress() 
         progress = db.scalars(select(BookProgress).where(BookProgress.book_id == book.id)).one()
         assert progress.progress_percent == 55
         assert db.get(Book, book.id).metadata_source == "libby"  # type: ignore[union-attr]
+
+
+def test_series_detail_shows_add_planned_book_form_for_admin() -> None:
+    client, session_factory = make_series_client()
+    login_as_admin(client)
+    series = add_series(session_factory, name="Planned UI")
+
+    response = client.get(f"/series/{series.id}")
+
+    assert response.status_code == 200
+    assert "Add Planned Book" in response.text
+    assert "Add Planned" in response.text
+    assert "Audiobook" in response.text
+
+
+def test_add_planned_series_entry_requires_admin_login() -> None:
+    client, session_factory = make_series_client()
+    series = add_series(session_factory, name="Protected Planned")
+
+    response = client.post(
+        f"/series/{series.id}/planned/add",
+        data={"planned_title": "Future Book", "planned_format": "ebook", "position": "1"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 403
+    assert "Admin login is required for write actions." in response.text
+
+
+def test_add_planned_series_entry_persists_without_book_record() -> None:
+    client, session_factory = make_series_client()
+    login_as_admin(client)
+    series = add_series(session_factory, name="Planned Add")
+
+    response = client.post(
+        f"/series/{series.id}/planned/add",
+        data={
+            "planned_title": " Future Book ",
+            "planned_author_name": " Future Author ",
+            "planned_format": "physical",
+            "position": "3.5",
+            "notes": " Buy later ",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/series/{series.id}?message=Added+planned+book%3A+Future+Book"
+    with session_factory() as db:
+        entry = db.scalars(select(SeriesBook).where(SeriesBook.series_id == series.id)).one()
+        assert entry.book_id is None
+        assert entry.planned_title == "Future Book"
+        assert entry.planned_author_name == "Future Author"
+        assert entry.planned_format == "physical"
+        assert entry.position == 3.5
+        assert entry.notes == "Buy later"
+
+
+def test_add_planned_series_entry_validates_title_format_and_position() -> None:
+    client, session_factory = make_series_client()
+    login_as_admin(client)
+    series = add_series(session_factory, name="Planned Validation")
+
+    response = client.post(
+        f"/series/{series.id}/planned/add",
+        data={"planned_title": " ", "planned_format": "scroll", "position": "soon"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/series/{series.id}?error=Planned+title+is+required."
+    with session_factory() as db:
+        assert db.scalars(select(SeriesBook).where(SeriesBook.series_id == series.id)).all() == []
+
+
+def test_update_planned_series_entry_changes_metadata_and_order() -> None:
+    client, session_factory = make_series_client()
+    login_as_admin(client)
+    series = add_series(session_factory, name="Planned Edit")
+    add_series_entry(
+        session_factory,
+        series.id,
+        position=5,
+        planned_title="Original Planned",
+        planned_author_name="Original Author",
+        planned_format="ebook",
+    )
+    with session_factory() as db:
+        entry = db.scalars(select(SeriesBook).where(SeriesBook.series_id == series.id)).one()
+
+    response = client.post(
+        f"/series/{series.id}/planned/{entry.id}/edit",
+        data={
+            "planned_title": "Updated Planned",
+            "planned_author_name": "Updated Author",
+            "planned_format": "audiobook",
+            "position": "1.25",
+            "notes": "Updated note",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/series/{series.id}?message=Updated+planned+book%3A+Updated+Planned"
+    with session_factory() as db:
+        updated = db.get(SeriesBook, entry.id)
+        assert updated is not None
+        assert updated.book_id is None
+        assert updated.planned_title == "Updated Planned"
+        assert updated.planned_author_name == "Updated Author"
+        assert updated.planned_format == "audiobook"
+        assert updated.position == 1.25
+        assert updated.notes == "Updated note"
+
+
+def test_remove_planned_series_entry_deletes_only_planned_entry() -> None:
+    client, session_factory = make_series_client()
+    login_as_admin(client)
+    series = add_series(session_factory, name="Planned Remove")
+    book = add_book(session_factory, title="Owned Book", author="Author")
+    add_series_entry(session_factory, series.id, position=1, book_id=book.id)
+    add_series_entry(session_factory, series.id, position=2, planned_title="Remove Me")
+    with session_factory() as db:
+        planned = db.scalars(
+            select(SeriesBook).where(SeriesBook.series_id == series.id, SeriesBook.book_id.is_(None))
+        ).one()
+
+    response = client.post(
+        f"/series/{series.id}/planned/{planned.id}/remove",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/series/{series.id}?message=Removed+planned+book+from+this+series."
+    with session_factory() as db:
+        entries = db.scalars(select(SeriesBook).where(SeriesBook.series_id == series.id)).all()
+        assert len(entries) == 1
+        assert entries[0].book_id == book.id
+
+
+def test_convert_planned_entry_to_existing_book_assignment() -> None:
+    client, session_factory = make_series_client()
+    login_as_admin(client)
+    series = add_series(session_factory, name="Planned Convert")
+    book = add_book(session_factory, title="Now Owned", author="Author", metadata_source="manual")
+    add_series_entry(
+        session_factory,
+        series.id,
+        position=4,
+        planned_title="Planned Placeholder",
+        planned_author_name="Placeholder Author",
+        planned_format="ebook",
+    )
+    with session_factory() as db:
+        planned = db.scalars(select(SeriesBook).where(SeriesBook.series_id == series.id)).one()
+
+    response = client.post(
+        f"/series/{series.id}/planned/{planned.id}/convert",
+        data={"book_id": str(book.id)},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/series/{series.id}?message=Converted+planned+entry+to+Now+Owned."
+    with session_factory() as db:
+        converted = db.get(SeriesBook, planned.id)
+        assert converted is not None
+        assert converted.book_id == book.id
+        assert converted.position == 4
+        assert converted.planned_title is None
+        assert converted.planned_author_name is None
+        assert converted.planned_format is None
+        assert db.get(Book, book.id) is not None
+
+
+def test_convert_planned_entry_rejects_duplicate_existing_book() -> None:
+    client, session_factory = make_series_client()
+    login_as_admin(client)
+    series = add_series(session_factory, name="Duplicate Convert")
+    book = add_book(session_factory, title="Already Assigned", author="Author")
+    add_series_entry(session_factory, series.id, position=1, book_id=book.id)
+    add_series_entry(session_factory, series.id, position=2, planned_title="Duplicate Placeholder")
+    with session_factory() as db:
+        planned = db.scalars(
+            select(SeriesBook).where(SeriesBook.series_id == series.id, SeriesBook.book_id.is_(None))
+        ).one()
+
+    response = client.post(
+        f"/series/{series.id}/planned/{planned.id}/convert",
+        data={"book_id": str(book.id)},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/series/{series.id}?error=Already+Assigned+is+already+in+this+series."
+    with session_factory() as db:
+        unchanged = db.get(SeriesBook, planned.id)
+        assert unchanged is not None
+        assert unchanged.book_id is None
+        assert unchanged.planned_title == "Duplicate Placeholder"

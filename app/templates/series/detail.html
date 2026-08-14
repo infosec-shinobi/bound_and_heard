@@ -93,6 +93,45 @@
     </div>
   </section>
 
+  <section class="card mb-4">
+    <div class="card-body">
+      <h2 class="h5 mb-3">Add Planned Book</h2>
+      {% if can_write %}
+        <form class="row g-3" method="post" action="/series/{{ series.id }}/planned/add">
+          <div class="col-lg-5">
+            <label class="form-label" for="planned_title">Title</label>
+            <input class="form-control" id="planned_title" name="planned_title" required>
+          </div>
+          <div class="col-lg-3">
+            <label class="form-label" for="planned_author_name">Author</label>
+            <input class="form-control" id="planned_author_name" name="planned_author_name">
+          </div>
+          <div class="col-md-4 col-lg-2">
+            <label class="form-label" for="planned_format">Format</label>
+            <select class="form-select" id="planned_format" name="planned_format">
+              {% for value in series_book_formats %}
+                <option value="{{ value }}">{{ value.replace('_', ' ').title() }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-4 col-lg-2">
+            <label class="form-label" for="planned_position">Position</label>
+            <input class="form-control" id="planned_position" name="position" type="number" step="0.01" placeholder="1">
+          </div>
+          <div class="col-lg-10">
+            <label class="form-label" for="planned_notes">Notes</label>
+            <input class="form-control" id="planned_notes" name="notes" placeholder="Optional note">
+          </div>
+          <div class="col-lg-2 d-grid align-items-end">
+            <button class="btn btn-primary" type="submit">Add Planned</button>
+          </div>
+        </form>
+      {% else %}
+        <p class="app-muted mb-0">{{ write_disabled_reason }}</p>
+      {% endif %}
+    </div>
+  </section>
+
   <section class="card">
     <div class="card-body">
       <h2 class="h5 mb-3">Books In Series</h2>
@@ -123,6 +162,7 @@
                       <span class="fw-semibold">{{ item.title }}</span>
                     {% endif %}
                     {% if item.author %}<div class="small app-muted">{{ item.author }}</div>{% endif %}
+                    {% if item.entry.notes %}<div class="small app-muted">{{ item.entry.notes }}</div>{% endif %}
                     {% if item.is_next_unread %}<span class="badge app-badge-success mt-1">Next unread</span>{% endif %}
                   </td>
                   <td>{{ item.entry_type.title() }}</td>
@@ -145,7 +185,48 @@
                         <span class="app-muted">Admin only</span>
                       {% endif %}
                     {% else %}
-                      <span class="app-muted">Planned entry</span>
+                      {% if can_write %}
+                        <form class="row g-2 mb-2" method="post" action="/series/{{ series.id }}/planned/{{ item.entry.id }}/edit">
+                          <div class="col-12">
+                            <input class="form-control form-control-sm" name="planned_title" value="{{ item.entry.planned_title or '' }}" aria-label="Planned title for {{ item.title }}" required>
+                          </div>
+                          <div class="col-12">
+                            <input class="form-control form-control-sm" name="planned_author_name" value="{{ item.entry.planned_author_name or '' }}" aria-label="Planned author for {{ item.title }}" placeholder="Author">
+                          </div>
+                          <div class="col-6">
+                            <select class="form-select form-select-sm" name="planned_format" aria-label="Planned format for {{ item.title }}">
+                              {% for value in series_book_formats %}
+                                <option value="{{ value }}" {% if item.entry.planned_format == value %}selected{% endif %}>{{ value.replace('_', ' ').title() }}</option>
+                              {% endfor %}
+                            </select>
+                          </div>
+                          <div class="col-6">
+                            <input class="form-control form-control-sm" name="position" type="number" step="0.01" value="{% if item.entry.position is not none %}{{ '%g'|format(item.entry.position) }}{% endif %}" aria-label="Series position for {{ item.title }}">
+                          </div>
+                          <div class="col-12">
+                            <input class="form-control form-control-sm" name="notes" value="{{ item.entry.notes or '' }}" aria-label="Notes for {{ item.title }}" placeholder="Notes">
+                          </div>
+                          <div class="col-12">
+                            <button class="btn btn-sm btn-outline-primary" type="submit">Save Planned</button>
+                          </div>
+                        </form>
+                        <form class="mb-2" method="post" action="/series/{{ series.id }}/planned/{{ item.entry.id }}/convert">
+                          <label class="form-label small" for="convert_book_{{ item.entry.id }}">Convert to book</label>
+                          <div class="d-flex gap-2">
+                            <select class="form-select form-select-sm" id="convert_book_{{ item.entry.id }}" name="book_id" required>
+                              {% for book in selectable_books %}
+                                <option value="{{ book.id }}">{{ book_options[book.id] }}</option>
+                              {% endfor %}
+                            </select>
+                            <button class="btn btn-sm btn-outline-success" type="submit" {% if not selectable_books %}disabled{% endif %}>Convert</button>
+                          </div>
+                        </form>
+                        <form method="post" action="/series/{{ series.id }}/planned/{{ item.entry.id }}/remove" onsubmit="return confirm('Remove this planned book from the series?');">
+                          <button class="btn btn-sm btn-outline-danger" type="submit">Remove Planned</button>
+                        </form>
+                      {% else %}
+                        <span class="app-muted">Planned entry</span>
+                      {% endif %}
                     {% endif %}
                   </td>
                 </tr>

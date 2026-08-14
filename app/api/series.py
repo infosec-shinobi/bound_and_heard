@@ -19,6 +19,7 @@ router = APIRouter(prefix="/series", tags=["series"])
 
 SERIES_STATUSES = ["active", "paused", "completed", "abandoned", "unknown"]
 CONTINUATION_INTENTS = ["yes", "no", "unknown"]
+SERIES_BOOK_FORMATS = ["ebook", "audiobook", "physical", "unknown"]
 
 
 @dataclass(frozen=True)
@@ -185,6 +186,21 @@ def parse_optional_position(value: str | None, errors: list[str]) -> float | Non
         return None
 
 
+def validate_planned_entry_form(
+    title: str | None,
+    planned_format: str,
+    position: str | None,
+) -> tuple[str | None, float | None, list[str]]:
+    errors: list[str] = []
+    clean_title = clean_optional(title)
+    if clean_title is None:
+        errors.append("Planned title is required.")
+    if planned_format not in SERIES_BOOK_FORMATS:
+        errors.append("Format is invalid.")
+    parsed_position = parse_optional_position(position, errors)
+    return clean_title, parsed_position, errors
+
+
 def series_redirect(**params: str) -> RedirectResponse:
     return RedirectResponse(
         f"/series?{urlencode(params)}",
@@ -217,6 +233,20 @@ def book_option_label(book: Book) -> str:
     parts.append(book.format.replace("_", " ").title())
     parts.append((book.metadata_source or "missing source").replace("_", " ").title())
     return " - ".join(parts)
+
+
+def get_local_series(db: Session, series_id: int) -> Series | None:
+    series = db.get(Series, series_id)
+    if series is None or series.user_id != DEFAULT_LOCAL_USER_ID:
+        return None
+    return series
+
+
+def get_series_entry(db: Session, series: Series, entry_id: int) -> SeriesBook | None:
+    entry = db.get(SeriesBook, entry_id)
+    if entry is None or entry.series_id != series.id:
+        return None
+    return entry
 
 
 def selectable_books_statement(book_q: str | None):
@@ -516,6 +546,126 @@ async def remove_existing_book_from_series(
     return series_detail_redirect(series.id, message="Removed book from this series.")
 
 
+@router.post("/{series_id}/planned/add")
+async def add_planned_series_entry(
+    series_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_write_access),
+    planned_title: str = Form(default=""),
+    planned_author_name: str | None = Form(default=None),
+    planned_format: str = Form(default="unknown"),
+    position: str | None = Form(default=None),
+    notes: str | None = Form(default=None),
+) -> Response:
+    series = get_local_series(db, series_id)
+    if series is None:
+        return series_redirect(error="Series not found.")
+
+    clean_title, parsed_position, errors = validate_planned_entry_form(planned_title, planned_format, position)
+    if errors:
+        return series_detail_redirect(series.id, error=errors[0])
+
+    db.add(
+        SeriesBook(
+            series_id=series.id,
+            position=parsed_position,
+            planned_title=clean_title,
+            planned_author_name=clean_optional(planned_author_name),
+            planned_format=planned_format,
+            notes=clean_optional(notes),
+        )
+    )
+    db.commit()
+    return series_detail_redirect(series.id, message=f"Added planned book: {clean_title}")
+
+
+@router.post("/{series_id}/planned/{entry_id}/edit")
+async def update_planned_series_entry(
+    series_id: int,
+    entry_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_write_access),
+    planned_title: str = Form(default=""),
+    planned_author_name: str | None = Form(default=None),
+    planned_format: str = Form(default="unknown"),
+    position: str | None = Form(default=None),
+    notes: str | None = Form(default=None),
+) -> Response:
+    series = get_local_series(db, series_id)
+    if series is None:
+        return series_redirect(error="Series not found.")
+
+    entry = get_series_entry(db, series, entry_id)
+    if entry is None or entry.book_id is not None:
+        return series_detail_redirect(series.id, error="Planned entry not found.")
+
+    clean_title, parsed_position, errors = validate_planned_entry_form(planned_title, planned_format, position)
+    if errors:
+        return series_detail_redirect(series.id, error=errors[0])
+
+    entry.position = parsed_position
+    entry.planned_title = clean_title
+    entry.planned_author_name = clean_optional(planned_author_name)
+    entry.planned_format = planned_format
+    entry.notes = clean_optional(notes)
+    db.commit()
+    return series_detail_redirect(series.id, message=f"Updated planned book: {clean_title}")
+
+
+@router.post("/{series_id}/planned/{entry_id}/remove")
+async def remove_planned_series_entry(
+    series_id: int,
+    entry_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_write_access),
+) -> Response:
+    series = get_local_series(db, series_id)
+    if series is None:
+        return series_redirect(error="Series not found.")
+
+    entry = get_series_entry(db, series, entry_id)
+    if entry is None or entry.book_id is not None:
+        return series_detail_redirect(series.id, error="Planned entry not found.")
+
+    db.delete(entry)
+    db.commit()
+    return series_detail_redirect(series.id, message="Removed planned book from this series.")
+
+
+@router.post("/{series_id}/planned/{entry_id}/convert")
+async def convert_planned_entry_to_existing_book(
+    series_id: int,
+    entry_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_write_access),
+    book_id: int = Form(...),
+) -> Response:
+    series = get_local_series(db, series_id)
+    if series is None:
+        return series_redirect(error="Series not found.")
+
+    entry = get_series_entry(db, series, entry_id)
+    if entry is None or entry.book_id is not None:
+        return series_detail_redirect(series.id, error="Planned entry not found.")
+
+    book = db.get(Book, book_id)
+    if book is None or book.user_id != DEFAULT_LOCAL_USER_ID:
+        return series_detail_redirect(series.id, error="Book not found.")
+
+    existing = db.scalars(
+        select(SeriesBook).where(SeriesBook.series_id == series.id, SeriesBook.book_id == book.id)
+    ).first()
+    if existing is not None:
+        return series_detail_redirect(series.id, error=f"{book.title} is already in this series.")
+
+    entry.book_id = book.id
+    entry.planned_title = None
+    entry.planned_author_name = None
+    entry.planned_format = None
+    db.commit()
+    return series_detail_redirect(series.id, message=f"Converted planned entry to {book.title}.")
+
+
 @router.get("/{series_id}", response_class=HTMLResponse)
 async def series_detail(
     series_id: int,
@@ -553,6 +703,7 @@ async def series_detail(
             selectable_books=selectable_books,
             book_options={book.id: book_option_label(book) for book in selectable_books},
             book_q=book_q or "",
+            series_book_formats=SERIES_BOOK_FORMATS,
             message=message,
             error=error,
         ),
