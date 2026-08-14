@@ -108,13 +108,13 @@ Derived from `docs/ROADMAP.md` MVP 4 - Libby Progress Scraping, with continuity 
 
 ## Chunk 11 - Failure Handling And Retry
 
-- [ ] Capture per-book failure reason and traceback or selector context
-- [ ] Mark failed items without failing the whole job
-- [ ] Add retry action for failed items
-- [ ] Add skip action for failed items
-- [ ] Track attempt count and last attempted timestamp
-- [ ] Show failed/skipped counts in job summary
-- [ ] Test failed item isolation and retry/skip behavior
+- [x] Capture per-book failure reason and traceback or selector context
+- [x] Mark failed items without failing the whole job
+- [x] Add retry action for failed items
+- [x] Add skip action for failed items
+- [x] Track attempt count and last attempted timestamp
+- [x] Show failed/skipped counts in job summary
+- [x] Test failed item isolation and retry/skip behavior
 
 ## Chunk 12 - Tests
 

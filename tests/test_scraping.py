@@ -736,6 +736,67 @@ def test_requeue_skipped_item_from_completed_job_reopens_job() -> None:
         assert item.status == "queued"
 
 
+def test_skip_failed_libby_scrape_item_marks_item_skipped() -> None:
+    client, session_factory = make_scraping_client()
+    client.post("/admin/login", data={"password": "secret"})
+    book_id = add_libby_book(session_factory, title="Failed To Skip Book", libby_title_id="failed-skip-title")
+    with session_factory() as db:
+        job = ScrapeJob(user_id=DEFAULT_LOCAL_USER_ID, source="libby", status="completed", finished_at=datetime.now(timezone.utc))
+        db.add(job)
+        db.flush()
+        item = ScrapeJobItem(
+            job_id=job.id,
+            book_id=book_id,
+            status="failed",
+            error_code="ValueError",
+            error_message="No progress parsed.",
+        )
+        db.add(item)
+        db.commit()
+        job_id = job.id
+        item_id = item.id
+
+    detail_response = client.get(f"/scraping/libby/jobs/{job_id}")
+
+    assert detail_response.status_code == 200
+    assert "Retry" in detail_response.text
+    assert "Skip" in detail_response.text
+
+    response = client.post(f"/scraping/libby/jobs/{job_id}/items/{item_id}/skip", follow_redirects=False)
+
+    assert response.status_code == 303
+    with session_factory() as db:
+        item = db.get(ScrapeJobItem, item_id)
+        assert item is not None
+        assert item.status == "skipped"
+        assert item.error_code == "user_skipped"
+        assert item.error_message == "Item was skipped by user after failure."
+        assert item.finished_at is not None
+
+
+def test_skip_libby_scrape_item_requires_failed_status() -> None:
+    client, session_factory = make_scraping_client()
+    client.post("/admin/login", data={"password": "secret"})
+    book_id = add_libby_book(session_factory, title="Queued Not Skipped Book", libby_title_id="queued-no-skip-title")
+    with session_factory() as db:
+        job = ScrapeJob(user_id=DEFAULT_LOCAL_USER_ID, source="libby", status="pending")
+        db.add(job)
+        db.flush()
+        item = ScrapeJobItem(job_id=job.id, book_id=book_id, status="queued")
+        db.add(item)
+        db.commit()
+        job_id = job.id
+        item_id = item.id
+
+    response = client.post(f"/scraping/libby/jobs/{job_id}/items/{item_id}/skip", follow_redirects=False)
+
+    assert response.status_code == 303
+    with session_factory() as db:
+        item = db.get(ScrapeJobItem, item_id)
+        assert item is not None
+        assert item.status == "queued"
+
+
 def test_completed_empty_progress_item_can_be_retried_and_clears_scraped_borrow_gate() -> None:
     client, session_factory = make_scraping_client()
     client.post("/admin/login", data={"password": "secret"})
@@ -893,6 +954,58 @@ def test_start_libby_scrape_job_marks_running_items_failed_on_runner_crash() -> 
         assert item.status == "failed"
         assert item.error_code == "RuntimeError"
         assert item.error_message == "Browser driver disconnected"
+
+
+def test_libby_scrape_job_allows_failed_item_retry_or_skip_after_mixed_run() -> None:
+    client, session_factory = make_scraping_client()
+    client.post("/admin/login", data={"password": "secret"})
+    first_book_id = add_libby_book(session_factory, title="Mixed Success Book", libby_title_id="mixed-success")
+    second_book_id = add_libby_book(session_factory, title="Mixed Failed Book", libby_title_id="mixed-failed")
+    with session_factory() as db:
+        job = ScrapeJob(user_id=DEFAULT_LOCAL_USER_ID, source="libby", status="pending")
+        db.add(job)
+        db.flush()
+        db.add_all(
+            [
+                ScrapeJobItem(job_id=job.id, book_id=first_book_id, status="queued"),
+                ScrapeJobItem(job_id=job.id, book_id=second_book_id, status="queued"),
+            ]
+        )
+        db.commit()
+        job_id = job.id
+
+    def mixed_runner(db: Session, *, job: ScrapeJob, profile_dir: str, scraped_dir: str) -> dict[str, int]:
+        items = sorted(job.items, key=lambda value: value.id)
+        items[0].status = "succeeded"
+        items[1].status = "failed"
+        items[1].error_code = "ValueError"
+        items[1].error_message = "No parseable progress."
+        return {"succeeded": 1, "failed": 1, "skipped": 0}
+
+    from app.api import scraping
+
+    original_runner = scraping.libby_scrape_runner.run_libby_scrape_job
+    scraping.libby_scrape_runner.run_libby_scrape_job = mixed_runner
+    try:
+        response = client.post(f"/scraping/libby/jobs/{job_id}/start", follow_redirects=False)
+    finally:
+        scraping.libby_scrape_runner.run_libby_scrape_job = original_runner
+
+    assert response.status_code == 303
+    detail_response = client.get(f"/scraping/libby/jobs/{job_id}")
+    assert detail_response.status_code == 200
+    assert "Mixed Success Book" in detail_response.text
+    assert "Mixed Failed Book" in detail_response.text
+    assert "No parseable progress." in detail_response.text
+    assert "Retry" in detail_response.text
+    assert "Skip" in detail_response.text
+
+    with session_factory() as db:
+        job = db.get(ScrapeJob, job_id)
+        assert job is not None
+        assert job.status == "completed"
+        assert job.summary["run"] == {"succeeded": 1, "failed": 1, "skipped": 0}
+        assert {item.status for item in job.items} == {"succeeded", "failed"}
 
 
 def test_start_libby_scrape_job_does_not_start_completed_job() -> None:

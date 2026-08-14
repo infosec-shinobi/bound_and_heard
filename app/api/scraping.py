@@ -566,3 +566,32 @@ async def requeue_skipped_libby_scrape_item(job_id: int, item_id: int, db: Sessi
         f"/scraping/libby/jobs/{job_id}?{urlencode({'message': message})}",
         status_code=status.HTTP_303_SEE_OTHER,
     )
+
+
+@router.post("/libby/jobs/{job_id}/items/{item_id}/skip", dependencies=[Depends(require_write_access)])
+async def skip_failed_libby_scrape_item(job_id: int, item_id: int, db: Session = Depends(get_db)) -> Response:
+    item = db.scalars(
+        select(ScrapeJobItem)
+        .join(ScrapeJob)
+        .where(
+            ScrapeJobItem.id == item_id,
+            ScrapeJobItem.job_id == job_id,
+            ScrapeJob.user_id == DEFAULT_LOCAL_USER_ID,
+            ScrapeJob.source == "libby",
+        )
+    ).first()
+    if item is None:
+        return RedirectResponse(f"/scraping/libby/jobs/{job_id}", status_code=status.HTTP_303_SEE_OTHER)
+    if item.status == "failed":
+        item.status = "skipped"
+        item.error_code = "user_skipped"
+        item.error_message = "Item was skipped by user after failure."
+        item.finished_at = datetime.now(timezone.utc)
+        db.commit()
+        message = "Failed item skipped."
+    else:
+        message = "Only failed items can be skipped."
+    return RedirectResponse(
+        f"/scraping/libby/jobs/{job_id}?{urlencode({'message': message})}",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )

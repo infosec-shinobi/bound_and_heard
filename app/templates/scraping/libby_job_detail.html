@@ -177,10 +177,19 @@
                   {% endif %}
                 </td>
                 <td>
-                  {% if item.id in retryable_item_ids %}
-                    <form method="post" action="/scraping/libby/jobs/{{ job.id }}/items/{{ item.id }}/requeue">
-                      <button class="btn btn-sm btn-outline-primary" type="submit">{{ 'Retry' if item.status in ['failed', 'succeeded'] else 'Requeue' }}</button>
-                    </form>
+                  {% if item.id in retryable_item_ids or item.status == 'failed' %}
+                    <div class="d-flex gap-2">
+                      {% if item.id in retryable_item_ids %}
+                        <form method="post" action="/scraping/libby/jobs/{{ job.id }}/items/{{ item.id }}/requeue">
+                          <button class="btn btn-sm btn-outline-primary" type="submit">{{ 'Retry' if item.status in ['failed', 'succeeded'] else 'Requeue' }}</button>
+                        </form>
+                      {% endif %}
+                      {% if item.status == 'failed' %}
+                        <form method="post" action="/scraping/libby/jobs/{{ job.id }}/items/{{ item.id }}/skip">
+                          <button class="btn btn-sm btn-outline-secondary" type="submit">Skip</button>
+                        </form>
+                      {% endif %}
+                    </div>
                   {% else %}
                     <span class="app-muted">None</span>
                   {% endif %}
