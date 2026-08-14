@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% from "components/actions.html" import protected_link %}
+
+{% block content %}
+  <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
+    <div>
+      <p class="app-kicker small fw-semibold mb-2">Series Tracking</p>
+      <h1 class="display-6 mb-1">Series</h1>
+      <p class="app-muted mb-0">Track series status, continuation intent, and the next unread book.</p>
+    </div>
+    <div>
+      {{ protected_link('Create Series', '/series/new', can_write, write_disabled_reason) }}
+    </div>
+  </div>
+
+  <form class="card mb-4" method="get" action="/series">
+    <div class="card-body">
+      <div class="row g-3 align-items-end">
+        <div class="col-lg-6">
+          <label class="form-label" for="q">Search</label>
+          <input class="form-control" id="q" name="q" value="{{ q }}" placeholder="Series name">
+        </div>
+        <div class="col-md-6 col-lg-3">
+          <label class="form-label" for="status">Status</label>
+          <select class="form-select" id="status" name="status">
+            <option value="">Any status</option>
+            {% for value in series_statuses %}
+              <option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>{{ value.replace('_', ' ').title() }}{% if status_counts[value] %} ({{ status_counts[value] }}){% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-6 col-lg-3 d-grid">
+          <button class="btn btn-outline-primary" type="submit">Apply Filters</button>
+        </div>
+      </div>
+    </div>
+  </form>
+
+  {% if series_items %}
+    <div class="card">
+      <div class="table-responsive">
+        <table class="table table-dark table-hover align-middle mb-0 app-table">
+          <thead>
+            <tr>
+              <th scope="col">Series</th>
+              <th scope="col">Status</th>
+              <th scope="col">Continue</th>
+              <th scope="col">Progress</th>
+              <th scope="col">Next Unread</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in series_items %}
+              <tr>
+                <td>
+                  <a class="fw-semibold app-link" href="/series/{{ item.series.id }}">{{ item.series.name }}</a>
+                  {% if item.series.description %}<div class="small app-muted">{{ item.series.description }}</div>{% endif %}
+                </td>
+                <td>{{ item.series.status.replace('_', ' ').title() }}</td>
+                <td>{{ item.series.wants_to_continue.replace('_', ' ').title() }}</td>
+                <td>{{ item.completed_count }} / {{ item.total_count }}</td>
+                <td>
+                  {% if item.next_unread_title %}
+                    <span class="fw-semibold">{{ item.next_unread_title }}</span>
+                    {% if item.next_unread_author %}<div class="small app-muted">{{ item.next_unread_author }}</div>{% endif %}
+                  {% else %}
+                    <span class="app-muted">None</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% else %}
+    <section class="card text-center py-5">
+      <div class="card-body">
+        <p class="app-kicker small fw-semibold mb-2">No series yet</p>
+        <h2 class="h4">No series found</h2>
+        <p class="app-muted mb-4">Create a series manually, then add owned books or planned future reads.</p>
+        {{ protected_link('Create Series', '/series/new', can_write, write_disabled_reason) }}
+      </div>
+    </section>
+  {% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    document.querySelectorAll('[data-bs-toggle="popover"]').forEach((element) => {
+      new bootstrap.Popover(element);
+    });
+  </script>
+{% endblock %}

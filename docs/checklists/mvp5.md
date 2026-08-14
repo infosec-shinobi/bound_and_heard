@@ -21,13 +21,13 @@ Derived from `docs/ROADMAP.md` MVP 5 - Series Tracking, with continuity from MVP
 
 ## Chunk 2 - Series List Page
 
-- [ ] Add `/series` route and navigation entry
-- [ ] List series with name, status, continuation intent, progress count, and next unread item
-- [ ] Add filters for active, paused, completed, abandoned, unknown
-- [ ] Add search by series name
-- [ ] Show empty state with create action
-- [ ] Keep read-only users able to view series
-- [ ] Keep mutations protected by admin login
+- [x] Add `/series` route and navigation entry
+- [x] List series with name, status, continuation intent, progress count, and next unread item
+- [x] Add filters for active, paused, completed, abandoned, unknown
+- [x] Add search by series name
+- [x] Show empty state with create action
+- [x] Keep read-only users able to view series
+- [x] Keep mutations protected by admin login
 
 ## Chunk 3 - Create And Edit Series
 
