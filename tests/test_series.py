@@ -1,5 +1,5 @@
 from collections.abc import Generator
-from datetime import date
+from datetime import date, datetime, timezone
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
@@ -10,7 +10,7 @@ from app.core.bootstrap import DEFAULT_LOCAL_USER_ID
 from app.core.config import Settings
 from app.core.database import Base, get_db
 from app.main import create_app
-from app.models import Book, BookProgress, Series, SeriesBook, User
+from app.models import Book, BookProgress, ReadingEvent, Series, SeriesBook, User
 
 
 def make_series_client(admin_password: str | None = "secret") -> tuple[TestClient, sessionmaker[Session]]:
@@ -123,6 +123,20 @@ def add_series_entry(
 def login_as_admin(client: TestClient) -> None:
     response = client.post("/admin/login", data={"password": "secret"})
     assert response.status_code == 200
+
+
+def add_reading_event(session_factory: sessionmaker[Session], book_id: int) -> None:
+    with session_factory() as db:
+        db.add(
+            ReadingEvent(
+                user_id=DEFAULT_LOCAL_USER_ID,
+                book_id=book_id,
+                source="manual",
+                event_type="started",
+                event_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            )
+        )
+        db.commit()
 
 
 def test_series_page_shows_empty_state_for_read_only_user() -> None:
@@ -476,3 +490,156 @@ def test_series_detail_treats_progress_100_as_completed_before_next_unread() -> 
     assert "1 / 2" in response.text
     assert "Actual Next" in response.text
     assert "Fully Scraped" in response.text
+
+
+def test_series_detail_shows_assign_existing_book_form_for_admin() -> None:
+    client, session_factory = make_series_client()
+    login_as_admin(client)
+    series = add_series(session_factory, name="Assignable")
+    add_book(
+        session_factory,
+        title="Searchable Book",
+        author="Search Author",
+        book_format="audiobook",
+        metadata_source="libby",
+    )
+    add_book(session_factory, title="Hidden Book", author="Other", metadata_source="manual")
+
+    response = client.get(f"/series/{series.id}?book_q=Search")
+
+    assert response.status_code == 200
+    assert "Assign Existing Book" in response.text
+    assert "Searchable Book - Search Author - Audiobook - Libby" in response.text
+    assert "Hidden Book" not in response.text
+
+
+def test_assign_existing_book_requires_admin_login() -> None:
+    client, session_factory = make_series_client()
+    series = add_series(session_factory, name="Protected")
+    book = add_book(session_factory, title="Protected Book", author="Author")
+
+    response = client.post(
+        f"/series/{series.id}/books/add",
+        data={"book_id": str(book.id), "position": "1"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 403
+    assert "Admin login is required for write actions." in response.text
+
+
+def test_assign_existing_book_to_series_persists_position() -> None:
+    client, session_factory = make_series_client()
+    login_as_admin(client)
+    series = add_series(session_factory, name="Assignment")
+    book = add_book(session_factory, title="Assigned Book", author="Author")
+
+    response = client.post(
+        f"/series/{series.id}/books/add",
+        data={"book_id": str(book.id), "position": "2.5"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/series/{series.id}?message=Added+Assigned+Book+to+this+series."
+    with session_factory() as db:
+        entry = db.scalars(select(SeriesBook).where(SeriesBook.series_id == series.id)).one()
+        assert entry.book_id == book.id
+        assert entry.position == 2.5
+
+
+def test_assign_existing_book_rejects_duplicate_assignment() -> None:
+    client, session_factory = make_series_client()
+    login_as_admin(client)
+    series = add_series(session_factory, name="Duplicates")
+    book = add_book(session_factory, title="Duplicate Book", author="Author")
+    add_series_entry(session_factory, series.id, position=1, book_id=book.id)
+
+    response = client.post(
+        f"/series/{series.id}/books/add",
+        data={"book_id": str(book.id), "position": "2"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/series/{series.id}?error=Duplicate+Book+is+already+in+this+series."
+    with session_factory() as db:
+        entries = db.scalars(select(SeriesBook).where(SeriesBook.series_id == series.id)).all()
+        assert len(entries) == 1
+        assert entries[0].position == 1
+
+
+def test_assign_existing_book_rejects_invalid_position() -> None:
+    client, session_factory = make_series_client()
+    login_as_admin(client)
+    series = add_series(session_factory, name="Bad Position")
+    book = add_book(session_factory, title="Position Book", author="Author")
+
+    response = client.post(
+        f"/series/{series.id}/books/add",
+        data={"book_id": str(book.id), "position": "first"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/series/{series.id}?error=Position+must+be+a+number."
+
+
+def test_update_existing_series_book_position_changes_order() -> None:
+    client, session_factory = make_series_client()
+    login_as_admin(client)
+    series = add_series(session_factory, name="Reorder")
+    first = add_book(session_factory, title="First Book", author="Author")
+    second = add_book(session_factory, title="Second Book", author="Author")
+    add_series_entry(session_factory, series.id, position=1, book_id=first.id)
+    add_series_entry(session_factory, series.id, position=2, book_id=second.id)
+    with session_factory() as db:
+        second_entry = db.scalars(
+            select(SeriesBook).where(SeriesBook.series_id == series.id, SeriesBook.book_id == second.id)
+        ).one()
+
+    response = client.post(
+        f"/series/{series.id}/entries/{second_entry.id}/position",
+        data={"position": "0.5"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    follow_response = client.get(response.headers["location"])
+    table_html = follow_response.text[follow_response.text.find("Books In Series") :]
+    assert table_html.find("Second Book") < table_html.find("First Book")
+
+
+def test_remove_existing_book_from_series_preserves_book_history_and_progress() -> None:
+    client, session_factory = make_series_client()
+    login_as_admin(client)
+    series = add_series(session_factory, name="Removal")
+    book = add_book(session_factory, title="Preserved Book", author="Author", metadata_source="libby")
+    add_series_entry(session_factory, series.id, position=1, book_id=book.id)
+    add_reading_event(session_factory, book.id)
+    with session_factory() as db:
+        db.add(
+            BookProgress(
+                user_id=DEFAULT_LOCAL_USER_ID,
+                book_id=book.id,
+                source="manual",
+                progress_percent=55,
+            )
+        )
+        db.commit()
+        entry = db.scalars(select(SeriesBook).where(SeriesBook.series_id == series.id)).one()
+
+    response = client.post(
+        f"/series/{series.id}/entries/{entry.id}/remove",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/series/{series.id}?message=Removed+book+from+this+series."
+    with session_factory() as db:
+        assert db.get(Book, book.id) is not None
+        assert db.scalars(select(SeriesBook).where(SeriesBook.series_id == series.id)).all() == []
+        assert db.scalars(select(ReadingEvent).where(ReadingEvent.book_id == book.id)).one() is not None
+        progress = db.scalars(select(BookProgress).where(BookProgress.book_id == book.id)).one()
+        assert progress.progress_percent == 55
+        assert db.get(Book, book.id).metadata_source == "libby"  # type: ignore[union-attr]

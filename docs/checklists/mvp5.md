@@ -51,12 +51,12 @@ Derived from `docs/ROADMAP.md` MVP 5 - Series Tracking, with continuity from MVP
 
 ## Chunk 5 - Assign Existing Books To Series
 
-- [ ] Add protected action to assign an existing book to a series
-- [ ] Search/select books by title, author, format, and source
-- [ ] Prevent duplicate assignment of the same book to the same series
-- [ ] Allow changing assigned book order/position
-- [ ] Allow removing a book from a series without deleting the book
-- [ ] Preserve book records, reading events, progress, and import attribution
+- [x] Add protected action to assign an existing book to a series
+- [x] Search/select books by title, author, format, and source
+- [x] Prevent duplicate assignment of the same book to the same series
+- [x] Allow changing assigned book order/position
+- [x] Allow removing a book from a series without deleting the book
+- [x] Preserve book records, reading events, progress, and import attribution
 
 ## Chunk 6 - Planned Series Books
 

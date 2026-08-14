@@ -4,7 +4,7 @@ from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Form, Query, Request, status as http_status
 from fastapi.responses import RedirectResponse, Response
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, joinedload
 from starlette.responses import HTMLResponse
 
@@ -174,11 +174,30 @@ def validate_series_form(name: str | None, status: str, wants_to_continue: str) 
     return clean_name, errors
 
 
+def parse_optional_position(value: str | None, errors: list[str]) -> float | None:
+    value = clean_optional(value)
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        errors.append("Position must be a number.")
+        return None
+
+
 def series_redirect(**params: str) -> RedirectResponse:
     return RedirectResponse(
         f"/series?{urlencode(params)}",
         status_code=http_status.HTTP_303_SEE_OTHER,
     )
+
+
+def series_detail_redirect(series_id: int, **params: str) -> RedirectResponse:
+    query = urlencode(params)
+    target = f"/series/{series_id}"
+    if query:
+        target = f"{target}?{query}"
+    return RedirectResponse(target, status_code=http_status.HTTP_303_SEE_OTHER)
 
 
 def get_local_series_statement(series_id: int):
@@ -189,6 +208,30 @@ def get_local_series_statement(series_id: int):
         )
         .where(Series.id == series_id, Series.user_id == DEFAULT_LOCAL_USER_ID)
     )
+
+
+def book_option_label(book: Book) -> str:
+    parts = [book.title]
+    if book.primary_author_name:
+        parts.append(book.primary_author_name)
+    parts.append(book.format.replace("_", " ").title())
+    parts.append((book.metadata_source or "missing source").replace("_", " ").title())
+    return " - ".join(parts)
+
+
+def selectable_books_statement(book_q: str | None):
+    statement = select(Book).where(Book.user_id == DEFAULT_LOCAL_USER_ID).order_by(Book.title.asc())
+    if book_q:
+        search = f"%{book_q.strip()}%"
+        statement = statement.where(
+            or_(
+                Book.title.ilike(search),
+                Book.primary_author_name.ilike(search),
+                Book.format.ilike(search),
+                Book.metadata_source.ilike(search),
+            )
+        )
+    return statement
 
 
 @router.get("", response_class=HTMLResponse)
@@ -395,11 +438,92 @@ async def update_series(
     return series_redirect(message=f"Series updated: {series.name}")
 
 
+@router.post("/{series_id}/books/add")
+async def add_existing_book_to_series(
+    series_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_write_access),
+    book_id: int = Form(...),
+    position: str | None = Form(default=None),
+) -> Response:
+    series = db.get(Series, series_id)
+    if series is None or series.user_id != DEFAULT_LOCAL_USER_ID:
+        return series_redirect(error="Series not found.")
+
+    book = db.get(Book, book_id)
+    if book is None or book.user_id != DEFAULT_LOCAL_USER_ID:
+        return series_detail_redirect(series.id, error="Book not found.")
+
+    existing = db.scalars(
+        select(SeriesBook).where(SeriesBook.series_id == series.id, SeriesBook.book_id == book.id)
+    ).first()
+    if existing is not None:
+        return series_detail_redirect(series.id, error=f"{book.title} is already in this series.")
+
+    errors: list[str] = []
+    parsed_position = parse_optional_position(position, errors)
+    if errors:
+        return series_detail_redirect(series.id, error=errors[0])
+
+    db.add(SeriesBook(series_id=series.id, book_id=book.id, position=parsed_position))
+    db.commit()
+    return series_detail_redirect(series.id, message=f"Added {book.title} to this series.")
+
+
+@router.post("/{series_id}/entries/{entry_id}/position")
+async def update_series_entry_position(
+    series_id: int,
+    entry_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_write_access),
+    position: str | None = Form(default=None),
+) -> Response:
+    series = db.get(Series, series_id)
+    if series is None or series.user_id != DEFAULT_LOCAL_USER_ID:
+        return series_redirect(error="Series not found.")
+
+    entry = db.get(SeriesBook, entry_id)
+    if entry is None or entry.series_id != series.id or entry.book_id is None:
+        return series_detail_redirect(series.id, error="Series book entry not found.")
+
+    errors: list[str] = []
+    parsed_position = parse_optional_position(position, errors)
+    if errors:
+        return series_detail_redirect(series.id, error=errors[0])
+
+    entry.position = parsed_position
+    db.commit()
+    return series_detail_redirect(series.id, message="Series position updated.")
+
+
+@router.post("/{series_id}/entries/{entry_id}/remove")
+async def remove_existing_book_from_series(
+    series_id: int,
+    entry_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_write_access),
+) -> Response:
+    series = db.get(Series, series_id)
+    if series is None or series.user_id != DEFAULT_LOCAL_USER_ID:
+        return series_redirect(error="Series not found.")
+
+    entry = db.get(SeriesBook, entry_id)
+    if entry is None or entry.series_id != series.id or entry.book_id is None:
+        return series_detail_redirect(series.id, error="Series book entry not found.")
+
+    db.delete(entry)
+    db.commit()
+    return series_detail_redirect(series.id, message="Removed book from this series.")
+
+
 @router.get("/{series_id}", response_class=HTMLResponse)
 async def series_detail(
     series_id: int,
     request: Request,
     db: Session = Depends(get_db),
+    book_q: str | None = Query(default=None),
+    message: str | None = Query(default=None),
+    error: str | None = Query(default=None),
 ) -> HTMLResponse:
     series = db.scalars(get_local_series_statement(series_id)).unique().one_or_none()
     if series is None:
@@ -413,6 +537,7 @@ async def series_detail(
     entries = build_series_detail_entries(series)
     completed_count = sum(1 for entry in entries if entry.is_completed)
     next_unread = next((entry for entry in entries if entry.is_next_unread), None)
+    selectable_books = db.scalars(selectable_books_statement(book_q)).all()
 
     return templates.TemplateResponse(
         request,
@@ -425,5 +550,10 @@ async def series_detail(
             completed_count=completed_count,
             total_count=len(entries),
             next_unread=next_unread,
+            selectable_books=selectable_books,
+            book_options={book.id: book_option_label(book) for book in selectable_books},
+            book_q=book_q or "",
+            message=message,
+            error=error,
         ),
     )
