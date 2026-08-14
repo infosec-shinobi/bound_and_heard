@@ -1007,6 +1007,15 @@ def test_libby_scrape_job_allows_failed_item_retry_or_skip_after_mixed_run() -> 
         assert job.summary["run"] == {"succeeded": 1, "failed": 1, "skipped": 0}
         assert {item.status for item in job.items} == {"succeeded", "failed"}
 
+    failed_item_id = next(item.id for item in job.items if item.status == "failed")
+    skip_response = client.post(f"/scraping/libby/jobs/{job_id}/items/{failed_item_id}/skip", follow_redirects=False)
+
+    assert skip_response.status_code == 303
+    with session_factory() as db:
+        job = db.get(ScrapeJob, job_id)
+        assert job is not None
+        assert sorted(item.status for item in job.items) == ["skipped", "succeeded"]
+
 
 def test_start_libby_scrape_job_does_not_start_completed_job() -> None:
     client, session_factory = make_scraping_client()

@@ -118,17 +118,17 @@ Derived from `docs/ROADMAP.md` MVP 4 - Libby Progress Scraping, with continuity 
 
 ## Chunk 12 - Tests
 
-- [ ] Test scrape job creation creates expected job and item records
-- [ ] Test read-only users cannot create or run scrape jobs
-- [ ] Test persistent profile path/config behavior
-- [ ] Test skip logic for unchanged latest borrow timestamp
-- [ ] Test forced re-scrape bypasses skip logic if implemented
-- [ ] Test randomized delay logic without real waiting
-- [ ] Test raw snapshot preservation references
-- [ ] Test progress parser for partial progress
-- [ ] Test completion inference and manual overwrite protection
-- [ ] Test per-book failure does not fail entire job
-- [ ] Test retry or skip failed scrape items
+- [x] Test scrape job creation creates expected job and item records
+- [x] Test read-only users cannot create or run scrape jobs
+- [x] Test persistent profile path/config behavior
+- [x] Test skip logic for unchanged latest borrow timestamp
+- [x] Test forced re-scrape bypasses skip logic if implemented
+- [x] Test randomized delay logic without real waiting
+- [x] Test raw snapshot preservation references
+- [x] Test progress parser for partial progress
+- [x] Test completion inference and manual overwrite protection
+- [x] Test per-book failure does not fail entire job
+- [x] Test retry or skip failed scrape items
 
 ## Chunk 13 - Documentation
 
