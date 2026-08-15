@@ -11,7 +11,7 @@ from app.core.bootstrap import DEFAULT_LOCAL_USER_ID
 from app.core.config import Settings
 from app.core.database import Base, get_db
 from app.main import create_app
-from app.models import Book, Import, ImportFile, ReadingEvent, User
+from app.models import Book, Import, ImportFile, ReadingEvent, Series, User
 
 
 def make_imports_client(
@@ -266,7 +266,9 @@ def test_import_detail_shows_summary_metadata_counts_and_book_links(tmp_path: Pa
     assert "Duplicate Events Skipped" in detail_response.text
     assert "No duplicate file detected" in detail_response.text
     assert "Imported Book" in detail_response.text
-    assert 'href="/books/1"' in detail_response.text
+    assert "Series tracking is manual-first in MVP 5" in detail_response.text
+    assert 'href="/books/1#series-memberships"' in detail_response.text
+    assert "Assign series" in detail_response.text
 
     with session_factory() as db:
         import_record = db.query(Import).one()
@@ -275,6 +277,7 @@ def test_import_detail_shows_summary_metadata_counts_and_book_links(tmp_path: Pa
         assert import_record.summary["events_created"] == 1
         assert db.query(Book).count() == 1
         assert db.query(ReadingEvent).count() == 1
+        assert db.query(Series).count() == 0
 
 
 def test_valid_libby_import_makes_book_and_event_visible_in_ui(tmp_path: Path) -> None:

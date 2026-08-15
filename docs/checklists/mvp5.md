@@ -102,11 +102,11 @@ Derived from `docs/ROADMAP.md` MVP 5 - Series Tracking, with continuity from MVP
 
 ## Chunk 11 - Import/Review Integration
 
-- [ ] Decide whether imported Libby metadata can suggest series candidates in MVP 5 or defer to enrichment
-- [ ] Keep MVP 5 manual-first; do not auto-create series from imported text unless explicitly chosen
-- [ ] Make it easy to assign reviewed/imported books to a series
-- [ ] Preserve manual series assignments during later Libby imports
-- [ ] Preserve manual series assignments during metadata enrichment in MVP 6
+- [x] Decide whether imported Libby metadata can suggest series candidates in MVP 5 or defer to enrichment
+- [x] Keep MVP 5 manual-first; do not auto-create series from imported text unless explicitly chosen
+- [x] Make it easy to assign reviewed/imported books to a series
+- [x] Preserve manual series assignments during later Libby imports
+- [x] Preserve manual series assignments during metadata enrichment in MVP 6
 
 ## Chunk 12 - Tests
 

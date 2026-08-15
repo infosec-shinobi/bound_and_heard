@@ -73,10 +73,11 @@
   <section class="card mt-4">
     <div class="card-body">
       <h2 class="h5 mb-3">Imported Or Updated Books</h2>
+      <p class="app-muted">Series tracking is manual-first in MVP 5. Open a book detail page to assign it to an existing series; imports do not auto-create or overwrite series.</p>
       {% if linked_books %}
         <div class="list-group list-group-flush">
           {% for book in linked_books %}
-            <a class="list-group-item list-group-item-action" href="/books/{{ book.id }}">{{ book.title }}</a>
+            <a class="list-group-item list-group-item-action" href="/books/{{ book.id }}#series-memberships">{{ book.title }} <span class="small app-muted">Assign series</span></a>
           {% endfor %}
         </div>
       {% else %}

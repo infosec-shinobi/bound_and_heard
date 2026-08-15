@@ -445,6 +445,8 @@ def test_imported_books_review_page_lists_libby_books_needing_review() -> None:
     assert "Imported metadata" in response.text
     assert "Title ID libby-1" in response.text
     assert f'href="/books/{book.id}"' in response.text
+    assert f'href="/books/{book.id}#series-memberships"' in response.text
+    assert "View Series" in response.text
     assert f'action="/books/{book.id}/review/archive"' not in response.text
     assert f'action="/books/{book.id}/review/state"' not in response.text
 
@@ -469,6 +471,8 @@ def test_imported_books_review_page_shows_quick_status_form_after_admin_login() 
     assert 'option value="completed"' in response.text
     assert 'option value="abandoned"' in response.text
     assert 'option value="unknown"' in response.text
+    assert f'href="/books/{book.id}#series-memberships"' in response.text
+    assert "Assign Series" in response.text
 
 
 def test_quick_status_update_requires_admin_login() -> None:
