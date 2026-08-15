@@ -1,6 +1,7 @@
 """SQLAlchemy model package."""
 
 from app.models.book import Book
+from app.models.enrichment import MetadataCacheEntry, MetadataEnrichmentRun
 from app.models.import_record import Import, ImportFile
 from app.models.progress import BookProgress
 from app.models.reading_event import ReadingEvent
@@ -13,6 +14,8 @@ __all__ = [
     "BookProgress",
     "Import",
     "ImportFile",
+    "MetadataCacheEntry",
+    "MetadataEnrichmentRun",
     "ReadingEvent",
     "ScrapeJob",
     "ScrapeJobItem",

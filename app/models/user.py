@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
 if TYPE_CHECKING:
+    from app.models.enrichment import MetadataEnrichmentRun
     from app.models.import_record import Import
     from app.models.book import Book
     from app.models.progress import BookProgress
@@ -41,3 +42,4 @@ class User(Base):
     book_progress: Mapped[list[BookProgress]] = relationship(back_populates="user")
     scrape_jobs: Mapped[list[ScrapeJob]] = relationship(back_populates="user")
     series: Mapped[list[Series]] = relationship(back_populates="user")
+    metadata_enrichment_runs: Mapped[list[MetadataEnrichmentRun]] = relationship(back_populates="user")

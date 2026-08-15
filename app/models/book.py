@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
 if TYPE_CHECKING:
+    from app.models.enrichment import MetadataEnrichmentRun
     from app.models.progress import BookProgress
     from app.models.reading_event import ReadingEvent
     from app.models.scrape import ScrapeJobItem
@@ -29,6 +30,8 @@ class Book(Base):
     libby_title_id: Mapped[str | None] = mapped_column(String(100), index=True)
     libby_share_url: Mapped[str | None] = mapped_column(String(1000))
     publisher: Mapped[str | None] = mapped_column(String(300))
+    published_on: Mapped[date | None] = mapped_column(Date, index=True)
+    publication_year: Mapped[int | None] = mapped_column(Integer, index=True)
     format: Mapped[str] = mapped_column(String(50), nullable=False, default="unknown", index=True)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="unknown", index=True)
     rating: Mapped[float | None] = mapped_column(Float)
@@ -64,3 +67,4 @@ class Book(Base):
     progress: Mapped[BookProgress | None] = relationship(back_populates="book")
     scrape_items: Mapped[list[ScrapeJobItem]] = relationship(back_populates="book")
     series_entries: Mapped[list[SeriesBook]] = relationship(back_populates="book")
+    metadata_enrichment_runs: Mapped[list[MetadataEnrichmentRun]] = relationship(back_populates="book")
