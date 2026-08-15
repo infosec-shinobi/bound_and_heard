@@ -11,7 +11,7 @@ from app.core.bootstrap import DEFAULT_LOCAL_USER_ID
 from app.core.config import Settings
 from app.core.database import Base, get_db
 from app.main import create_app
-from app.models import Book, BookProgress, ReadingEvent, User
+from app.models import Book, BookProgress, ReadingEvent, Series, SeriesBook, User
 
 
 def make_books_client(admin_password: str | None = "secret") -> tuple[TestClient, sessionmaker[Session]]:
@@ -124,6 +124,30 @@ def add_reading_event(session_factory: sessionmaker[Session], book_id: int) -> N
             )
         )
         db.commit()
+
+
+def add_series(session_factory: sessionmaker[Session], *, name: str, status: str = "active") -> Series:
+    with session_factory() as db:
+        series = Series(user_id=DEFAULT_LOCAL_USER_ID, name=name, status=status, wants_to_continue="yes")
+        db.add(series)
+        db.commit()
+        db.refresh(series)
+        return series
+
+
+def add_series_entry(
+    session_factory: sessionmaker[Session],
+    *,
+    series_id: int,
+    book_id: int,
+    position: float | None = None,
+) -> SeriesBook:
+    with session_factory() as db:
+        entry = SeriesBook(series_id=series_id, book_id=book_id, position=position)
+        db.add(entry)
+        db.commit()
+        db.refresh(entry)
+        return entry
 
 
 def test_books_page_shows_empty_state() -> None:
@@ -1768,3 +1792,96 @@ def test_archived_book_detail_shows_restore_action_after_login() -> None:
     assert response.status_code == 200
     assert "Restore" in response.text
     assert f'action="/books/{book.id}/restore"' in response.text
+
+
+def test_book_detail_shows_no_series_state_without_clutter() -> None:
+    client, session_factory = make_books_client(admin_password=None)
+    book = add_book(session_factory, title="Standalone", author="Author")
+
+    response = client.get(f"/books/{book.id}")
+
+    assert response.status_code == 200
+    assert "Series" in response.text
+    assert "This book is not assigned to a series." in response.text
+    assert "Assign Series" not in response.text
+
+
+def test_book_detail_shows_multiple_series_memberships_with_links() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Crossover Book", author="Author")
+    first = add_series(session_factory, name="First Series", status="active")
+    second = add_series(session_factory, name="Second Series", status="paused")
+    add_series_entry(session_factory, series_id=first.id, book_id=book.id, position=1)
+    add_series_entry(session_factory, series_id=second.id, book_id=book.id, position=2.5)
+
+    response = client.get(f"/books/{book.id}")
+
+    assert response.status_code == 200
+    assert "First Series" in response.text
+    assert f'href="/series/{first.id}"' in response.text
+    assert "Second Series" in response.text
+    assert f'href="/series/{second.id}"' in response.text
+    assert "2.5" in response.text
+    assert "Paused" in response.text
+
+
+def test_book_detail_allows_assigning_book_to_series() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Assignable Detail", author="Author")
+    series = add_series(session_factory, name="Assignable Series")
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.post(
+        f"/books/{book.id}/series/add",
+        data={"series_id": str(series.id), "position": "4.5"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/books/{book.id}?message=Added+to+series%3A+Assignable+Series"
+    with session_factory() as db:
+        entry = db.query(SeriesBook).filter_by(series_id=series.id, book_id=book.id).one()
+        assert entry.position == 4.5
+
+
+def test_book_detail_prevents_duplicate_series_assignment() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Duplicate Detail", author="Author")
+    series = add_series(session_factory, name="Duplicate Series")
+    add_series_entry(session_factory, series_id=series.id, book_id=book.id, position=1)
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.post(
+        f"/books/{book.id}/series/add",
+        data={"series_id": str(series.id), "position": "2"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/books/{book.id}?message=Duplicate+Detail+is+already+in+Duplicate+Series."
+    with session_factory() as db:
+        entries = db.query(SeriesBook).filter_by(series_id=series.id, book_id=book.id).all()
+        assert len(entries) == 1
+        assert entries[0].position == 1
+
+
+def test_book_detail_remove_series_membership_preserves_book_history_and_progress() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Remove Membership", author="Author")
+    series = add_series(session_factory, name="Removal Series")
+    entry = add_series_entry(session_factory, series_id=series.id, book_id=book.id, position=1)
+    add_reading_event(session_factory, book.id)
+    with session_factory() as db:
+        db.add(BookProgress(user_id=DEFAULT_LOCAL_USER_ID, book_id=book.id, source="manual", progress_percent=25))
+        db.commit()
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.post(f"/books/{book.id}/series/{entry.id}/remove", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/books/{book.id}?message=Removed+from+series%3A+Removal+Series"
+    with session_factory() as db:
+        assert db.get(Book, book.id) is not None
+        assert db.query(SeriesBook).filter_by(book_id=book.id).count() == 0
+        assert db.query(ReadingEvent).filter_by(book_id=book.id).count() == 1
+        assert db.query(BookProgress).filter_by(book_id=book.id).one().progress_percent == 25

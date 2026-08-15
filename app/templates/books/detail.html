@@ -115,6 +115,72 @@
 
   <section class="card mt-4">
     <div class="card-body">
+      <h2 class="h5 mb-3">Series</h2>
+      {% if series_entries %}
+        <div class="table-responsive mb-3">
+          <table class="table table-dark table-hover align-middle mb-0 app-table">
+            <thead>
+              <tr>
+                <th scope="col">Series</th>
+                <th scope="col">Position</th>
+                <th scope="col">Status</th>
+                <th scope="col">Continue</th>
+                <th scope="col">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for entry in series_entries %}
+                <tr>
+                  <td><a class="fw-semibold app-link" href="/series/{{ entry.series.id }}">{{ entry.series.name }}</a></td>
+                  <td>{% if entry.position is not none %}{{ '%g'|format(entry.position) }}{% else %}<span class="app-muted">Unknown</span>{% endif %}</td>
+                  <td>{{ entry.series.status.replace('_', ' ').title() }}</td>
+                  <td>{{ entry.series.wants_to_continue.replace('_', ' ').title() }}</td>
+                  <td>
+                    {% if can_write %}
+                      <form method="post" action="/books/{{ book.id }}/series/{{ entry.id }}/remove" onsubmit="return confirm('Remove this book from the series? The book and its history will be preserved.');">
+                        <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
+                      </form>
+                    {% else %}
+                      <span class="app-muted">Admin only</span>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="app-muted mb-3">This book is not assigned to a series.</p>
+      {% endif %}
+
+      {% if can_write %}
+        {% if available_series %}
+          <form class="row g-3 align-items-end" method="post" action="/books/{{ book.id }}/series/add">
+            <div class="col-lg-7">
+              <label class="form-label" for="series_id">Assign to series</label>
+              <select class="form-select" id="series_id" name="series_id" required>
+                {% for series in available_series %}
+                  <option value="{{ series.id }}">{{ series.name }} ({{ series.status.replace('_', ' ').title() }})</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-4 col-lg-2">
+              <label class="form-label" for="series_position">Position</label>
+              <input class="form-control" id="series_position" name="position" type="number" step="0.01" placeholder="1">
+            </div>
+            <div class="col-md-8 col-lg-3 d-grid">
+              <button class="btn btn-outline-primary" type="submit">Assign Series</button>
+            </div>
+          </form>
+        {% else %}
+          <p class="app-muted mb-0">No unassigned series are available.</p>
+        {% endif %}
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="card mt-4">
+    <div class="card-body">
       <h2 class="h5 mb-3">Reading Event History</h2>
       {% if events %}
         <div class="table-responsive">

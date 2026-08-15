@@ -94,11 +94,11 @@ Derived from `docs/ROADMAP.md` MVP 5 - Series Tracking, with continuity from MVP
 
 ## Chunk 10 - Book Detail Integration
 
-- [ ] Show series memberships on book detail pages
-- [ ] Link from book detail to series detail
-- [ ] Allow assigning/removing series membership from book detail if practical
-- [ ] Avoid clutter when a book belongs to no series
-- [ ] Support multiple series memberships only if needed and explicitly allowed
+- [x] Show series memberships on book detail pages
+- [x] Link from book detail to series detail
+- [x] Allow assigning/removing series membership from book detail if practical
+- [x] Avoid clutter when a book belongs to no series
+- [x] Support multiple series memberships only if needed and explicitly allowed
 
 ## Chunk 11 - Import/Review Integration
 

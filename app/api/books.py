@@ -12,7 +12,7 @@ from app.core.bootstrap import DEFAULT_LOCAL_USER_ID
 from app.core.database import get_db
 from app.core.templates import template_context, templates
 from app.core.write_protection import require_write_access
-from app.models import Book, BookProgress, ReadingEvent
+from app.models import Book, BookProgress, ReadingEvent, Series, SeriesBook
 
 
 router = APIRouter(prefix="/books", tags=["books"])
@@ -138,6 +138,17 @@ def parse_optional_float(
     return parsed
 
 
+def parse_optional_series_position(value: str | None, errors: list[str]) -> float | None:
+    value = clean_optional(value)
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        errors.append("Series position must be a number.")
+        return None
+
+
 def parse_optional_int(
     value: str | None,
     field_name: str,
@@ -234,6 +245,14 @@ def review_return_url_with_message(return_url: str, message: str) -> str:
     query_items = parse_qsl(parsed.query)
     query_items.append(("review_message", message))
     return urlunsplit(("", "", parsed.path, urlencode(query_items), ""))
+
+
+def book_detail_redirect(book_id: int, **params: str) -> RedirectResponse:
+    query = urlencode(params)
+    target = f"/books/{book_id}"
+    if query:
+        target = f"{target}?{query}"
+    return RedirectResponse(target, status_code=status.HTTP_303_SEE_OTHER)
 
 
 def active_review_filter_labels(active_filters: dict[str, bool]) -> list[str]:
@@ -1154,6 +1173,79 @@ async def clear_book_scraped_progress(
     )
 
 
+@router.post("/{book_id}/series/add")
+async def add_book_to_series_from_detail(
+    book_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_write_access),
+    series_id: int = Form(...),
+    position: str | None = Form(default=None),
+) -> Response:
+    book = db.get(Book, book_id)
+    if book is None or book.user_id != DEFAULT_LOCAL_USER_ID:
+        return templates.TemplateResponse(
+            request,
+            "books/not_found.html",
+            template_context(request, page_title="Book Not Found"),
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+
+    series = db.get(Series, series_id)
+    if series is None or series.user_id != DEFAULT_LOCAL_USER_ID:
+        return book_detail_redirect(book.id, message="Series not found.")
+
+    existing = db.scalars(
+        select(SeriesBook).where(SeriesBook.series_id == series.id, SeriesBook.book_id == book.id)
+    ).first()
+    if existing is not None:
+        return book_detail_redirect(book.id, message=f"{book.title} is already in {series.name}.")
+
+    errors: list[str] = []
+    parsed_position = parse_optional_series_position(position, errors)
+    if errors:
+        return book_detail_redirect(book.id, message=errors[0])
+
+    db.add(SeriesBook(series_id=series.id, book_id=book.id, position=parsed_position))
+    db.commit()
+    return book_detail_redirect(book.id, message=f"Added to series: {series.name}")
+
+
+@router.post("/{book_id}/series/{entry_id}/remove")
+async def remove_book_from_series_from_detail(
+    book_id: int,
+    entry_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_write_access),
+) -> Response:
+    book = db.get(Book, book_id)
+    if book is None or book.user_id != DEFAULT_LOCAL_USER_ID:
+        return templates.TemplateResponse(
+            request,
+            "books/not_found.html",
+            template_context(request, page_title="Book Not Found"),
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+
+    entry = db.scalars(
+        select(SeriesBook)
+        .join(Series)
+        .where(
+            SeriesBook.id == entry_id,
+            SeriesBook.book_id == book.id,
+            Series.user_id == DEFAULT_LOCAL_USER_ID,
+        )
+    ).first()
+    if entry is None:
+        return book_detail_redirect(book.id, message="Series membership not found.")
+
+    series_name = entry.series.name
+    db.delete(entry)
+    db.commit()
+    return book_detail_redirect(book.id, message=f"Removed from series: {series_name}")
+
+
 @router.get("/{book_id}", response_class=HTMLResponse)
 async def book_detail(
     book_id: int,
@@ -1179,6 +1271,19 @@ async def book_detail(
         .where(ReadingEvent.book_id == book.id, ReadingEvent.user_id == DEFAULT_LOCAL_USER_ID)
         .order_by(ReadingEvent.event_date.desc(), ReadingEvent.id.desc())
     ).all()
+    series_entries = db.scalars(
+        select(SeriesBook)
+        .join(Series)
+        .options(joinedload(SeriesBook.series))
+        .where(SeriesBook.book_id == book.id, Series.user_id == DEFAULT_LOCAL_USER_ID)
+        .order_by(Series.name.asc())
+    ).all()
+    assigned_series_ids = {entry.series_id for entry in series_entries}
+    available_series = db.scalars(
+        select(Series)
+        .where(Series.user_id == DEFAULT_LOCAL_USER_ID, Series.id.not_in(assigned_series_ids))
+        .order_by(Series.name.asc())
+    ).all()
 
     return templates.TemplateResponse(
         request,
@@ -1191,6 +1296,8 @@ async def book_detail(
             progress_percent=display_progress(book),
             audio_duration=format_audio_seconds(book.audio_seconds),
             enjoyed_duration=format_enjoyed_seconds(book.progress.enjoyed_seconds if book.progress else None),
+            series_entries=series_entries,
+            available_series=available_series,
             message=message,
         ),
     )
