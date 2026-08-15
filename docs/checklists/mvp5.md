@@ -77,12 +77,12 @@ Derived from `docs/ROADMAP.md` MVP 5 - Series Tracking, with continuity from MVP
 
 ## Chunk 8 - Progress And Next-Unread Logic
 
-- [ ] Define what counts as read/completed for existing books
-- [ ] Define how planned/unowned entries affect remaining count
-- [ ] Calculate completed count and total known/planned count
-- [ ] Identify next unread item from ordered entries
-- [ ] Handle abandoned, paused, and completed series status edge cases
-- [ ] Avoid marking series complete automatically unless behavior is explicit and safe
+- [x] Define what counts as read/completed for existing books
+- [x] Define how planned/unowned entries affect remaining count
+- [x] Calculate completed count and total known/planned count
+- [x] Identify next unread item from ordered entries
+- [x] Handle abandoned, paused, and completed series status edge cases
+- [x] Avoid marking series complete automatically unless behavior is explicit and safe
 
 ## Chunk 9 - Series Status And Continuation Tracking
 

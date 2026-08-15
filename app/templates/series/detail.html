@@ -26,6 +26,8 @@
             <dd class="col-sm-8">{{ series.wants_to_continue.replace('_', ' ').title() }}</dd>
             <dt class="col-sm-4">Progress</dt>
             <dd class="col-sm-8">{{ completed_count }} / {{ total_count }}</dd>
+            <dt class="col-sm-4">Remaining</dt>
+            <dd class="col-sm-8">{{ remaining_count }}</dd>
             <dt class="col-sm-4">Next Unread</dt>
             <dd class="col-sm-8">
               {% if next_unread %}
@@ -35,6 +37,7 @@
               {% endif %}
             </dd>
           </dl>
+          <div class="alert app-status-alert mt-3 mb-0" role="status">{{ progress_note }}</div>
         </div>
       </section>
     </div>
@@ -42,7 +45,7 @@
       <section class="card h-100">
         <div class="card-body">
           <h2 class="h5 mb-3">What Counts Here</h2>
-          <p class="app-muted mb-0">Existing books count as complete when their status is Completed or their progress is 100%. Planned books remain unread until linked to a book later.</p>
+          <p class="app-muted mb-0">Existing books count as complete when their status is Completed or their progress is 100%. Planned books count toward the total and remain unread until linked to a completed book later.</p>
           <h3 class="h6 mt-4 mb-2">Ordering</h3>
           <p class="app-muted mb-0">{{ ordering_help }}</p>
         </div>

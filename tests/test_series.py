@@ -942,3 +942,98 @@ def test_clearing_planned_position_moves_entry_to_unknown_group() -> None:
     follow_response = client.get(response.headers["location"])
     table_html = follow_response.text[follow_response.text.find("Books In Series") :]
     assert table_html.find("Numbered Planned") < table_html.find("Cleared Planned")
+
+
+def test_series_detail_counts_planned_entries_as_remaining() -> None:
+    client, session_factory = make_series_client()
+    series = add_series(session_factory, name="Remaining Planned", status="active")
+    completed = add_book(session_factory, title="Finished Book", author="Author", status="completed")
+    add_series_entry(session_factory, series.id, position=1, book_id=completed.id)
+    add_series_entry(session_factory, series.id, position=2, planned_title="Future Planned")
+
+    response = client.get(f"/series/{series.id}")
+
+    assert response.status_code == 200
+    assert "1 / 2" in response.text
+    assert "Remaining" in response.text
+    assert "1 tracked entries remain unread or planned." in response.text
+    assert "Future Planned" in response.text
+    assert "Next unread" in response.text
+
+
+def test_series_detail_marks_all_complete_without_auto_completing_series_status() -> None:
+    client, session_factory = make_series_client()
+    series = add_series(session_factory, name="Manual Status", status="active")
+    first = add_book(session_factory, title="Complete One", author="Author", status="completed")
+    second = add_book(session_factory, title="Complete Two", author="Author", status="started")
+    add_series_entry(session_factory, series.id, position=1, book_id=first.id)
+    add_series_entry(session_factory, series.id, position=2, book_id=second.id)
+    with session_factory() as db:
+        db.add(
+            BookProgress(
+                user_id=DEFAULT_LOCAL_USER_ID,
+                book_id=second.id,
+                source="manual",
+                progress_percent=100,
+            )
+        )
+        db.commit()
+
+    response = client.get(f"/series/{series.id}")
+
+    assert response.status_code == 200
+    assert "2 / 2" in response.text
+    assert "All tracked entries are complete or read. Series status remains manual." in response.text
+    assert "Active" in response.text
+    with session_factory() as db:
+        unchanged = db.get(Series, series.id)
+        assert unchanged is not None
+        assert unchanged.status == "active"
+
+
+def test_series_detail_completed_status_warns_when_entries_remain() -> None:
+    client, session_factory = make_series_client()
+    series = add_series(session_factory, name="Completed With Remainder", status="completed")
+    read_book = add_book(session_factory, title="Read Book", author="Author", status="completed")
+    unread_book = add_book(session_factory, title="Unread Book", author="Author", status="want_to_read")
+    add_series_entry(session_factory, series.id, position=1, book_id=read_book.id)
+    add_series_entry(session_factory, series.id, position=2, book_id=unread_book.id)
+    add_series_entry(session_factory, series.id, position=3, planned_title="Planned Remainder")
+
+    response = client.get(f"/series/{series.id}")
+
+    assert response.status_code == 200
+    assert "1 / 3" in response.text
+    assert "Series is marked Completed, but 2 tracked entries remain unread or planned." in response.text
+    assert "Unread Book" in response.text
+
+
+def test_series_detail_paused_and_abandoned_keep_next_unread_visible() -> None:
+    client, session_factory = make_series_client()
+    paused = add_series(session_factory, name="Paused Series", status="paused")
+    abandoned = add_series(session_factory, name="Abandoned Series", status="abandoned")
+    paused_book = add_book(session_factory, title="Paused Next", author="Author", status="want_to_read")
+    abandoned_book = add_book(session_factory, title="Abandoned Next", author="Author", status="want_to_read")
+    add_series_entry(session_factory, paused.id, position=1, book_id=paused_book.id)
+    add_series_entry(session_factory, abandoned.id, position=1, book_id=abandoned_book.id)
+
+    paused_response = client.get(f"/series/{paused.id}")
+    abandoned_response = client.get(f"/series/{abandoned.id}")
+
+    assert paused_response.status_code == 200
+    assert "Series is paused. Next unread remains Paused Next." in paused_response.text
+    assert "Paused Next" in paused_response.text
+    assert abandoned_response.status_code == 200
+    assert "Series is abandoned. Next unread remains Abandoned Next if you resume." in abandoned_response.text
+    assert "Abandoned Next" in abandoned_response.text
+
+
+def test_series_detail_empty_series_progress_note() -> None:
+    client, session_factory = make_series_client()
+    series = add_series(session_factory, name="No Progress Yet", status="unknown")
+
+    response = client.get(f"/series/{series.id}")
+
+    assert response.status_code == 200
+    assert "0 / 0" in response.text
+    assert "No books or planned entries are tracked yet." in response.text

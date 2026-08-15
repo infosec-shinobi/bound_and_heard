@@ -137,6 +137,21 @@ def build_series_detail_entries(series: Series) -> list[SeriesDetailEntry]:
     return detail_entries
 
 
+def series_progress_note(series: Series, completed_count: int, total_count: int, next_unread: SeriesDetailEntry | None) -> str:
+    remaining_count = total_count - completed_count
+    if total_count == 0:
+        return "No books or planned entries are tracked yet."
+    if next_unread is None:
+        return "All tracked entries are complete or read. Series status remains manual."
+    if series.status == "completed":
+        return f"Series is marked Completed, but {remaining_count} tracked entries remain unread or planned."
+    if series.status == "paused":
+        return f"Series is paused. Next unread remains {next_unread.title}."
+    if series.status == "abandoned":
+        return f"Series is abandoned. Next unread remains {next_unread.title} if you resume."
+    return f"{remaining_count} tracked entries remain unread or planned."
+
+
 def clean_optional(value: str | None) -> str | None:
     if value is None:
         return None
@@ -692,6 +707,7 @@ async def series_detail(
     entries = build_series_detail_entries(series)
     completed_count = sum(1 for entry in entries if entry.is_completed)
     next_unread = next((entry for entry in entries if entry.is_next_unread), None)
+    progress_note = series_progress_note(series, completed_count, len(entries), next_unread)
     selectable_books = db.scalars(selectable_books_statement(book_q)).all()
 
     return templates.TemplateResponse(
@@ -705,6 +721,8 @@ async def series_detail(
             completed_count=completed_count,
             total_count=len(entries),
             next_unread=next_unread,
+            remaining_count=len(entries) - completed_count,
+            progress_note=progress_note,
             selectable_books=selectable_books,
             book_options={book.id: book_option_label(book) for book in selectable_books},
             book_q=book_q or "",
