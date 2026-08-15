@@ -843,3 +843,102 @@ def test_convert_planned_entry_rejects_duplicate_existing_book() -> None:
         assert unchanged is not None
         assert unchanged.book_id is None
         assert unchanged.planned_title == "Duplicate Placeholder"
+
+
+def test_series_detail_documents_ordering_semantics() -> None:
+    client, session_factory = make_series_client(admin_password=None)
+    series = add_series(session_factory, name="Ordering Help")
+
+    response = client.get(f"/series/{series.id}")
+
+    assert response.status_code == 200
+    assert "Use whole numbers for main books" in response.text
+    assert "decimals for novellas" in response.text
+    assert "negative numbers for prequels" in response.text
+    assert "Unknown-position entries appear after numbered entries" in response.text
+
+
+def test_series_entries_sort_by_prequel_decimal_whole_then_unknown_title() -> None:
+    client, session_factory = make_series_client()
+    series = add_series(session_factory, name="Ordering Semantics")
+    main = add_book(session_factory, title="Main Book", author="Author")
+    sequel = add_book(session_factory, title="Sequel Book", author="Author")
+    add_series_entry(session_factory, series.id, position=1, book_id=main.id)
+    add_series_entry(session_factory, series.id, position=2, book_id=sequel.id)
+    add_series_entry(session_factory, series.id, position=-1, planned_title="Prequel Book")
+    add_series_entry(session_factory, series.id, position=1.5, planned_title="Novella Book")
+    add_series_entry(session_factory, series.id, position=None, planned_title="Zulu Unknown")
+    add_series_entry(session_factory, series.id, position=None, planned_title="Alpha Unknown")
+
+    response = client.get(f"/series/{series.id}")
+
+    assert response.status_code == 200
+    table_html = response.text[response.text.find("Books In Series") :]
+    assert table_html.find("Prequel Book") < table_html.find("Main Book")
+    assert table_html.find("Main Book") < table_html.find("Novella Book")
+    assert table_html.find("Novella Book") < table_html.find("Sequel Book")
+    assert table_html.find("Sequel Book") < table_html.find("Alpha Unknown")
+    assert table_html.find("Alpha Unknown") < table_html.find("Zulu Unknown")
+
+
+def test_clearing_existing_book_position_moves_entry_to_unknown_group() -> None:
+    client, session_factory = make_series_client()
+    login_as_admin(client)
+    series = add_series(session_factory, name="Clear Owned Position")
+    first = add_book(session_factory, title="First Numbered", author="Author")
+    second = add_book(session_factory, title="Second Cleared", author="Author")
+    add_series_entry(session_factory, series.id, position=1, book_id=first.id)
+    add_series_entry(session_factory, series.id, position=2, book_id=second.id)
+    with session_factory() as db:
+        second_entry = db.scalars(
+            select(SeriesBook).where(SeriesBook.series_id == series.id, SeriesBook.book_id == second.id)
+        ).one()
+
+    response = client.post(
+        f"/series/{series.id}/entries/{second_entry.id}/position",
+        data={"position": ""},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    with session_factory() as db:
+        updated = db.get(SeriesBook, second_entry.id)
+        assert updated is not None
+        assert updated.position is None
+    follow_response = client.get(response.headers["location"])
+    table_html = follow_response.text[follow_response.text.find("Books In Series") :]
+    assert table_html.find("First Numbered") < table_html.find("Second Cleared")
+    assert "Unknown" in table_html
+
+
+def test_clearing_planned_position_moves_entry_to_unknown_group() -> None:
+    client, session_factory = make_series_client()
+    login_as_admin(client)
+    series = add_series(session_factory, name="Clear Planned Position")
+    add_series_entry(session_factory, series.id, position=1, planned_title="Numbered Planned")
+    add_series_entry(session_factory, series.id, position=2, planned_title="Cleared Planned")
+    with session_factory() as db:
+        cleared = db.scalars(
+            select(SeriesBook).where(SeriesBook.series_id == series.id, SeriesBook.planned_title == "Cleared Planned")
+        ).one()
+
+    response = client.post(
+        f"/series/{series.id}/planned/{cleared.id}/edit",
+        data={
+            "planned_title": "Cleared Planned",
+            "planned_author_name": "",
+            "planned_format": "ebook",
+            "position": "",
+            "notes": "",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    with session_factory() as db:
+        updated = db.get(SeriesBook, cleared.id)
+        assert updated is not None
+        assert updated.position is None
+    follow_response = client.get(response.headers["location"])
+    table_html = follow_response.text[follow_response.text.find("Books In Series") :]
+    assert table_html.find("Numbered Planned") < table_html.find("Cleared Planned")

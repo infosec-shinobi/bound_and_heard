@@ -20,6 +20,11 @@ router = APIRouter(prefix="/series", tags=["series"])
 SERIES_STATUSES = ["active", "paused", "completed", "abandoned", "unknown"]
 CONTINUATION_INTENTS = ["yes", "no", "unknown"]
 SERIES_BOOK_FORMATS = ["ebook", "audiobook", "physical", "unknown"]
+SERIES_ORDERING_HELP = (
+    "Use whole numbers for main books, decimals for novellas or side stories, "
+    "negative numbers for prequels, and leave blank when order is unknown. "
+    "Unknown-position entries appear after numbered entries, sorted by title."
+)
 
 
 @dataclass(frozen=True)
@@ -704,6 +709,7 @@ async def series_detail(
             book_options={book.id: book_option_label(book) for book in selectable_books},
             book_q=book_q or "",
             series_book_formats=SERIES_BOOK_FORMATS,
+            ordering_help=SERIES_ORDERING_HELP,
             message=message,
             error=error,
         ),

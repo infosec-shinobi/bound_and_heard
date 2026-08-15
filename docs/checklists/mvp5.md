@@ -69,11 +69,11 @@ Derived from `docs/ROADMAP.md` MVP 5 - Series Tracking, with continuity from MVP
 
 ## Chunk 7 - Ordering And Position UX
 
-- [ ] Define ordering semantics for whole numbers, decimals, novellas, prequels, and unknown order
-- [ ] Sort series entries consistently by position then title
-- [ ] Allow editing position inline or through forms
-- [ ] Show unknown-position entries without breaking ordered entries
-- [ ] Preserve order when adding or removing items
+- [x] Define ordering semantics for whole numbers, decimals, novellas, prequels, and unknown order
+- [x] Sort series entries consistently by position then title
+- [x] Allow editing position inline or through forms
+- [x] Show unknown-position entries without breaking ordered entries
+- [x] Preserve order when adding or removing items
 
 ## Chunk 8 - Progress And Next-Unread Logic
 

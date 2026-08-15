@@ -43,6 +43,8 @@
         <div class="card-body">
           <h2 class="h5 mb-3">What Counts Here</h2>
           <p class="app-muted mb-0">Existing books count as complete when their status is Completed or their progress is 100%. Planned books remain unread until linked to a book later.</p>
+          <h3 class="h6 mt-4 mb-2">Ordering</h3>
+          <p class="app-muted mb-0">{{ ordering_help }}</p>
         </div>
       </section>
     </div>
@@ -82,6 +84,7 @@
           <div class="col-md-4 col-lg-2">
             <label class="form-label" for="position">Position</label>
             <input class="form-control" id="position" name="position" type="number" step="0.01" placeholder="1">
+            <div class="form-text app-muted">{{ ordering_help }}</div>
           </div>
           <div class="col-md-8 col-lg-2 d-grid">
             <button class="btn btn-primary" type="submit" {% if not selectable_books %}disabled{% endif %}>Assign Book</button>
@@ -117,6 +120,7 @@
           <div class="col-md-4 col-lg-2">
             <label class="form-label" for="planned_position">Position</label>
             <input class="form-control" id="planned_position" name="position" type="number" step="0.01" placeholder="1">
+            <div class="form-text app-muted">Blank means unknown.</div>
           </div>
           <div class="col-lg-10">
             <label class="form-label" for="planned_notes">Notes</label>
