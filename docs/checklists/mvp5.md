@@ -110,18 +110,18 @@ Derived from `docs/ROADMAP.md` MVP 5 - Series Tracking, with continuity from MVP
 
 ## Chunk 12 - Tests
 
-- [ ] Test series model and migration fields
-- [ ] Test series list and detail pages render expected state
-- [ ] Test read-only users can view but cannot mutate series
-- [ ] Test create/edit series validation and persistence
-- [ ] Test assigning existing books to series
-- [ ] Test duplicate assignment prevention
-- [ ] Test planned book creation/edit/removal
-- [ ] Test converting planned entry to existing book assignment if implemented
-- [ ] Test ordering and next unread logic
-- [ ] Test status and continuation intent display
-- [ ] Test book detail series membership display
-- [ ] Test imports/scrapes do not overwrite manual series state
+- [x] Test series model and migration fields
+- [x] Test series list and detail pages render expected state
+- [x] Test read-only users can view but cannot mutate series
+- [x] Test create/edit series validation and persistence
+- [x] Test assigning existing books to series
+- [x] Test duplicate assignment prevention
+- [x] Test planned book creation/edit/removal
+- [x] Test converting planned entry to existing book assignment if implemented
+- [x] Test ordering and next unread logic
+- [x] Test status and continuation intent display
+- [x] Test book detail series membership display
+- [x] Test imports/scrapes do not overwrite manual series state
 
 ## Chunk 13 - Documentation
 
