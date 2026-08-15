@@ -34,6 +34,7 @@ class SeriesListItem:
     total_count: int
     next_unread_title: str | None
     next_unread_author: str | None
+    continuation_notice: str | None
 
 
 @dataclass(frozen=True)
@@ -108,6 +109,7 @@ def build_series_list_item(series: Series) -> SeriesListItem:
         total_count=len(entries),
         next_unread_title=series_entry_title(next_unread) if next_unread else None,
         next_unread_author=series_entry_author(next_unread) if next_unread else None,
+        continuation_notice=series_continuation_notice(series, series_entry_title(next_unread) if next_unread else None),
     )
 
 
@@ -150,6 +152,14 @@ def series_progress_note(series: Series, completed_count: int, total_count: int,
     if series.status == "abandoned":
         return f"Series is abandoned. Next unread remains {next_unread.title} if you resume."
     return f"{remaining_count} tracked entries remain unread or planned."
+
+
+def series_continuation_notice(series: Series, next_unread_title: str | None) -> str | None:
+    if series.wants_to_continue == "no" and next_unread_title is not None:
+        return f"Marked not continuing; next unread is {next_unread_title}."
+    if series.wants_to_continue == "unknown" and next_unread_title is not None:
+        return "Continuation intent is unknown."
+    return None
 
 
 def clean_optional(value: str | None) -> str | None:
@@ -708,6 +718,7 @@ async def series_detail(
     completed_count = sum(1 for entry in entries if entry.is_completed)
     next_unread = next((entry for entry in entries if entry.is_next_unread), None)
     progress_note = series_progress_note(series, completed_count, len(entries), next_unread)
+    continuation_notice = series_continuation_notice(series, next_unread.title if next_unread else None)
     selectable_books = db.scalars(selectable_books_statement(book_q)).all()
 
     return templates.TemplateResponse(
@@ -723,6 +734,7 @@ async def series_detail(
             next_unread=next_unread,
             remaining_count=len(entries) - completed_count,
             progress_note=progress_note,
+            continuation_notice=continuation_notice,
             selectable_books=selectable_books,
             book_options={book.id: book_option_label(book) for book in selectable_books},
             book_q=book_q or "",

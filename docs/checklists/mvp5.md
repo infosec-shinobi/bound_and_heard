@@ -86,11 +86,11 @@ Derived from `docs/ROADMAP.md` MVP 5 - Series Tracking, with continuity from MVP
 
 ## Chunk 9 - Series Status And Continuation Tracking
 
-- [ ] Let user set status independent of book completion state
-- [ ] Let user record wants-to-continue yes/no/unknown
-- [ ] Surface abandoned or paused state clearly
-- [ ] Surface series where next unread exists but user does not want to continue
-- [ ] Preserve manual series state across imports and scraping
+- [x] Let user set status independent of book completion state
+- [x] Let user record wants-to-continue yes/no/unknown
+- [x] Surface abandoned or paused state clearly
+- [x] Surface series where next unread exists but user does not want to continue
+- [x] Preserve manual series state across imports and scraping
 
 ## Chunk 10 - Book Detail Integration
 

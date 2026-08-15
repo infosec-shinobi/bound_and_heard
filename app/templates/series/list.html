@@ -65,7 +65,12 @@
                   {{ protected_link('Edit', '/series/' ~ item.series.id ~ '/edit', can_write, write_disabled_reason, 'btn btn-sm btn-outline-primary mt-2') }}
                 </td>
                 <td>{{ item.series.status.replace('_', ' ').title() }}</td>
-                <td>{{ item.series.wants_to_continue.replace('_', ' ').title() }}</td>
+                <td>
+                  {{ item.series.wants_to_continue.replace('_', ' ').title() }}
+                  {% if item.continuation_notice %}<div class="small app-muted">{{ item.continuation_notice }}</div>{% endif %}
+                  {% if item.series.status in ['paused', 'abandoned'] %}<span class="badge app-badge-warning mt-1">{{ item.series.status.title() }} series</span>{% endif %}
+                  {% if item.series.wants_to_continue == 'no' and item.next_unread_title %}<span class="badge app-badge-muted mt-1">Not continuing</span>{% endif %}
+                </td>
                 <td>{{ item.completed_count }} / {{ item.total_count }}</td>
                 <td>
                   {% if item.next_unread_title %}

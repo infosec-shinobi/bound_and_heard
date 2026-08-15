@@ -9,8 +9,12 @@ from sqlalchemy.pool import StaticPool
 from app.core.bootstrap import DEFAULT_LOCAL_USER_ID
 from app.core.config import Settings
 from app.core.database import Base, get_db
+from app.importers.libby_json import parse_libby_export
 from app.main import create_app
-from app.models import Book, BookProgress, ReadingEvent, Series, SeriesBook, User
+from app.models import Book, BookProgress, ReadingEvent, ScrapeJob, ScrapeJobItem, Series, SeriesBook, User
+from app.scrapers.libby_progress import parse_libby_progress
+from app.services.import_service import process_libby_timeline_items
+from app.services.scrape_progress import apply_scraped_progress
 
 
 def make_series_client(admin_password: str | None = "secret") -> tuple[TestClient, sessionmaker[Session]]:
@@ -137,6 +141,29 @@ def add_reading_event(session_factory: sessionmaker[Session], book_id: int) -> N
             )
         )
         db.commit()
+
+
+def libby_item_for_book(*, title: str, author: str, title_id: str):
+    return parse_libby_export(
+        {
+            "version": 1,
+            "timeline": [
+                {
+                    "cover": {"title": title, "format": "ebook"},
+                    "title": {
+                        "text": title,
+                        "url": f"https://share.libbyapp.com/title/{title_id}",
+                        "titleId": title_id,
+                    },
+                    "author": author,
+                    "publisher": "Example Publisher",
+                    "timestamp": 1767903363000,
+                    "activity": "Borrowed",
+                    "library": {"text": "Example Library", "key": "examplelibrary"},
+                }
+            ],
+        }
+    ).timeline[0]
 
 
 def test_series_page_shows_empty_state_for_read_only_user() -> None:
@@ -1037,3 +1064,127 @@ def test_series_detail_empty_series_progress_note() -> None:
     assert response.status_code == 200
     assert "0 / 0" in response.text
     assert "No books or planned entries are tracked yet." in response.text
+
+
+def test_series_list_and_detail_surface_not_continuing_with_next_unread() -> None:
+    client, session_factory = make_series_client()
+    series = add_series(session_factory, name="Do Not Continue", status="active", wants_to_continue="no")
+    book = add_book(session_factory, title="Unread Stop Point", author="Author", status="want_to_read")
+    add_series_entry(session_factory, series.id, position=1, book_id=book.id)
+
+    list_response = client.get("/series")
+    detail_response = client.get(f"/series/{series.id}")
+
+    assert list_response.status_code == 200
+    assert "Marked not continuing; next unread is Unread Stop Point." in list_response.text
+    assert "Not continuing" in list_response.text
+    assert detail_response.status_code == 200
+    assert "Marked not continuing; next unread is Unread Stop Point." in detail_response.text
+    assert "Not continuing" in detail_response.text
+
+
+def test_series_status_and_continuation_are_independent_of_completion_state() -> None:
+    client, session_factory = make_series_client()
+    series = add_series(session_factory, name="Manual State", status="abandoned", wants_to_continue="no")
+    book = add_book(session_factory, title="Already Finished", author="Author", status="completed")
+    add_series_entry(session_factory, series.id, position=1, book_id=book.id)
+
+    response = client.get(f"/series/{series.id}")
+
+    assert response.status_code == 200
+    assert "Abandoned" in response.text
+    assert "No" in response.text
+    assert "All tracked entries are complete or read. Series status remains manual." in response.text
+    with session_factory() as db:
+        unchanged = db.get(Series, series.id)
+        assert unchanged is not None
+        assert unchanged.status == "abandoned"
+        assert unchanged.wants_to_continue == "no"
+
+
+def test_series_list_and_detail_surface_paused_and_abandoned_state() -> None:
+    client, session_factory = make_series_client()
+    paused = add_series(session_factory, name="Clearly Paused", status="paused")
+    abandoned = add_series(session_factory, name="Clearly Abandoned", status="abandoned")
+    paused_book = add_book(session_factory, title="Paused Book", author="Author", status="want_to_read")
+    abandoned_book = add_book(session_factory, title="Abandoned Book", author="Author", status="want_to_read")
+    add_series_entry(session_factory, paused.id, position=1, book_id=paused_book.id)
+    add_series_entry(session_factory, abandoned.id, position=1, book_id=abandoned_book.id)
+
+    list_response = client.get("/series")
+    paused_response = client.get(f"/series/{paused.id}")
+    abandoned_response = client.get(f"/series/{abandoned.id}")
+
+    assert list_response.status_code == 200
+    assert "Paused series" in list_response.text
+    assert "Abandoned series" in list_response.text
+    assert paused_response.status_code == 200
+    assert "Paused series" in paused_response.text
+    assert abandoned_response.status_code == 200
+    assert "Abandoned series" in abandoned_response.text
+
+
+def test_libby_import_preserves_manual_series_state() -> None:
+    client, session_factory = make_series_client()
+    series = add_series(session_factory, name="Import Preserved", status="paused", wants_to_continue="no")
+    book = add_book(
+        session_factory,
+        title="Imported Series Book",
+        author="Import Author",
+        status="started",
+        metadata_source="manual",
+    )
+    add_series_entry(session_factory, series.id, position=1.5, book_id=book.id)
+
+    with session_factory() as db:
+        process_libby_timeline_items(
+            db,
+            user_id=DEFAULT_LOCAL_USER_ID,
+            items=[libby_item_for_book(title="Imported Series Book", author="Import Author", title_id="import-1")],
+        )
+        db.commit()
+
+        preserved_series = db.get(Series, series.id)
+        entry = db.scalars(select(SeriesBook).where(SeriesBook.series_id == series.id)).one()
+        assert preserved_series is not None
+        assert preserved_series.status == "paused"
+        assert preserved_series.wants_to_continue == "no"
+        assert entry.book_id == book.id
+        assert entry.position == 1.5
+
+    assert client.get(f"/series/{series.id}").status_code == 200
+
+
+def test_scraped_progress_preserves_manual_series_state() -> None:
+    client, session_factory = make_series_client()
+    series = add_series(session_factory, name="Scrape Preserved", status="abandoned", wants_to_continue="no")
+    book = add_book(session_factory, title="Scraped Series Book", author="Author", status="borrowed")
+    add_series_entry(session_factory, series.id, position=2, book_id=book.id)
+
+    with session_factory() as db:
+        scrape_job = ScrapeJob(user_id=DEFAULT_LOCAL_USER_ID, source="libby", status="running")
+        db.add(scrape_job)
+        db.flush()
+        item = ScrapeJobItem(job_id=scrape_job.id, book_id=book.id, status="running")
+        db.add(item)
+        db.flush()
+        apply_scraped_progress(
+            db,
+            item=item,
+            parsed=parse_libby_progress("Completed"),
+            observed_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+        )
+        db.commit()
+
+        preserved_series = db.get(Series, series.id)
+        entry = db.scalars(select(SeriesBook).where(SeriesBook.series_id == series.id)).one()
+        updated_book = db.get(Book, book.id)
+        assert preserved_series is not None
+        assert preserved_series.status == "abandoned"
+        assert preserved_series.wants_to_continue == "no"
+        assert entry.book_id == book.id
+        assert entry.position == 2
+        assert updated_book is not None
+        assert updated_book.status == "completed"
+
+    assert client.get(f"/series/{series.id}").status_code == 200

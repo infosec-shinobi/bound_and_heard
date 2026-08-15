@@ -23,7 +23,10 @@
             <dt class="col-sm-4">Status</dt>
             <dd class="col-sm-8">{{ series.status.replace('_', ' ').title() }}</dd>
             <dt class="col-sm-4">Want To Continue</dt>
-            <dd class="col-sm-8">{{ series.wants_to_continue.replace('_', ' ').title() }}</dd>
+            <dd class="col-sm-8">
+              {{ series.wants_to_continue.replace('_', ' ').title() }}
+              {% if continuation_notice %}<div class="small app-muted">{{ continuation_notice }}</div>{% endif %}
+            </dd>
             <dt class="col-sm-4">Progress</dt>
             <dd class="col-sm-8">{{ completed_count }} / {{ total_count }}</dd>
             <dt class="col-sm-4">Remaining</dt>
@@ -38,6 +41,8 @@
             </dd>
           </dl>
           <div class="alert app-status-alert mt-3 mb-0" role="status">{{ progress_note }}</div>
+          {% if series.status in ['paused', 'abandoned'] %}<span class="badge app-badge-warning mt-3">{{ series.status.title() }} series</span>{% endif %}
+          {% if series.wants_to_continue == 'no' and next_unread %}<span class="badge app-badge-muted mt-3">Not continuing</span>{% endif %}
         </div>
       </section>
     </div>
