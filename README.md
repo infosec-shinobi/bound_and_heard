@@ -113,6 +113,35 @@ Admin users can make quick corrections from review rows:
 
 Quick status, progress, and completion-date changes create `manually_corrected` reading events. Marking a book reviewed or ignored stores review state and a review note. Ignored and reviewed books stay out of the default review results.
 
+## Series Tracking
+
+Series tracking is manual-first in MVP 5. Imports, review cleanup, scraping, and future metadata enrichment do not auto-create series and do not overwrite manual series assignments.
+
+Open `/series` from the navigation to create and manage series. Each series has a manual status of `active`, `paused`, `completed`, `abandoned`, or `unknown`, plus a continuation intent of `yes`, `no`, or `unknown`.
+
+Admin users can:
+
+- Create and edit series.
+- Assign existing books to one or more series.
+- Add planned books that are not yet in the local library.
+- Edit or remove planned entries.
+- Convert a planned entry to an existing book once the book has been added or imported.
+- Set or clear each entry's series position.
+
+Ordering uses numeric positions:
+
+- Whole numbers are intended for main books.
+- Decimals are intended for novellas or side stories.
+- Negative numbers can represent prequels.
+- Blank position means unknown order.
+- Unknown-position entries appear after numbered entries and sort by title.
+
+Series progress is calculated from the ordered entries. Existing books count as complete when their status is `completed` or their latest progress is `100%`. Planned entries count toward the total and remain unread until they are converted to a completed book. The next unread item is the first ordered entry that is not complete.
+
+Book detail pages show series memberships and link back to series detail pages. Import review and import summary pages link to the book detail series section so imported books can be assigned manually.
+
+Future metadata enrichment may suggest series candidates, but suggestions should not overwrite manual series records or assignments unless the user explicitly chooses to do so.
+
 ## Libby Progress Scraping Setup
 
 MVP 4 uses Playwright with a persistent local browser profile so you can log in to Libby manually and reuse that browser session for progress scraping. The default profile directory is `data/browser/libby-profile`, which is ignored by Git through the existing `data/**` rule.

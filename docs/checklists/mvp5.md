@@ -125,23 +125,23 @@ Derived from `docs/ROADMAP.md` MVP 5 - Series Tracking, with continuity from MVP
 
 ## Chunk 13 - Documentation
 
-- [ ] Update README with series tracking workflow
-- [ ] Document manual-first series policy
-- [ ] Document planned/unowned series entries
-- [ ] Document ordering semantics and next-unread behavior
-- [ ] Update database documentation for series tables and fields
-- [ ] Note future metadata enrichment can suggest series but should not overwrite manual assignments
+- [x] Update README with series tracking workflow
+- [x] Document manual-first series policy
+- [x] Document planned/unowned series entries
+- [x] Document ordering semantics and next-unread behavior
+- [x] Update database documentation for series tables and fields
+- [x] Note future metadata enrichment can suggest series but should not overwrite manual assignments
 
 ## MVP 5 Done Criteria
 
-- [ ] User can create and edit series
-- [ ] User can assign existing books to series
-- [ ] User can add planned series books that are not yet in the library
-- [ ] User can set series order/position
-- [ ] User can track series status: active, paused, completed, abandoned, unknown
-- [ ] User can track whether they want to continue a series
-- [ ] Series detail shows completed/remaining progress
-- [ ] Series detail shows the next unread book when available
-- [ ] Series list shows completed, active, paused, and abandoned series states
-- [ ] Manual series assignments survive imports and scraping
-- [ ] Basic tests pass
+- [x] User can create and edit series
+- [x] User can assign existing books to series
+- [x] User can add planned series books that are not yet in the library
+- [x] User can set series order/position
+- [x] User can track series status: active, paused, completed, abandoned, unknown
+- [x] User can track whether they want to continue a series
+- [x] Series detail shows completed/remaining progress
+- [x] Series detail shows the next unread book when available
+- [x] Series list shows completed, active, paused, and abandoned series states
+- [x] Manual series assignments survive imports and scraping
+- [x] Basic tests pass

@@ -309,7 +309,7 @@ Snapshot files are written under the configured scraped directory, usually `data
 
 ### series
 
-Stores user-created series records.
+Stores user-created series records. Series state is manual-first: imports, scraping, and future enrichment should not auto-create or overwrite series unless the user explicitly chooses that behavior.
 
 Fields:
 
@@ -318,6 +318,7 @@ Fields:
 - name
 - description
 - status
+- wants_to_continue
 - created_at
 - updated_at
 
@@ -329,27 +330,49 @@ Recommended status values:
 - abandoned
 - unknown
 
+Recommended wants_to_continue values:
+
+- yes
+- no
+- unknown
+
+`status` is independent of book completion state. A series can be marked `active`, `paused`, `completed`, or `abandoned` manually even if tracked entries suggest otherwise.
+
 ### series_books
 
-Maps books to series.
+Maps existing books and planned/unowned entries to series.
 
 `book_id` is nullable so the app can represent planned or unread books in a series before those books exist in the user's library.
+
+Existing book assignments have `book_id` set and normally leave planned metadata fields empty. Planned entries have `book_id` unset and use `planned_title`, `planned_author_name`, and `planned_format` until explicitly converted to an existing book assignment.
 
 Fields:
 
 - id
-- user_id
 - series_id
 - book_id
-- title
-- author_name
 - position
-- position_label
-- is_optional
-- status
+- planned_title
+- planned_author_name
+- planned_format
 - notes
 - created_at
 - updated_at
+
+Constraints and indexes:
+
+- `uq_series_books_series_id_book_id` prevents assigning the same existing book to the same series more than once.
+- `series_id`, `book_id`, `position`, `planned_title`, `planned_author_name`, and `planned_format` are indexed for lookup and ordering.
+
+Ordering semantics:
+
+- Whole-number positions are intended for main books.
+- Decimal positions are intended for novellas or side stories.
+- Negative positions can represent prequels.
+- Null position means unknown order.
+- Unknown-position entries appear after numbered entries and sort by title.
+
+Series progress is derived from ordered `series_books` rows. Existing books count as complete when `books.status = completed` or latest progress is `100%`. Planned entries count toward the total and remain unread until linked to a completed book. The next unread item is the first ordered row that is not complete.
 
 ### genres
 
