@@ -12,7 +12,10 @@ from app.core.bootstrap import DEFAULT_LOCAL_USER_ID
 from app.core.database import get_db
 from app.core.templates import template_context, templates
 from app.core.write_protection import require_write_access
-from app.models import Book, BookProgress, ReadingEvent, Series, SeriesBook
+from app.models import Book, BookProgress, MetadataEnrichmentRun, ReadingEvent, Series, SeriesBook
+from app.services.metadata_apply import apply_metadata_result_to_empty_fields
+from app.services.metadata_lookup import MetadataCandidate, lookup_book_metadata
+from app.services.metadata_providers import GoogleBooksClient, MetadataProvider, OpenLibraryClient
 
 
 router = APIRouter(prefix="/books", tags=["books"])
@@ -44,6 +47,10 @@ REVIEW_SUSPICIOUS_FILTERS = {
 }
 TITLE_FALLBACK_VALUES = ["untitled libby book"]
 WHITESPACE_PATTERN = re.compile(r"\s+")
+
+
+def get_metadata_providers() -> list[MetadataProvider]:
+    return [OpenLibraryClient(), GoogleBooksClient()]
 
 
 def clean_optional(value: str | None) -> str | None:
@@ -253,6 +260,75 @@ def book_detail_redirect(book_id: int, **params: str) -> RedirectResponse:
     if query:
         target = f"{target}?{query}"
     return RedirectResponse(target, status_code=status.HTTP_303_SEE_OTHER)
+
+
+def enrichment_message_for_status(enrichment_status: str, applied_fields: list[str] | None = None) -> str:
+    if enrichment_status == "matched":
+        if applied_fields:
+            return "Metadata enriched: " + ", ".join(applied_fields) + "."
+        return "Metadata provider matched, but no empty supported fields needed updates."
+    if enrichment_status == "ambiguous":
+        return "Metadata enrichment found ambiguous matches. Review candidates before applying changes."
+    if enrichment_status == "low_confidence":
+        return "Metadata enrichment found only low-confidence matches, so nothing was applied."
+    if enrichment_status == "no_candidates":
+        return "No useful metadata enrichment candidates were found."
+    return "Metadata enrichment could not be completed."
+
+
+def book_detail_response(
+    request: Request,
+    db: Session,
+    book: Book,
+    *,
+    message: str | None = None,
+    enrichment_status: str | None = None,
+    enrichment_candidates: tuple[MetadataCandidate, ...] = (),
+) -> HTMLResponse:
+    events = db.scalars(
+        select(ReadingEvent)
+        .where(ReadingEvent.book_id == book.id, ReadingEvent.user_id == DEFAULT_LOCAL_USER_ID)
+        .order_by(ReadingEvent.event_date.desc(), ReadingEvent.id.desc())
+    ).all()
+    series_entries = db.scalars(
+        select(SeriesBook)
+        .join(Series)
+        .options(joinedload(SeriesBook.series))
+        .where(SeriesBook.book_id == book.id, Series.user_id == DEFAULT_LOCAL_USER_ID)
+        .order_by(Series.name.asc())
+    ).all()
+    assigned_series_ids = {entry.series_id for entry in series_entries}
+    available_series = db.scalars(
+        select(Series)
+        .where(Series.user_id == DEFAULT_LOCAL_USER_ID, Series.id.not_in(assigned_series_ids))
+        .order_by(Series.name.asc())
+    ).all()
+    enrichment_runs = db.scalars(
+        select(MetadataEnrichmentRun)
+        .where(MetadataEnrichmentRun.book_id == book.id, MetadataEnrichmentRun.user_id == DEFAULT_LOCAL_USER_ID)
+        .order_by(MetadataEnrichmentRun.created_at.desc(), MetadataEnrichmentRun.id.desc())
+        .limit(5)
+    ).all()
+
+    return templates.TemplateResponse(
+        request,
+        "books/detail.html",
+        template_context(
+            request,
+            page_title=book.title,
+            book=book,
+            events=events,
+            progress_percent=display_progress(book),
+            audio_duration=format_audio_seconds(book.audio_seconds),
+            enjoyed_duration=format_enjoyed_seconds(book.progress.enjoyed_seconds if book.progress else None),
+            series_entries=series_entries,
+            available_series=available_series,
+            message=message,
+            enrichment_status=enrichment_status,
+            enrichment_runs=enrichment_runs,
+            enrichment_candidates=enrichment_candidates,
+        ),
+    )
 
 
 def active_review_filter_labels(active_filters: dict[str, bool]) -> list[str]:
@@ -1246,12 +1322,62 @@ async def remove_book_from_series_from_detail(
     return book_detail_redirect(book.id, message=f"Removed from series: {series_name}")
 
 
+@router.post("/{book_id}/enrich")
+async def enrich_book_metadata(
+    book_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    providers: list[MetadataProvider] = Depends(get_metadata_providers),
+    _: None = Depends(require_write_access),
+    force_refresh: bool = Form(default=False),
+) -> Response:
+    book = db.get(Book, book_id)
+    if book is None or book.user_id != DEFAULT_LOCAL_USER_ID:
+        return templates.TemplateResponse(
+            request,
+            "books/not_found.html",
+            template_context(request, page_title="Book Not Found"),
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+
+    outcome = lookup_book_metadata(db, book=book, providers=providers, force_refresh=force_refresh)
+    applied_fields: list[str] = []
+    if outcome.status == "matched" and outcome.best_candidate is not None:
+        candidate = outcome.best_candidate
+        applied = apply_metadata_result_to_empty_fields(
+            db,
+            book=book,
+            result=candidate.result,
+            cache_entry_id=candidate.cache_entry.id,
+            lookup_type=candidate.response.lookup_type,
+            normalized_query=candidate.response.normalized_query,
+        )
+        applied_fields = sorted(field for field in applied.fields_applied if field != "metadata_source")
+
+    db.commit()
+    if outcome.status in {"ambiguous", "low_confidence"}:
+        return book_detail_response(
+            request,
+            db,
+            book,
+            message=enrichment_message_for_status(outcome.status, applied_fields),
+            enrichment_status=outcome.status,
+            enrichment_candidates=outcome.candidates,
+        )
+    return book_detail_redirect(
+        book.id,
+        message=enrichment_message_for_status(outcome.status, applied_fields),
+        enrichment_status=outcome.status,
+    )
+
+
 @router.get("/{book_id}", response_class=HTMLResponse)
 async def book_detail(
     book_id: int,
     request: Request,
     db: Session = Depends(get_db),
     message: str | None = None,
+    enrichment_status: str | None = None,
 ) -> HTMLResponse:
     book = db.scalars(
         select(Book)
@@ -1266,38 +1392,4 @@ async def book_detail(
             status_code=status.HTTP_404_NOT_FOUND,
         )
 
-    events = db.scalars(
-        select(ReadingEvent)
-        .where(ReadingEvent.book_id == book.id, ReadingEvent.user_id == DEFAULT_LOCAL_USER_ID)
-        .order_by(ReadingEvent.event_date.desc(), ReadingEvent.id.desc())
-    ).all()
-    series_entries = db.scalars(
-        select(SeriesBook)
-        .join(Series)
-        .options(joinedload(SeriesBook.series))
-        .where(SeriesBook.book_id == book.id, Series.user_id == DEFAULT_LOCAL_USER_ID)
-        .order_by(Series.name.asc())
-    ).all()
-    assigned_series_ids = {entry.series_id for entry in series_entries}
-    available_series = db.scalars(
-        select(Series)
-        .where(Series.user_id == DEFAULT_LOCAL_USER_ID, Series.id.not_in(assigned_series_ids))
-        .order_by(Series.name.asc())
-    ).all()
-
-    return templates.TemplateResponse(
-        request,
-        "books/detail.html",
-        template_context(
-            request,
-            page_title=book.title,
-            book=book,
-            events=events,
-            progress_percent=display_progress(book),
-            audio_duration=format_audio_seconds(book.audio_seconds),
-            enjoyed_duration=format_enjoyed_seconds(book.progress.enjoyed_seconds if book.progress else None),
-            series_entries=series_entries,
-            available_series=available_series,
-            message=message,
-        ),
-    )
+    return book_detail_response(request, db, book, message=message, enrichment_status=enrichment_status)

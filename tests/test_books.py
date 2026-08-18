@@ -10,8 +10,10 @@ from sqlalchemy.pool import StaticPool
 from app.core.bootstrap import DEFAULT_LOCAL_USER_ID
 from app.core.config import Settings
 from app.core.database import Base, get_db
+from app.api.books import get_metadata_providers
 from app.main import create_app
-from app.models import Book, BookProgress, ReadingEvent, Series, SeriesBook, User
+from app.models import Book, BookProgress, MetadataEnrichmentRun, ReadingEvent, Series, SeriesBook, User
+from app.services.metadata_providers import MetadataLookupResponse, MetadataResult
 
 
 def make_books_client(admin_password: str | None = "secret") -> tuple[TestClient, sessionmaker[Session]]:
@@ -148,6 +150,81 @@ def add_series_entry(
         db.commit()
         db.refresh(entry)
         return entry
+
+
+class FakeMetadataProvider:
+    def __init__(self, *, results: tuple[MetadataResult, ...], status: str = "succeeded") -> None:
+        self.name = "fake_provider"
+        self.results = results
+        self.status = status
+        self.isbn_calls = 0
+        self.title_calls = 0
+
+    def lookup_isbn(self, isbn: str) -> MetadataLookupResponse:
+        self.isbn_calls += 1
+        return MetadataLookupResponse(
+            provider=self.name,
+            lookup_type="isbn",
+            normalized_query=isbn,
+            status=self.status,
+            results=self.results if self.status == "succeeded" else (),
+            raw_response={"results": [result.title for result in self.results]},
+            http_status=200,
+        )
+
+    def lookup_title_author(self, title: str, author: str | None = None) -> MetadataLookupResponse:
+        self.title_calls += 1
+        normalized_query = f"{title.casefold()}|{(author or '').casefold()}" if author else title.casefold()
+        return MetadataLookupResponse(
+            provider=self.name,
+            lookup_type="title_author",
+            normalized_query=normalized_query,
+            status=self.status,
+            results=self.results if self.status == "succeeded" else (),
+            raw_response={"results": [result.title for result in self.results]},
+            http_status=200,
+        )
+
+    def parse_cached_response(
+        self,
+        *,
+        lookup_type: str,
+        normalized_query: str,
+        status: str,
+        raw_response,
+        http_status: int | None = None,
+        error_message: str | None = None,
+    ) -> MetadataLookupResponse:
+        return MetadataLookupResponse(
+            provider=self.name,
+            lookup_type=lookup_type,
+            normalized_query=normalized_query,
+            status=status,
+            results=self.results if status == "succeeded" else (),
+            raw_response=raw_response,
+            http_status=http_status,
+            error_message=error_message,
+        )
+
+
+def provider_result(
+    *,
+    title: str = "Enriched Title",
+    author: str = "Provider Author",
+    confidence: float = 0.98,
+    isbn13: str | None = "9781234567890",
+) -> MetadataResult:
+    return MetadataResult(
+        provider="fake_provider",
+        title=title,
+        authors=(author,),
+        publisher="Provider Press",
+        publication_year=2020,
+        isbn13=isbn13,
+        page_count=321,
+        cover_url="https://example.test/provider-cover.jpg",
+        confidence=confidence,
+    )
 
 
 def test_books_page_shows_empty_state() -> None:
@@ -303,6 +380,86 @@ def test_book_detail_shows_clear_scraped_progress_action_for_scraped_progress() 
     assert response.status_code == 200
     assert "Clear Scraped Progress" in response.text
     assert f'action="/books/{book.id}/scraped-progress/clear"' in response.text
+
+
+def test_book_detail_shows_enrichment_action_disabled_until_admin_login() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Read Only Enrichment", author="Author")
+
+    response = client.get(f"/books/{book.id}")
+
+    assert response.status_code == 200
+    assert "Metadata Enrichment" in response.text
+    assert "Enrich Metadata" in response.text
+    assert f'action="/books/{book.id}/enrich"' not in response.text
+
+
+def test_enrich_book_metadata_requires_admin_login() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Protected Enrichment", author="Author", isbn13="9781234567890")
+
+    response = client.post(f"/books/{book.id}/enrich", follow_redirects=False)
+
+    assert response.status_code == 403
+
+
+def test_enrich_book_metadata_fills_empty_fields_and_records_context() -> None:
+    client, session_factory = make_books_client()
+    client.post("/admin/login", data={"password": "secret"})
+    provider = FakeMetadataProvider(results=(provider_result(title="Detail Enrichment", author="Author"),))
+    client.app.dependency_overrides[get_metadata_providers] = lambda: [provider]
+    book = add_book(session_factory, title="Detail Enrichment", author="Author", isbn13="9781234567890")
+
+    response = client.post(f"/books/{book.id}/enrich", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"].startswith(f"/books/{book.id}?message=Metadata+enriched")
+    with session_factory() as db:
+        updated = db.get(Book, book.id)
+        assert updated is not None
+        assert updated.title == "Detail Enrichment"
+        assert updated.primary_author_name == "Author"
+        assert updated.publisher == "Provider Press"
+        assert updated.publication_year == 2020
+        assert updated.page_count == 321
+        assert updated.cover_url == "https://example.test/provider-cover.jpg"
+        assert updated.metadata_source == "fake_provider"
+        run = db.query(MetadataEnrichmentRun).filter_by(book_id=book.id).one()
+        assert run.provider == "fake_provider"
+        assert run.lookup_type == "isbn"
+        assert run.fields_applied["page_count"] == {"source": "fake_provider", "value": 321}
+
+    detail_response = client.get(f"/books/{book.id}")
+    assert "Recent Enrichment Runs" in detail_response.text
+    assert "Fake Provider" in detail_response.text
+    assert "Completed" in detail_response.text
+
+
+def test_enrich_book_metadata_shows_ambiguous_candidates_without_applying() -> None:
+    client, session_factory = make_books_client()
+    client.post("/admin/login", data={"password": "secret"})
+    provider = FakeMetadataProvider(
+        results=(
+            provider_result(title="Candidate One", author="Author", confidence=0.86, isbn13=None),
+            provider_result(title="Candidate Two", author="Author", confidence=0.85, isbn13=None),
+        )
+    )
+    client.app.dependency_overrides[get_metadata_providers] = lambda: [provider]
+    book = add_book(session_factory, title="Ambiguous Enrichment", author="Author")
+
+    response = client.post(f"/books/{book.id}/enrich")
+
+    assert response.status_code == 200
+    assert "ambiguous matches" in response.text
+    assert "Candidate One" in response.text
+    assert "Candidate Two" in response.text
+    assert "review only" in response.text
+    with session_factory() as db:
+        updated = db.get(Book, book.id)
+        assert updated is not None
+        assert updated.publisher is None
+        assert updated.page_count is None
+        assert db.query(MetadataEnrichmentRun).filter_by(book_id=book.id).count() == 0
 
 
 def test_book_detail_shows_enjoyed_for_and_read_count_in_progress_stats() -> None:

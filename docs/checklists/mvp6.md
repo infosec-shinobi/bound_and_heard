@@ -70,13 +70,13 @@ Derived from `docs/ROADMAP.md` MVP 6 - Metadata Enrichment, with continuity from
 
 ## Chunk 7 - Enrichment UI
 
-- [ ] Add protected enrichment entry point from book detail
+- [x] Add protected enrichment entry point from book detail
 - [ ] Add protected bulk enrichment entry point from review or books list if practical
-- [ ] Show proposed metadata before applying ambiguous results
-- [ ] Show cache/provider/source context on enrichment results
-- [ ] Return clear success, skipped, and error messages
-- [ ] Keep read-only users able to view existing metadata without triggering enrichment
-- [ ] Keep all mutation actions protected by admin login
+- [x] Show proposed metadata before applying ambiguous results
+- [x] Show cache/provider/source context on enrichment results
+- [x] Return clear success, skipped, and error messages
+- [x] Keep read-only users able to view existing metadata without triggering enrichment
+- [x] Keep all mutation actions protected by admin login
 
 ## Chunk 8 - Import Review Integration
 
@@ -117,7 +117,7 @@ Derived from `docs/ROADMAP.md` MVP 6 - Metadata Enrichment, with continuity from
 - [x] Test enrichment does not overwrite Libby import attribution unexpectedly
 - [x] Test enrichment does not alter reading events, scraped progress, or series assignments
 - [x] Test ambiguous results are not silently applied
-- [ ] Test enrichment UI permissions and read-only behavior
+- [x] Test enrichment UI permissions and read-only behavior
 - [ ] Test import review integration
 - [ ] Test genre/category normalization if implemented
 
