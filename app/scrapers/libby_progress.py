@@ -41,6 +41,17 @@ MINUTES_PATTERN = re.compile(r"(?P<minutes>\d+)\s*(?:minutes|minute|mins|min|m)"
 COMPLETED_PATTERN = re.compile(r"\b(completed|finished|100\s*%)\b", re.IGNORECASE)
 NO_PROGRESS_PATTERN = re.compile(r"\bno progress yet\b", re.IGNORECASE)
 WHITESPACE_PATTERN = re.compile(r"\s+")
+SERIES_HREF_PATTERN = re.compile(r"^/shelf/(?P<key>series-\d+)/page-\d+")
+SERIES_LABEL_PATTERN = re.compile(r"^#(?P<position>\d+(?:\.\d+)?)\s+in\s+(?P<name>.+)$", re.IGNORECASE)
+
+
+@dataclass(frozen=True)
+class LibbySeriesHintParseResult:
+    libby_series_key: str
+    libby_series_url: str
+    raw_label: str
+    series_name: str | None = None
+    position: float | None = None
 
 
 @dataclass(frozen=True)
@@ -57,6 +68,7 @@ class LibbyProgressParseResult:
     status_inferred: str | None = None
     progress_text: str | None = None
     remaining_seconds: int | None = None
+    series_hint: LibbySeriesHintParseResult | None = None
 
     def as_book_progress_values(self) -> dict[str, object]:
         return {
@@ -97,6 +109,55 @@ class TextExtractor(HTMLParser):
         return " ".join(self.parts)
 
 
+class SeriesHintExtractor(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.current_href: str | None = None
+        self.current_parts: list[str] = []
+        self.hints: list[LibbySeriesHintParseResult] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() != "a":
+            return
+        attrs_by_name = dict(attrs)
+        href = attrs_by_name.get("href")
+        if href and SERIES_HREF_PATTERN.search(href):
+            self.current_href = href
+            self.current_parts = []
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() != "a" or self.current_href is None:
+            return
+        raw_text = WHITESPACE_PATTERN.sub(" ", " ".join(self.current_parts)).strip()
+        label = raw_text.removeprefix("Series").strip()
+        href_match = SERIES_HREF_PATTERN.search(self.current_href)
+        if href_match and label:
+            label_match = SERIES_LABEL_PATTERN.search(label)
+            self.hints.append(
+                LibbySeriesHintParseResult(
+                    libby_series_key=href_match.group("key"),
+                    libby_series_url=self.current_href,
+                    raw_label=label,
+                    series_name=label_match.group("name").strip() if label_match else None,
+                    position=float(label_match.group("position")) if label_match else None,
+                )
+            )
+        self.current_href = None
+        self.current_parts = []
+
+    def handle_data(self, data: str) -> None:
+        if self.current_href is not None and data.strip():
+            self.current_parts.append(data.strip())
+
+
+def parse_libby_series_hint(content: str, *, content_type: str | None = None) -> LibbySeriesHintParseResult | None:
+    if content_type != "text/html" and "<" not in content:
+        return None
+    extractor = SeriesHintExtractor()
+    extractor.feed(content)
+    return extractor.hints[0] if extractor.hints else None
+
+
 def normalize_scraped_text(content: str, *, content_type: str | None = None) -> str:
     if content_type == "text/html" or "<" in content and ">" in content:
         extractor = TextExtractor()
@@ -130,6 +191,7 @@ def infer_status(progress_percent: float | None) -> str | None:
 
 def parse_libby_progress(content: str, *, content_type: str | None = None) -> LibbyProgressParseResult:
     needle_match = PROGRESS_NEEDLE_PATTERN.search(content) if content_type == "text/html" else None
+    series_hint = parse_libby_series_hint(content, content_type=content_type)
     text = normalize_scraped_text(content, content_type=content_type)
     progress_percent: float | None = None
     position_pages: int | None = None
@@ -199,4 +261,5 @@ def parse_libby_progress(content: str, *, content_type: str | None = None) -> Li
         status_inferred=infer_status(progress_percent),
         progress_text=text or None,
         remaining_seconds=remaining_seconds,
+        series_hint=series_hint,
     )

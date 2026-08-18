@@ -12,7 +12,7 @@ from app.core.config import Settings
 from app.core.database import Base, get_db
 from app.api.books import get_metadata_providers
 from app.main import create_app
-from app.models import Book, BookProgress, MetadataEnrichmentRun, ReadingEvent, Series, SeriesBook, User
+from app.models import Book, BookProgress, LibbySeriesHint, MetadataEnrichmentRun, ReadingEvent, Series, SeriesBook, User
 from app.services.metadata_providers import MetadataLookupResponse, MetadataResult
 
 
@@ -941,6 +941,29 @@ def test_imported_books_review_page_shows_enriched_provider_context_for_comparis
     assert "Imported metadata" in response.text
     assert "Enriched via Fake Provider: Completed" in response.text
     assert "Applied page_count" in response.text
+
+
+def test_imported_books_review_page_shows_libby_series_hint() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Review Series Hint", author="Author", metadata_source="libby")
+    with session_factory() as db:
+        db.add(
+            LibbySeriesHint(
+                user_id=DEFAULT_LOCAL_USER_ID,
+                book_id=book.id,
+                libby_series_key="series-503231",
+                libby_series_url="/shelf/series-503231/page-1",
+                raw_label="#26 in Jack Reacher",
+                series_name="Jack Reacher",
+                position=26,
+            )
+        )
+        db.commit()
+
+    response = client.get("/books/review?missing_page_count=true")
+
+    assert response.status_code == 200
+    assert "Libby series: #26 in Jack Reacher" in response.text
 
 
 def test_imported_books_review_page_shows_bulk_enrichment_form_after_admin_login() -> None:
@@ -2164,6 +2187,122 @@ def test_book_detail_shows_multiple_series_memberships_with_links() -> None:
     assert f'href="/series/{second.id}"' in response.text
     assert "2.5" in response.text
     assert "Paused" in response.text
+
+
+def test_book_detail_shows_libby_series_hint_without_write_access() -> None:
+    client, session_factory = make_books_client(admin_password=None)
+    book = add_book(session_factory, title="Hint Detail", author="Author", metadata_source="libby")
+    with session_factory() as db:
+        db.add(
+            LibbySeriesHint(
+                user_id=DEFAULT_LOCAL_USER_ID,
+                book_id=book.id,
+                libby_series_key="series-503231",
+                libby_series_url="/shelf/series-503231/page-1",
+                raw_label="#26 in Jack Reacher",
+                series_name="Jack Reacher",
+                position=26,
+            )
+        )
+        db.commit()
+
+    response = client.get(f"/books/{book.id}")
+
+    assert response.status_code == 200
+    assert "Libby suggests:" in response.text
+    assert "#26 in Jack Reacher" in response.text
+    assert "Apply Libby Suggestion" not in response.text
+
+
+def test_book_detail_applies_libby_series_hint_to_existing_series() -> None:
+    client, session_factory = make_books_client()
+    client.post("/admin/login", data={"password": "secret"})
+    book = add_book(session_factory, title="Hint Apply", author="Author", metadata_source="libby")
+    series = add_series(session_factory, name="jack reacher")
+    with session_factory() as db:
+        hint = LibbySeriesHint(
+            user_id=DEFAULT_LOCAL_USER_ID,
+            book_id=book.id,
+            libby_series_key="series-503231",
+            libby_series_url="/shelf/series-503231/page-1",
+            raw_label="#26 in Jack Reacher",
+            series_name="Jack Reacher",
+            position=26,
+        )
+        db.add(hint)
+        db.commit()
+        hint_id = hint.id
+
+    response = client.post(f"/books/{book.id}/series-hints/{hint_id}/apply", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/books/{book.id}?message=Applied+Libby+series+suggestion%3A+%2326+in+Jack+Reacher"
+    with session_factory() as db:
+        entry = db.query(SeriesBook).filter_by(book_id=book.id).one()
+        assert entry.series_id == series.id
+        assert entry.position == 26
+        applied_hint = db.get(LibbySeriesHint, hint_id)
+        assert applied_hint is not None
+        assert applied_hint.status == "applied"
+        assert applied_hint.applied_at is not None
+
+
+def test_book_detail_apply_libby_series_hint_creates_series_when_missing() -> None:
+    client, session_factory = make_books_client()
+    client.post("/admin/login", data={"password": "secret"})
+    book = add_book(session_factory, title="Hint Creates Series", author="Author", metadata_source="libby")
+    with session_factory() as db:
+        hint = LibbySeriesHint(
+            user_id=DEFAULT_LOCAL_USER_ID,
+            book_id=book.id,
+            libby_series_key="series-503231",
+            libby_series_url="/shelf/series-503231/page-1",
+            raw_label="#26 in Jack Reacher",
+            series_name="Jack Reacher",
+            position=26,
+        )
+        db.add(hint)
+        db.commit()
+        hint_id = hint.id
+
+    response = client.post(f"/books/{book.id}/series-hints/{hint_id}/apply", follow_redirects=False)
+
+    assert response.status_code == 303
+    with session_factory() as db:
+        series = db.query(Series).filter_by(name="Jack Reacher").one()
+        entry = db.query(SeriesBook).filter_by(book_id=book.id).one()
+        assert entry.series_id == series.id
+        assert entry.position == 26
+
+
+def test_book_detail_apply_libby_series_hint_does_not_overwrite_existing_assignment() -> None:
+    client, session_factory = make_books_client()
+    client.post("/admin/login", data={"password": "secret"})
+    book = add_book(session_factory, title="Hint Existing Assignment", author="Author", metadata_source="libby")
+    existing_series = add_series(session_factory, name="Manual Series")
+    add_series_entry(session_factory, series_id=existing_series.id, book_id=book.id, position=1)
+    with session_factory() as db:
+        hint = LibbySeriesHint(
+            user_id=DEFAULT_LOCAL_USER_ID,
+            book_id=book.id,
+            libby_series_key="series-503231",
+            libby_series_url="/shelf/series-503231/page-1",
+            raw_label="#26 in Jack Reacher",
+            series_name="Jack Reacher",
+            position=26,
+        )
+        db.add(hint)
+        db.commit()
+        hint_id = hint.id
+
+    response = client.post(f"/books/{book.id}/series-hints/{hint_id}/apply", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/books/{book.id}?message=Book+already+has+a+series+assignment.+No+Libby+suggestion+was+applied."
+    with session_factory() as db:
+        entries = db.query(SeriesBook).filter_by(book_id=book.id).all()
+        assert len(entries) == 1
+        assert entries[0].series_id == existing_series.id
 
 
 def test_book_detail_allows_assigning_book_to_series() -> None:

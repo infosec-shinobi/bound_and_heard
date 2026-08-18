@@ -6,7 +6,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.bootstrap import DEFAULT_LOCAL_USER_ID
 from app.core.database import Base
-from app.models import Book, Series, SeriesBook, User
+from app.models import Book, LibbySeriesHint, Series, SeriesBook, User
 
 
 def make_session_factory() -> sessionmaker[Session]:
@@ -31,6 +31,7 @@ def test_series_schema_contains_expected_fields_indexes_and_constraints() -> Non
 
     assert "series" in inspector.get_table_names()
     assert "series_books" in inspector.get_table_names()
+    assert "libby_series_hints" in inspector.get_table_names()
 
     series_columns = {column["name"] for column in inspector.get_columns("series")}
     assert {
@@ -68,6 +69,25 @@ def test_series_schema_contains_expected_fields_indexes_and_constraints() -> Non
 
     unique_constraints = {constraint["name"] for constraint in inspector.get_unique_constraints("series_books")}
     assert "uq_series_books_series_id_book_id" in unique_constraints
+
+    hint_columns = {column["name"] for column in inspector.get_columns("libby_series_hints")}
+    assert {
+        "id",
+        "user_id",
+        "book_id",
+        "scrape_item_id",
+        "libby_series_key",
+        "libby_series_url",
+        "raw_label",
+        "series_name",
+        "position",
+        "status",
+        "applied_at",
+        "created_at",
+        "updated_at",
+    }.issubset(hint_columns)
+    hint_constraints = {constraint["name"] for constraint in inspector.get_unique_constraints("libby_series_hints")}
+    assert "uq_libby_series_hints_book_id_series_key" in hint_constraints
 
 
 def test_series_defaults_and_relationships_support_owned_and_planned_entries() -> None:
@@ -121,3 +141,27 @@ def test_series_book_unique_constraint_prevents_duplicate_owned_book_assignment(
         db.add(SeriesBook(series_id=series.id, book_id=book.id, position=2))
         with pytest.raises(IntegrityError):
             db.flush()
+
+
+def test_libby_series_hint_relationship_defaults() -> None:
+    session_factory = make_session_factory()
+    with session_factory() as db:
+        add_user(db)
+        book = Book(user_id=DEFAULT_LOCAL_USER_ID, title="Hint Book", format="ebook", status="borrowed")
+        db.add(book)
+        db.flush()
+        hint = LibbySeriesHint(
+            user_id=DEFAULT_LOCAL_USER_ID,
+            book_id=book.id,
+            libby_series_key="series-503231",
+            libby_series_url="/shelf/series-503231/page-1",
+            raw_label="#26 in Jack Reacher",
+            series_name="Jack Reacher",
+            position=26,
+        )
+        db.add(hint)
+        db.commit()
+
+        db.refresh(book)
+        assert book.libby_series_hints[0].status == "pending"
+        assert book.libby_series_hints[0].series_name == "Jack Reacher"

@@ -108,6 +108,7 @@
             {% for book in books %}
               {% set progress = book.progress.progress_percent if book.progress and book.progress.progress_percent is not none else book.manual_progress_percent %}
               {% set latest_enrichment = enrichment_runs_by_book_id.get(book.id) %}
+              {% set libby_series_hint = libby_series_hints_by_book_id.get(book.id) %}
               <tr>
                 {% if can_write %}
                   <td>
@@ -179,6 +180,9 @@
                   <div class="small app-muted mt-1">Imported metadata</div>
                   {% if book.libby_title_id %}<div class="small app-muted mt-1">Title ID {{ book.libby_title_id }}</div>{% endif %}
                   {% if book.libby_share_url %}<a class="small app-link d-block mt-1" href="{{ book.libby_share_url }}">Libby share</a>{% endif %}
+                  {% if libby_series_hint %}
+                    <div class="small app-muted mt-2">Libby series: {{ libby_series_hint.raw_label }}</div>
+                  {% endif %}
                   {% if latest_enrichment %}
                     <div class="small app-muted mt-2">
                       Enriched via {{ latest_enrichment.provider.replace('_', ' ').title() if latest_enrichment.provider else 'provider' }}: {{ latest_enrichment.status.replace('_', ' ').title() }}

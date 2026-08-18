@@ -107,12 +107,39 @@ Derived from `docs/ROADMAP.md` MVP 6 - Metadata Enrichment, with continuity from
 
 ## Chunk 10 - Series Metadata Research
 
-- [ ] Research whether Open Library, Google Books, or another provider exposes usable series metadata
-- [ ] Document provider limitations and confidence concerns
-- [ ] Keep MVP 6 series behavior suggestion-only
-- [ ] Do not auto-create series from enrichment metadata
-- [ ] Do not overwrite manual MVP 5 series assignments or planned entries
-- [ ] Capture follow-up recommendations for a future series-enrichment workflow
+- [x] Research whether Open Library, Google Books, or another provider exposes usable series metadata
+- [x] Document provider limitations and confidence concerns
+- [x] Keep MVP 6 series behavior suggestion-only
+- [x] Do not auto-create series from enrichment metadata
+- [x] Do not overwrite manual MVP 5 series assignments or planned entries
+- [x] Capture follow-up recommendations for a future series-enrichment workflow
+
+## Chunk 10.5 - Libby Series Hints
+
+- [x] Parse Libby reading journey series links like `/shelf/series-503231/page-1`
+- [x] Extract Libby series key, raw series URL, raw label, series name, and numeric position when available
+- [x] Store Libby-derived series hints without immediately changing local `series` or `series_books`
+- [x] Show Libby series suggestions on Libby-related book detail and import review rows
+- [x] Add admin-only action to apply a Libby series suggestion to a book
+- [x] Match existing local series by normalized name before offering to create a new series
+- [x] Create or assign series only after explicit admin confirmation
+- [x] Do not overwrite existing manual series assignments, planned entries, positions, or notes without explicit choice
+- [x] Keep non-Libby books eligible for external enrichment without requiring Libby series data
+- [x] Keep external provider series metadata suggestion-only and lower confidence than Libby journey hints
+- [x] Add tests for parsing, storage, display, permissions, and manual-apply behavior
+
+## Chunk 10.6 - Manual Book Enrichment
+
+- [ ] Ensure manually entered books can use metadata enrichment from book detail
+- [ ] Add a missing-metadata workflow for manual books if review filters remain Libby-focused
+- [ ] Prefer ISBN lookup for manual books when ISBN is present
+- [ ] Fall back to title/author lookup for manual books when ISBN is missing or unhelpful
+- [ ] Fill only empty supported fields on manual books
+- [ ] Preserve manual title, author, notes, rating, status, progress, completion date, genres, and series assignments
+- [ ] Surface ambiguous or low-confidence manual-book matches for review instead of applying automatically
+- [ ] Show provider/cache/source context for manual-book enrichment results
+- [ ] Keep all manual-book enrichment mutations admin-only
+- [ ] Add tests for manual-book enrichment, fallback lookup, overwrite protection, and permissions
 
 ## Chunk 11 - Tests
 

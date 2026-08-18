@@ -10,6 +10,7 @@ from app.core.database import Base
 
 if TYPE_CHECKING:
     from app.models.book import Book
+    from app.models.scrape import ScrapeJobItem
     from app.models.user import User
 
 
@@ -68,3 +69,35 @@ class SeriesBook(Base):
 
     series: Mapped[Series] = relationship(back_populates="books")
     book: Mapped[Book | None] = relationship(back_populates="series_entries")
+
+
+class LibbySeriesHint(Base):
+    __tablename__ = "libby_series_hints"
+    __table_args__ = (UniqueConstraint("book_id", "libby_series_key", name="uq_libby_series_hints_book_id_series_key"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
+    book_id: Mapped[int] = mapped_column(ForeignKey("books.id"), index=True, nullable=False)
+    scrape_item_id: Mapped[int | None] = mapped_column(ForeignKey("scrape_job_items.id"), index=True)
+    libby_series_key: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    libby_series_url: Mapped[str] = mapped_column(String(1000), nullable=False)
+    raw_label: Mapped[str] = mapped_column(String(500), nullable=False)
+    series_name: Mapped[str | None] = mapped_column(String(500), index=True)
+    position: Mapped[float | None] = mapped_column(Float, index=True)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending", index=True)
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    user: Mapped[User] = relationship(back_populates="libby_series_hints")
+    book: Mapped[Book] = relationship(back_populates="libby_series_hints")
+    scrape_item: Mapped[ScrapeJobItem | None] = relationship()

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from app.scrapers.libby_progress import parse_libby_progress
+from app.scrapers.libby_progress import parse_libby_progress, parse_libby_series_hint
 
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "libby_progress"
@@ -132,3 +132,26 @@ def test_parse_libby_progress_needle_does_not_use_unrelated_css_width() -> None:
     result = parse_libby_progress('<style>.x { width: 100%; }</style>', content_type="text/html")
 
     assert result.progress_percent is None
+
+
+def test_parse_libby_series_hint_from_journey_html() -> None:
+    html = '<a class="halo" href="/shelf/series-503231/page-1"><strong><span role="text">Series</span></strong><cite><span role="text">#26 in Jack Reacher</span></cite></a>'
+
+    hint = parse_libby_series_hint(html, content_type="text/html")
+
+    assert hint is not None
+    assert hint.libby_series_key == "series-503231"
+    assert hint.libby_series_url == "/shelf/series-503231/page-1"
+    assert hint.raw_label == "#26 in Jack Reacher"
+    assert hint.series_name == "Jack Reacher"
+    assert hint.position == 26
+
+
+def test_parse_libby_progress_includes_series_hint_from_html() -> None:
+    result = parse_libby_progress(
+        '<div class="screen-shelf-journey-progress-needle" style="width: 53%;"></div><a class="halo" href="/shelf/series-503231/page-1"><strong><span role="text">Series</span></strong><cite><span role="text">#26 in Jack Reacher</span></cite></a>',
+        content_type="text/html",
+    )
+
+    assert result.series_hint is not None
+    assert result.series_hint.series_name == "Jack Reacher"

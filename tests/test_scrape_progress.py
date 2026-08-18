@@ -6,7 +6,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.bootstrap import DEFAULT_LOCAL_USER_ID
 from app.core.database import Base
-from app.models import Book, BookProgress, ReadingEvent, ScrapeJob, ScrapeJobItem, User
+from app.models import Book, BookProgress, LibbySeriesHint, ReadingEvent, ScrapeJob, ScrapeJobItem, User
 from app.scrapers.libby_progress import parse_libby_progress
 from app.services.scrape_progress import apply_scraped_progress
 
@@ -208,3 +208,26 @@ def test_apply_scraped_progress_sets_enjoyed_seconds_from_libby_duration() -> No
 
         assert progress.enjoyed_seconds == 20520
         assert progress.read_count is None
+
+
+def test_apply_scraped_progress_stores_libby_series_hint() -> None:
+    session_factory = make_session_factory()
+    with session_factory() as db:
+        book = add_book(db)
+        item = add_scrape_item(db, book=book)
+        parsed = parse_libby_progress(
+            '<div class="screen-shelf-journey-progress-needle" style="width: 53%;"></div><a class="halo" href="/shelf/series-503231/page-1"><strong><span role="text">Series</span></strong><cite><span role="text">#26 in Jack Reacher</span></cite></a>',
+            content_type="text/html",
+        )
+
+        apply_scraped_progress(db, item=item, parsed=parsed)
+        db.commit()
+
+        hint = db.query(LibbySeriesHint).filter_by(book_id=book.id).one()
+        assert hint.scrape_item_id == item.id
+        assert hint.libby_series_key == "series-503231"
+        assert hint.libby_series_url == "/shelf/series-503231/page-1"
+        assert hint.raw_label == "#26 in Jack Reacher"
+        assert hint.series_name == "Jack Reacher"
+        assert hint.position == 26
+        assert hint.status == "pending"

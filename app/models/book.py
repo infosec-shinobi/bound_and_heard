@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from app.models.progress import BookProgress
     from app.models.reading_event import ReadingEvent
     from app.models.scrape import ScrapeJobItem
-    from app.models.series import SeriesBook
+    from app.models.series import LibbySeriesHint, SeriesBook
     from app.models.user import User
 
 
@@ -68,5 +68,6 @@ class Book(Base):
     progress: Mapped[BookProgress | None] = relationship(back_populates="book")
     scrape_items: Mapped[list[ScrapeJobItem]] = relationship(back_populates="book")
     series_entries: Mapped[list[SeriesBook]] = relationship(back_populates="book")
+    libby_series_hints: Mapped[list[LibbySeriesHint]] = relationship(back_populates="book")
     metadata_enrichment_runs: Mapped[list[MetadataEnrichmentRun]] = relationship(back_populates="book")
     genre_entries: Mapped[list[BookGenre]] = relationship(back_populates="book")

@@ -5,7 +5,7 @@ from datetime import date, datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Book, BookProgress, ReadingEvent, ScrapeJobItem
+from app.models import Book, BookProgress, LibbySeriesHint, ReadingEvent, ScrapeJobItem
 from app.scrapers.libby_progress import LibbyProgressParseResult
 
 
@@ -90,6 +90,9 @@ def apply_scraped_progress(
     event.progress_percent = parsed.progress_percent
     event.raw_data = {"parser_version": parsed.parser_version, "progress_text": parsed.progress_text}
 
+    if parsed.series_hint is not None:
+        upsert_libby_series_hint(db, item=item, parsed=parsed)
+
     if parsed.status_inferred == "completed":
         if book.completed_on is None and not has_manual_correction(db, book_id=book.id, field_name="completed_on"):
             book.completed_on = approximate_completion_date(observed_at)
@@ -101,3 +104,36 @@ def apply_scraped_progress(
             book.status = "completed"
 
     return progress
+
+
+def upsert_libby_series_hint(db: Session, *, item: ScrapeJobItem, parsed: LibbyProgressParseResult) -> LibbySeriesHint | None:
+    hint = parsed.series_hint
+    if hint is None:
+        return None
+    book = db.get(Book, item.book_id)
+    if book is None:
+        raise ValueError("Scrape item book does not exist.")
+    existing = db.scalars(
+        select(LibbySeriesHint).where(
+            LibbySeriesHint.book_id == book.id,
+            LibbySeriesHint.libby_series_key == hint.libby_series_key,
+        )
+    ).first()
+    if existing is None:
+        existing = LibbySeriesHint(
+            user_id=book.user_id,
+            book_id=book.id,
+            libby_series_key=hint.libby_series_key,
+            libby_series_url=hint.libby_series_url,
+            raw_label=hint.raw_label,
+        )
+        db.add(existing)
+    existing.scrape_item_id = item.id
+    existing.libby_series_url = hint.libby_series_url
+    existing.raw_label = hint.raw_label
+    existing.series_name = hint.series_name
+    existing.position = hint.position
+    if existing.status != "applied":
+        existing.status = "pending"
+    db.flush()
+    return existing

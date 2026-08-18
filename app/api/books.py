@@ -12,7 +12,7 @@ from app.core.bootstrap import DEFAULT_LOCAL_USER_ID
 from app.core.database import get_db
 from app.core.templates import template_context, templates
 from app.core.write_protection import require_write_access
-from app.models import Book, BookProgress, MetadataEnrichmentRun, ReadingEvent, Series, SeriesBook
+from app.models import Book, BookProgress, LibbySeriesHint, MetadataEnrichmentRun, ReadingEvent, Series, SeriesBook
 from app.services.metadata_apply import apply_metadata_result_to_empty_fields
 from app.services.metadata_lookup import MetadataCandidate, lookup_book_metadata
 from app.services.metadata_providers import GoogleBooksClient, MetadataProvider, OpenLibraryClient
@@ -65,6 +65,10 @@ def normalize_duplicate_text(value: str | None) -> str | None:
     if value is None:
         return None
     return WHITESPACE_PATTERN.sub(" ", value.casefold())
+
+
+def normalize_series_name(value: str | None) -> str:
+    return WHITESPACE_PATTERN.sub(" ", (value or "").strip().casefold())
 
 
 def add_duplicate_reason(
@@ -316,6 +320,11 @@ def book_detail_response(
         .order_by(MetadataEnrichmentRun.created_at.desc(), MetadataEnrichmentRun.id.desc())
         .limit(5)
     ).all()
+    libby_series_hints = db.scalars(
+        select(LibbySeriesHint)
+        .where(LibbySeriesHint.book_id == book.id, LibbySeriesHint.user_id == DEFAULT_LOCAL_USER_ID)
+        .order_by(LibbySeriesHint.created_at.desc(), LibbySeriesHint.id.desc())
+    ).all()
 
     return templates.TemplateResponse(
         request,
@@ -334,6 +343,7 @@ def book_detail_response(
             enrichment_status=enrichment_status,
             enrichment_runs=enrichment_runs,
             enrichment_candidates=enrichment_candidates,
+            libby_series_hints=libby_series_hints,
         ),
     )
 
@@ -654,6 +664,7 @@ async def book_list(
     )
     books = db.scalars(statement).unique().all()
     enrichment_runs_by_book_id: dict[int, MetadataEnrichmentRun] = {}
+    libby_series_hints_by_book_id: dict[int, LibbySeriesHint] = {}
     book_ids = [book.id for book in books]
     if book_ids:
         enrichment_runs = db.scalars(
@@ -667,6 +678,17 @@ async def book_list(
         for run in enrichment_runs:
             if run.book_id is not None and run.book_id not in enrichment_runs_by_book_id:
                 enrichment_runs_by_book_id[run.book_id] = run
+        libby_series_hints = db.scalars(
+            select(LibbySeriesHint)
+            .where(
+                LibbySeriesHint.book_id.in_(book_ids),
+                LibbySeriesHint.user_id == DEFAULT_LOCAL_USER_ID,
+            )
+            .order_by(LibbySeriesHint.created_at.desc(), LibbySeriesHint.id.desc())
+        ).all()
+        for hint in libby_series_hints:
+            if hint.book_id not in libby_series_hints_by_book_id:
+                libby_series_hints_by_book_id[hint.book_id] = hint
 
     return templates.TemplateResponse(
         request,
@@ -729,6 +751,7 @@ async def imported_books_review(
 
     books = db.scalars(statement).unique().all()
     enrichment_runs_by_book_id: dict[int, MetadataEnrichmentRun] = {}
+    libby_series_hints_by_book_id: dict[int, LibbySeriesHint] = {}
     book_ids = [book.id for book in books]
     if book_ids:
         enrichment_runs = db.scalars(
@@ -742,6 +765,17 @@ async def imported_books_review(
         for run in enrichment_runs:
             if run.book_id is not None and run.book_id not in enrichment_runs_by_book_id:
                 enrichment_runs_by_book_id[run.book_id] = run
+        libby_series_hints = db.scalars(
+            select(LibbySeriesHint)
+            .where(
+                LibbySeriesHint.book_id.in_(book_ids),
+                LibbySeriesHint.user_id == DEFAULT_LOCAL_USER_ID,
+            )
+            .order_by(LibbySeriesHint.created_at.desc(), LibbySeriesHint.id.desc())
+        ).all()
+        for hint in libby_series_hints:
+            if hint.book_id not in libby_series_hints_by_book_id:
+                libby_series_hints_by_book_id[hint.book_id] = hint
 
     return templates.TemplateResponse(
         request,
@@ -759,6 +793,7 @@ async def imported_books_review(
             review_message=review_message,
             duplicate_reasons=duplicate_reasons,
             enrichment_runs_by_book_id=enrichment_runs_by_book_id,
+            libby_series_hints_by_book_id=libby_series_hints_by_book_id,
             format_audio_seconds=format_audio_seconds,
         ),
     )
@@ -1452,6 +1487,49 @@ async def add_book_to_series_from_detail(
     db.add(SeriesBook(series_id=series.id, book_id=book.id, position=parsed_position))
     db.commit()
     return book_detail_redirect(book.id, message=f"Added to series: {series.name}")
+
+
+@router.post("/{book_id}/series-hints/{hint_id}/apply")
+async def apply_libby_series_hint_from_detail(
+    book_id: int,
+    hint_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_write_access),
+) -> Response:
+    book = db.get(Book, book_id)
+    if book is None or book.user_id != DEFAULT_LOCAL_USER_ID:
+        return templates.TemplateResponse(
+            request,
+            "books/not_found.html",
+            template_context(request, page_title="Book Not Found"),
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+    hint = db.get(LibbySeriesHint, hint_id)
+    if hint is None or hint.book_id != book.id or hint.user_id != DEFAULT_LOCAL_USER_ID:
+        return book_detail_redirect(book.id, message="Libby series suggestion not found.")
+    if not hint.series_name:
+        return book_detail_redirect(book.id, message="Libby series suggestion is missing a series name.")
+    existing_assignment = db.scalars(select(SeriesBook).where(SeriesBook.book_id == book.id)).first()
+    if existing_assignment is not None:
+        return book_detail_redirect(book.id, message="Book already has a series assignment. No Libby suggestion was applied.")
+
+    normalized_hint_name = normalize_series_name(hint.series_name)
+    series = None
+    for candidate in db.scalars(select(Series).where(Series.user_id == DEFAULT_LOCAL_USER_ID)).all():
+        if normalize_series_name(candidate.name) == normalized_hint_name:
+            series = candidate
+            break
+    if series is None:
+        series = Series(user_id=DEFAULT_LOCAL_USER_ID, name=hint.series_name, status="unknown", wants_to_continue="unknown")
+        db.add(series)
+        db.flush()
+
+    db.add(SeriesBook(series_id=series.id, book_id=book.id, position=hint.position))
+    hint.status = "applied"
+    hint.applied_at = datetime.now(timezone.utc)
+    db.commit()
+    return book_detail_redirect(book.id, message=f"Applied Libby series suggestion: {hint.raw_label}")
 
 
 @router.post("/{book_id}/series/{entry_id}/remove")
