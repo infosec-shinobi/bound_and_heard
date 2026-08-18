@@ -54,7 +54,7 @@ Derived from `docs/ROADMAP.md` MVP 6 - Metadata Enrichment, with continuity from
 - [x] Fill cover image URL when empty
 - [x] Fill page count when empty
 - [x] Fill publication year/date when supported by schema
-- [ ] Fill genre/category values when empty or absent
+- [x] Fill genre/category values when empty or absent
 - [x] Fill publisher/ISBN fields only when empty and confidence is acceptable
 - [x] Do not overwrite title, author, notes, rating, status, progress, completion date, or series assignments
 - [x] Record metadata source attribution for applied fields
@@ -99,11 +99,11 @@ Derived from `docs/ROADMAP.md` MVP 6 - Metadata Enrichment, with continuity from
 
 ## Chunk 9 - Genre And Category Handling
 
-- [ ] Decide schema for genres/categories if existing placeholder tables are not implemented
-- [ ] Normalize provider categories into local labels
-- [ ] Avoid duplicate genre/category labels by case-insensitive matching
-- [ ] Attach genres/categories to books without overwriting manual labels
-- [ ] Preserve raw provider category strings for traceability
+- [x] Decide schema for genres/categories if existing placeholder tables are not implemented
+- [x] Normalize provider categories into local labels
+- [x] Avoid duplicate genre/category labels by case-insensitive matching
+- [x] Attach genres/categories to books without overwriting manual labels
+- [x] Preserve raw provider category strings for traceability
 
 ## Chunk 10 - Series Metadata Research
 
@@ -130,7 +130,7 @@ Derived from `docs/ROADMAP.md` MVP 6 - Metadata Enrichment, with continuity from
 - [x] Test ambiguous results are not silently applied
 - [x] Test enrichment UI permissions and read-only behavior
 - [x] Test import review integration
-- [ ] Test genre/category normalization if implemented
+- [x] Test genre/category normalization if implemented
 
 ## Chunk 12 - Documentation
 

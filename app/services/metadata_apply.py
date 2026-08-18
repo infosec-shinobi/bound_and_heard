@@ -4,9 +4,10 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Book, MetadataEnrichmentRun
+from app.models import Book, BookGenre, Genre, MetadataEnrichmentRun
 from app.services.metadata_providers import MetadataResult
 
 
@@ -42,6 +43,10 @@ def apply_metadata_result_to_empty_fields(
             setattr(book, field_name, value)
             fields_applied[field_name] = {"source": result.provider, "value": _json_safe_value(value)}
 
+    attached_genres = attach_provider_categories(db, book=book, provider=result.provider, categories=result.categories)
+    if attached_genres:
+        fields_applied["genres"] = {"source": result.provider, "value": attached_genres}
+
     if fields_applied and _is_empty(book.metadata_source):
         book.metadata_source = result.provider
         fields_applied["metadata_source"] = {"source": result.provider, "value": result.provider}
@@ -70,3 +75,79 @@ def _is_empty(value: object) -> bool:
 
 def _json_safe_value(value: object) -> object:
     return value.isoformat() if hasattr(value, "isoformat") else value
+
+
+def attach_provider_categories(
+    db: Session,
+    *,
+    book: Book,
+    provider: str,
+    categories: tuple[str, ...],
+) -> list[dict[str, str]]:
+    attached: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for raw_label in categories:
+        normalized_name = normalize_genre_label(raw_label)
+        if normalized_name is None or normalized_name in seen:
+            continue
+        seen.add(normalized_name)
+        display_name = display_genre_label(raw_label)
+        genre = get_or_create_genre(
+            db,
+            user_id=book.user_id,
+            name=display_name,
+            normalized_name=normalized_name,
+            source=provider,
+        )
+        existing = db.scalars(
+            select(BookGenre).where(
+                BookGenre.book_id == book.id,
+                BookGenre.genre_id == genre.id,
+            )
+        ).first()
+        if existing is not None:
+            continue
+        db.add(
+            BookGenre(
+                user_id=book.user_id,
+                book_id=book.id,
+                genre_id=genre.id,
+                source=provider,
+                raw_label=raw_label,
+            )
+        )
+        attached.append({"name": genre.name, "raw_label": raw_label})
+    return attached
+
+
+def get_or_create_genre(
+    db: Session,
+    *,
+    user_id: int,
+    name: str,
+    normalized_name: str,
+    source: str,
+) -> Genre:
+    existing = db.scalars(
+        select(Genre).where(
+            Genre.user_id == user_id,
+            Genre.normalized_name == normalized_name,
+        )
+    ).first()
+    if existing is not None:
+        return existing
+    genre = Genre(user_id=user_id, name=name, normalized_name=normalized_name, source=source)
+    db.add(genre)
+    db.flush()
+    return genre
+
+
+def normalize_genre_label(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = " ".join(value.strip().casefold().replace("/", " ").replace("&", " and ").split())
+    return cleaned or None
+
+
+def display_genre_label(value: str) -> str:
+    return " ".join(value.strip().split())

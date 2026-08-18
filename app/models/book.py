@@ -10,6 +10,7 @@ from app.core.database import Base
 
 if TYPE_CHECKING:
     from app.models.enrichment import MetadataEnrichmentRun
+    from app.models.genre import BookGenre
     from app.models.progress import BookProgress
     from app.models.reading_event import ReadingEvent
     from app.models.scrape import ScrapeJobItem
@@ -68,3 +69,4 @@ class Book(Base):
     scrape_items: Mapped[list[ScrapeJobItem]] = relationship(back_populates="book")
     series_entries: Mapped[list[SeriesBook]] = relationship(back_populates="book")
     metadata_enrichment_runs: Mapped[list[MetadataEnrichmentRun]] = relationship(back_populates="book")
+    genre_entries: Mapped[list[BookGenre]] = relationship(back_populates="book")
