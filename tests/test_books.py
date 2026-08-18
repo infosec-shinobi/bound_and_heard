@@ -877,6 +877,72 @@ def test_imported_books_review_page_shows_quick_archive_and_review_state_actions
     assert 'name="return_to" value="/books/review?missing_page_count=true"' in response.text
 
 
+def test_imported_books_review_page_shows_per_book_enrichment_action_after_admin_login() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Review Enrich Action", author="Author", metadata_source="libby")
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.get("/books/review?missing_page_count=true")
+
+    assert response.status_code == 200
+    assert f'action="/books/{book.id}/enrich"' in response.text
+    assert 'name="return_to" value="/books/review?missing_page_count=true"' in response.text
+    assert "Enrich" in response.text
+
+
+def test_imported_books_review_enrichment_returns_to_filters_and_preserves_review_state() -> None:
+    client, session_factory = make_books_client()
+    client.post("/admin/login", data={"password": "secret"})
+    provider = FakeMetadataProvider(results=(provider_result(title="Review Row Enrich", author="Author"),))
+    client.app.dependency_overrides[get_metadata_providers] = lambda: [provider]
+    book = add_book(session_factory, title="Review Row Enrich", author="Author", metadata_source="libby", isbn13="9781234567890")
+
+    response = client.post(
+        f"/books/{book.id}/enrich",
+        data={"return_to": "/books/review?missing_page_count=true"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"].startswith("/books/review?missing_page_count=true&review_message=Metadata+enriched")
+    with session_factory() as db:
+        updated = db.get(Book, book.id)
+        assert updated is not None
+        assert updated.page_count == 321
+        assert updated.publisher == "Provider Press"
+        assert updated.metadata_source == "libby"
+        assert updated.review_status is None
+        assert updated.review_note is None
+        run = db.query(MetadataEnrichmentRun).filter_by(book_id=book.id).one()
+        assert run.provider == "fake_provider"
+        assert run.fields_applied["page_count"] == {"source": "fake_provider", "value": 321}
+
+
+def test_imported_books_review_page_shows_enriched_provider_context_for_comparison() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Review Enriched Context", author="Author", metadata_source="libby")
+    with session_factory() as db:
+        db.add(
+            MetadataEnrichmentRun(
+                user_id=DEFAULT_LOCAL_USER_ID,
+                book_id=book.id,
+                provider="fake_provider",
+                lookup_type="title_author",
+                normalized_query="review enriched context|author",
+                status="completed",
+                fields_applied={"page_count": {"source": "fake_provider", "value": 321}},
+            )
+        )
+        db.commit()
+
+    response = client.get("/books/review?missing_page_count=true")
+
+    assert response.status_code == 200
+    assert "Imported metadata" in response.text
+    assert "Enriched via Fake Provider: Completed" in response.text
+    assert "Applied page_count" in response.text
+
+
 def test_imported_books_review_page_shows_bulk_enrichment_form_after_admin_login() -> None:
     client, session_factory = make_books_client()
     book = add_book(session_factory, title="Bulk Form Book", author="Author", metadata_source="libby")

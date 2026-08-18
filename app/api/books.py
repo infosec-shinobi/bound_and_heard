@@ -653,6 +653,20 @@ async def book_list(
         include_archived=include_archived,
     )
     books = db.scalars(statement).unique().all()
+    enrichment_runs_by_book_id: dict[int, MetadataEnrichmentRun] = {}
+    book_ids = [book.id for book in books]
+    if book_ids:
+        enrichment_runs = db.scalars(
+            select(MetadataEnrichmentRun)
+            .where(
+                MetadataEnrichmentRun.book_id.in_(book_ids),
+                MetadataEnrichmentRun.user_id == DEFAULT_LOCAL_USER_ID,
+            )
+            .order_by(MetadataEnrichmentRun.created_at.desc(), MetadataEnrichmentRun.id.desc())
+        ).all()
+        for run in enrichment_runs:
+            if run.book_id is not None and run.book_id not in enrichment_runs_by_book_id:
+                enrichment_runs_by_book_id[run.book_id] = run
 
     return templates.TemplateResponse(
         request,
@@ -714,6 +728,20 @@ async def imported_books_review(
     statement = review_books_statement(active_filters=active_filters, duplicate_reasons=duplicate_reasons)
 
     books = db.scalars(statement).unique().all()
+    enrichment_runs_by_book_id: dict[int, MetadataEnrichmentRun] = {}
+    book_ids = [book.id for book in books]
+    if book_ids:
+        enrichment_runs = db.scalars(
+            select(MetadataEnrichmentRun)
+            .where(
+                MetadataEnrichmentRun.book_id.in_(book_ids),
+                MetadataEnrichmentRun.user_id == DEFAULT_LOCAL_USER_ID,
+            )
+            .order_by(MetadataEnrichmentRun.created_at.desc(), MetadataEnrichmentRun.id.desc())
+        ).all()
+        for run in enrichment_runs:
+            if run.book_id is not None and run.book_id not in enrichment_runs_by_book_id:
+                enrichment_runs_by_book_id[run.book_id] = run
 
     return templates.TemplateResponse(
         request,
@@ -730,6 +758,7 @@ async def imported_books_review(
             review_error=review_error,
             review_message=review_message,
             duplicate_reasons=duplicate_reasons,
+            enrichment_runs_by_book_id=enrichment_runs_by_book_id,
             format_audio_seconds=format_audio_seconds,
         ),
     )
@@ -1468,6 +1497,7 @@ async def enrich_book_metadata(
     providers: list[MetadataProvider] = Depends(get_metadata_providers),
     _: None = Depends(require_write_access),
     force_refresh: bool = Form(default=False),
+    return_to: str | None = Form(default=None),
 ) -> Response:
     book = db.get(Book, book_id)
     if book is None or book.user_id != DEFAULT_LOCAL_USER_ID:
@@ -1493,6 +1523,12 @@ async def enrich_book_metadata(
         applied_fields = sorted(field for field in applied.fields_applied if field != "metadata_source")
 
     db.commit()
+    if return_to is not None:
+        return_url = safe_review_return_url(return_to)
+        return RedirectResponse(
+            review_return_url_with_message(return_url, enrichment_message_for_status(outcome.status, applied_fields)),
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
     if outcome.status in {"ambiguous", "low_confidence"}:
         return book_detail_response(
             request,

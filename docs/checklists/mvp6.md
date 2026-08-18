@@ -91,11 +91,11 @@ Derived from `docs/ROADMAP.md` MVP 6 - Metadata Enrichment, with continuity from
 
 ## Chunk 8 - Import Review Integration
 
-- [ ] Add enrichment actions for imported books needing metadata cleanup
-- [ ] Make missing page count, cover URL, ISBN, publisher, and author filters work naturally with enrichment
-- [ ] Avoid marking books reviewed automatically after enrichment unless user chooses review action
-- [ ] Preserve manual review state and review notes
-- [ ] Make it easy to compare imported Libby metadata and enriched provider metadata
+- [x] Add enrichment actions for imported books needing metadata cleanup
+- [x] Make missing page count, cover URL, ISBN, publisher, and author filters work naturally with enrichment
+- [x] Avoid marking books reviewed automatically after enrichment unless user chooses review action
+- [x] Preserve manual review state and review notes
+- [x] Make it easy to compare imported Libby metadata and enriched provider metadata
 
 ## Chunk 9 - Genre And Category Handling
 
@@ -129,7 +129,7 @@ Derived from `docs/ROADMAP.md` MVP 6 - Metadata Enrichment, with continuity from
 - [x] Test enrichment does not alter reading events, scraped progress, or series assignments
 - [x] Test ambiguous results are not silently applied
 - [x] Test enrichment UI permissions and read-only behavior
-- [ ] Test import review integration
+- [x] Test import review integration
 - [ ] Test genre/category normalization if implemented
 
 ## Chunk 12 - Documentation
