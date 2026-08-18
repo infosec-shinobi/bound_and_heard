@@ -71,12 +71,23 @@ Derived from `docs/ROADMAP.md` MVP 6 - Metadata Enrichment, with continuity from
 ## Chunk 7 - Enrichment UI
 
 - [x] Add protected enrichment entry point from book detail
-- [ ] Add protected bulk enrichment entry point from review or books list if practical
+- [x] Add protected bulk enrichment entry point from review or books list if practical
 - [x] Show proposed metadata before applying ambiguous results
 - [x] Show cache/provider/source context on enrichment results
 - [x] Return clear success, skipped, and error messages
 - [x] Keep read-only users able to view existing metadata without triggering enrichment
 - [x] Keep all mutation actions protected by admin login
+
+## Chunk 7.5 - Bulk Enrichment
+
+- [x] Add protected bulk enrichment action from import review
+- [x] Scope bulk enrichment to selected books when selection is provided
+- [x] Support enriching current review-filter result set when no explicit selection is provided
+- [x] Reuse cached provider responses and book-detail enrichment services
+- [x] Return a clear summary of checked, updated, skipped, ambiguous, low-confidence, and error counts
+- [x] Preserve review state; do not mark books reviewed automatically
+- [x] Keep read-only users unable to trigger bulk enrichment
+- [x] Avoid applying ambiguous or low-confidence matches automatically
 
 ## Chunk 8 - Import Review Integration
 

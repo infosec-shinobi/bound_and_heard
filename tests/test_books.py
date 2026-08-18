@@ -877,6 +877,120 @@ def test_imported_books_review_page_shows_quick_archive_and_review_state_actions
     assert 'name="return_to" value="/books/review?missing_page_count=true"' in response.text
 
 
+def test_imported_books_review_page_shows_bulk_enrichment_form_after_admin_login() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Bulk Form Book", author="Author", metadata_source="libby")
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.get("/books/review?missing_page_count=true")
+
+    assert response.status_code == 200
+    assert 'id="bulk-enrich-form"' in response.text
+    assert 'action="/books/review/enrich"' in response.text
+    assert 'name="missing_page_count" value="true"' in response.text
+    assert f'name="book_ids" value="{book.id}"' in response.text
+    assert "Enrich Selected Or Filtered" in response.text
+
+
+def test_bulk_review_enrichment_requires_admin_login() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Protected Bulk", author="Author", metadata_source="libby")
+
+    response = client.post(
+        "/books/review/enrich",
+        data={"book_ids": str(book.id), "return_to": "/books/review?missing_page_count=true"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 403
+
+
+def test_bulk_review_enrichment_updates_selected_books_only() -> None:
+    client, session_factory = make_books_client()
+    client.post("/admin/login", data={"password": "secret"})
+    provider = FakeMetadataProvider(results=(provider_result(title="Bulk Selected", author="Author"),))
+    client.app.dependency_overrides[get_metadata_providers] = lambda: [provider]
+    selected = add_book(session_factory, title="Bulk Selected", author="Author", metadata_source="libby", isbn13="9781234567890")
+    unselected = add_book(session_factory, title="Bulk Unselected", author="Author", metadata_source="libby", isbn13="9781234567891")
+
+    response = client.post(
+        "/books/review/enrich",
+        data={"book_ids": str(selected.id), "return_to": "/books/review?missing_page_count=true"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"].startswith("/books/review?missing_page_count=true&review_message=Bulk+enrichment+checked+1+book")
+    with session_factory() as db:
+        updated = db.get(Book, selected.id)
+        untouched = db.get(Book, unselected.id)
+        assert updated is not None
+        assert untouched is not None
+        assert updated.page_count == 321
+        assert updated.publisher == "Provider Press"
+        assert untouched.page_count is None
+        assert untouched.publisher is None
+        assert db.query(MetadataEnrichmentRun).filter_by(book_id=selected.id).count() == 1
+        assert db.query(MetadataEnrichmentRun).filter_by(book_id=unselected.id).count() == 0
+
+
+def test_bulk_review_enrichment_uses_current_filter_when_no_selection() -> None:
+    client, session_factory = make_books_client()
+    client.post("/admin/login", data={"password": "secret"})
+    provider = FakeMetadataProvider(results=(provider_result(title="Bulk Filtered", author="Author"),))
+    client.app.dependency_overrides[get_metadata_providers] = lambda: [provider]
+    missing_pages = add_book(session_factory, title="Bulk Filtered", author="Author", metadata_source="libby")
+    complete = add_book(session_factory, title="Bulk Complete", author="Author", metadata_source="libby")
+    with session_factory() as db:
+        complete_book = db.get(Book, complete.id)
+        assert complete_book is not None
+        complete_book.page_count = 100
+        db.commit()
+
+    response = client.post(
+        "/books/review/enrich",
+        data={"missing_page_count": "true", "return_to": "/books/review?missing_page_count=true"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    with session_factory() as db:
+        updated = db.get(Book, missing_pages.id)
+        unchanged = db.get(Book, complete.id)
+        assert updated is not None
+        assert unchanged is not None
+        assert updated.page_count == 321
+        assert unchanged.page_count == 100
+
+
+def test_bulk_review_enrichment_skips_ambiguous_matches_and_preserves_review_state() -> None:
+    client, session_factory = make_books_client()
+    client.post("/admin/login", data={"password": "secret"})
+    provider = FakeMetadataProvider(
+        results=(
+            provider_result(title="Candidate One", author="Author", confidence=0.86, isbn13=None),
+            provider_result(title="Candidate Two", author="Author", confidence=0.85, isbn13=None),
+        )
+    )
+    client.app.dependency_overrides[get_metadata_providers] = lambda: [provider]
+    book = add_book(session_factory, title="Bulk Ambiguous", author="Author", metadata_source="libby")
+
+    response = client.post(
+        "/books/review/enrich",
+        data={"book_ids": str(book.id), "return_to": "/books/review?missing_page_count=true"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert "1+ambiguous" in response.headers["location"]
+    with session_factory() as db:
+        unchanged = db.get(Book, book.id)
+        assert unchanged is not None
+        assert unchanged.page_count is None
+        assert unchanged.review_status is None
+        assert db.query(MetadataEnrichmentRun).filter_by(book_id=book.id).count() == 0
+
+
 def test_quick_completion_date_update_requires_admin_login() -> None:
     client, session_factory = make_books_client()
     book = add_book(session_factory, title="Protected Completion", author="Author", metadata_source="libby")

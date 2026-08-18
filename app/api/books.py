@@ -276,6 +276,13 @@ def enrichment_message_for_status(enrichment_status: str, applied_fields: list[s
     return "Metadata enrichment could not be completed."
 
 
+def bulk_enrichment_summary_message(summary: dict[str, int]) -> str:
+    return (
+        "Bulk enrichment checked {checked} book(s): {updated} updated, {skipped} skipped, "
+        "{ambiguous} ambiguous, {low_confidence} low confidence, {errors} error(s)."
+    ).format(**summary)
+
+
 def book_detail_response(
     request: Request,
     db: Session,
@@ -517,6 +524,110 @@ def apply_book_filters(
     return statement
 
 
+def review_active_filters(
+    *,
+    missing_page_count: bool,
+    missing_audio_duration: bool,
+    missing_author: bool,
+    missing_publisher: bool,
+    missing_isbn: bool,
+    missing_cover_url: bool,
+    unknown_format: bool,
+    unknown_status: bool,
+    missing_libby_title_id: bool,
+    fallback_title: bool,
+    no_reading_events: bool,
+    completed_without_completion_date: bool,
+    progress_status_mismatch: bool,
+    duplicate_candidate: bool,
+) -> dict[str, bool]:
+    return {
+        "missing_page_count": missing_page_count,
+        "missing_audio_duration": missing_audio_duration,
+        "missing_author": missing_author,
+        "missing_publisher": missing_publisher,
+        "missing_isbn": missing_isbn,
+        "missing_cover_url": missing_cover_url,
+        "unknown_format": unknown_format,
+        "unknown_status": unknown_status,
+        "missing_libby_title_id": missing_libby_title_id,
+        "fallback_title": fallback_title,
+        "no_reading_events": no_reading_events,
+        "completed_without_completion_date": completed_without_completion_date,
+        "progress_status_mismatch": progress_status_mismatch,
+        "duplicate_candidate": duplicate_candidate,
+    }
+
+
+def duplicate_reasons_for_review(db: Session) -> dict[int, list[str]]:
+    duplicate_universe = db.scalars(
+        select(Book).where(
+            Book.user_id == DEFAULT_LOCAL_USER_ID,
+            Book.archived_at.is_(None),
+        )
+    ).all()
+    return duplicate_reasons_by_book_id(list(duplicate_universe))
+
+
+def review_books_statement(
+    *,
+    active_filters: dict[str, bool],
+    duplicate_reasons: dict[int, list[str]],
+) -> Select[tuple[Book]]:
+    statement = (
+        select(Book)
+        .options(joinedload(Book.progress))
+        .outerjoin(BookProgress, BookProgress.book_id == Book.id)
+        .where(
+            Book.user_id == DEFAULT_LOCAL_USER_ID,
+            Book.archived_at.is_(None),
+            Book.metadata_source == "libby",
+            or_(Book.review_status.is_(None), Book.review_status.not_in(["reviewed", "ignored"])),
+        )
+        .order_by(Book.title.asc(), Book.id.asc())
+    )
+
+    if active_filters["missing_page_count"]:
+        statement = statement.where(Book.page_count.is_(None))
+    if active_filters["missing_audio_duration"]:
+        statement = statement.where(Book.audio_seconds.is_(None))
+    if active_filters["missing_author"]:
+        statement = statement.where(missing_text_filter(Book.primary_author_name))
+    if active_filters["missing_publisher"]:
+        statement = statement.where(missing_text_filter(Book.publisher))
+    if active_filters["missing_isbn"]:
+        statement = statement.where(missing_text_filter(Book.isbn10), missing_text_filter(Book.isbn13))
+    if active_filters["missing_cover_url"]:
+        statement = statement.where(missing_text_filter(Book.cover_url))
+    if active_filters["unknown_format"]:
+        statement = statement.where(Book.format == "unknown")
+    if active_filters["unknown_status"]:
+        statement = statement.where(Book.status == "unknown")
+    if active_filters["missing_libby_title_id"]:
+        statement = statement.where(missing_text_filter(Book.libby_title_id))
+    if active_filters["fallback_title"]:
+        statement = statement.where(func.lower(func.trim(Book.title)).in_(TITLE_FALLBACK_VALUES))
+    if active_filters["no_reading_events"]:
+        statement = statement.where(~Book.reading_events.any())
+    if active_filters["completed_without_completion_date"]:
+        statement = statement.where(Book.status == "completed", Book.completed_on.is_(None))
+    if active_filters["progress_status_mismatch"]:
+        progress = review_progress_expression()
+        statement = statement.where(
+            or_(
+                and_(Book.status == "completed", progress.is_not(None), progress < 100),
+                and_(Book.status != "completed", progress >= 100),
+            )
+        )
+    if active_filters["duplicate_candidate"]:
+        duplicate_book_ids = list(duplicate_reasons)
+        if duplicate_book_ids:
+            statement = statement.where(Book.id.in_(duplicate_book_ids))
+        else:
+            statement = statement.where(Book.id == -1)
+    return statement
+
+
 @router.get("", response_class=HTMLResponse)
 async def book_list(
     request: Request,
@@ -583,82 +694,24 @@ async def imported_books_review(
     review_error: str | None = Query(default=None),
     review_message: str | None = Query(default=None),
 ) -> HTMLResponse:
-    active_filters = {
-        "missing_page_count": missing_page_count,
-        "missing_audio_duration": missing_audio_duration,
-        "missing_author": missing_author,
-        "missing_publisher": missing_publisher,
-        "missing_isbn": missing_isbn,
-        "missing_cover_url": missing_cover_url,
-        "unknown_format": unknown_format,
-        "unknown_status": unknown_status,
-        "missing_libby_title_id": missing_libby_title_id,
-        "fallback_title": fallback_title,
-        "no_reading_events": no_reading_events,
-        "completed_without_completion_date": completed_without_completion_date,
-        "progress_status_mismatch": progress_status_mismatch,
-        "duplicate_candidate": duplicate_candidate,
-    }
-
-    duplicate_universe = db.scalars(
-        select(Book).where(
-            Book.user_id == DEFAULT_LOCAL_USER_ID,
-            Book.archived_at.is_(None),
-        )
-    ).all()
-    duplicate_reasons = duplicate_reasons_by_book_id(list(duplicate_universe))
-
-    statement = (
-        select(Book)
-        .options(joinedload(Book.progress))
-        .outerjoin(BookProgress, BookProgress.book_id == Book.id)
-        .where(
-            Book.user_id == DEFAULT_LOCAL_USER_ID,
-            Book.archived_at.is_(None),
-            Book.metadata_source == "libby",
-            or_(Book.review_status.is_(None), Book.review_status.not_in(["reviewed", "ignored"])),
-        )
-        .order_by(Book.title.asc(), Book.id.asc())
+    active_filters = review_active_filters(
+        missing_page_count=missing_page_count,
+        missing_audio_duration=missing_audio_duration,
+        missing_author=missing_author,
+        missing_publisher=missing_publisher,
+        missing_isbn=missing_isbn,
+        missing_cover_url=missing_cover_url,
+        unknown_format=unknown_format,
+        unknown_status=unknown_status,
+        missing_libby_title_id=missing_libby_title_id,
+        fallback_title=fallback_title,
+        no_reading_events=no_reading_events,
+        completed_without_completion_date=completed_without_completion_date,
+        progress_status_mismatch=progress_status_mismatch,
+        duplicate_candidate=duplicate_candidate,
     )
-
-    if missing_page_count:
-        statement = statement.where(Book.page_count.is_(None))
-    if missing_audio_duration:
-        statement = statement.where(Book.audio_seconds.is_(None))
-    if missing_author:
-        statement = statement.where(missing_text_filter(Book.primary_author_name))
-    if missing_publisher:
-        statement = statement.where(missing_text_filter(Book.publisher))
-    if missing_isbn:
-        statement = statement.where(missing_text_filter(Book.isbn10), missing_text_filter(Book.isbn13))
-    if missing_cover_url:
-        statement = statement.where(missing_text_filter(Book.cover_url))
-    if unknown_format:
-        statement = statement.where(Book.format == "unknown")
-    if unknown_status:
-        statement = statement.where(Book.status == "unknown")
-    if missing_libby_title_id:
-        statement = statement.where(missing_text_filter(Book.libby_title_id))
-    if fallback_title:
-        statement = statement.where(func.lower(func.trim(Book.title)).in_(TITLE_FALLBACK_VALUES))
-    if no_reading_events:
-        statement = statement.where(~Book.reading_events.any())
-    if completed_without_completion_date:
-        statement = statement.where(Book.status == "completed", Book.completed_on.is_(None))
-    if progress_status_mismatch:
-        progress = review_progress_expression()
-        statement = statement.where(
-            or_(
-                and_(Book.status == "completed", progress.is_not(None), progress < 100),
-                and_(Book.status != "completed", progress >= 100),
-            )
-        )
-    if duplicate_candidate:
-        duplicate_book_ids = list(duplicate_reasons)
-        if duplicate_book_ids:
-            statement = statement.where(Book.id.in_(duplicate_book_ids))
-        else:
-            statement = statement.where(Book.id == -1)
+    duplicate_reasons = duplicate_reasons_for_review(db)
+    statement = review_books_statement(active_filters=active_filters, duplicate_reasons=duplicate_reasons)
 
     books = db.scalars(statement).unique().all()
 
@@ -679,6 +732,91 @@ async def imported_books_review(
             duplicate_reasons=duplicate_reasons,
             format_audio_seconds=format_audio_seconds,
         ),
+    )
+
+
+@router.post("/review/enrich")
+async def bulk_enrich_review_books(
+    db: Session = Depends(get_db),
+    providers: list[MetadataProvider] = Depends(get_metadata_providers),
+    _: None = Depends(require_write_access),
+    book_ids: list[int] = Form(default=[]),
+    return_to: str | None = Form(default=None),
+    missing_page_count: bool = Form(default=False),
+    missing_audio_duration: bool = Form(default=False),
+    missing_author: bool = Form(default=False),
+    missing_publisher: bool = Form(default=False),
+    missing_isbn: bool = Form(default=False),
+    missing_cover_url: bool = Form(default=False),
+    unknown_format: bool = Form(default=False),
+    unknown_status: bool = Form(default=False),
+    missing_libby_title_id: bool = Form(default=False),
+    fallback_title: bool = Form(default=False),
+    no_reading_events: bool = Form(default=False),
+    completed_without_completion_date: bool = Form(default=False),
+    progress_status_mismatch: bool = Form(default=False),
+    duplicate_candidate: bool = Form(default=False),
+) -> Response:
+    return_url = safe_review_return_url(return_to)
+    active_filters = review_active_filters(
+        missing_page_count=missing_page_count,
+        missing_audio_duration=missing_audio_duration,
+        missing_author=missing_author,
+        missing_publisher=missing_publisher,
+        missing_isbn=missing_isbn,
+        missing_cover_url=missing_cover_url,
+        unknown_format=unknown_format,
+        unknown_status=unknown_status,
+        missing_libby_title_id=missing_libby_title_id,
+        fallback_title=fallback_title,
+        no_reading_events=no_reading_events,
+        completed_without_completion_date=completed_without_completion_date,
+        progress_status_mismatch=progress_status_mismatch,
+        duplicate_candidate=duplicate_candidate,
+    )
+    duplicate_reasons = duplicate_reasons_for_review(db)
+    statement = review_books_statement(active_filters=active_filters, duplicate_reasons=duplicate_reasons)
+    if book_ids:
+        statement = statement.where(Book.id.in_(book_ids))
+    books = db.scalars(statement).unique().all()
+
+    summary = {
+        "checked": len(books),
+        "updated": 0,
+        "skipped": 0,
+        "ambiguous": 0,
+        "low_confidence": 0,
+        "errors": 0,
+    }
+    for book in books:
+        outcome = lookup_book_metadata(db, book=book, providers=providers)
+        if outcome.status == "matched" and outcome.best_candidate is not None:
+            candidate = outcome.best_candidate
+            applied = apply_metadata_result_to_empty_fields(
+                db,
+                book=book,
+                result=candidate.result,
+                cache_entry_id=candidate.cache_entry.id,
+                lookup_type=candidate.response.lookup_type,
+                normalized_query=candidate.response.normalized_query,
+            )
+            if applied.updated:
+                summary["updated"] += 1
+            else:
+                summary["skipped"] += 1
+        elif outcome.status == "ambiguous":
+            summary["ambiguous"] += 1
+        elif outcome.status == "low_confidence":
+            summary["low_confidence"] += 1
+        elif any(response.status in {"failed", "malformed", "rate_limited"} for response in outcome.attempted_lookups):
+            summary["errors"] += 1
+        else:
+            summary["skipped"] += 1
+
+    db.commit()
+    return RedirectResponse(
+        review_return_url_with_message(return_url, bulk_enrichment_summary_message(summary)),
+        status_code=status.HTTP_303_SEE_OTHER,
     )
 
 
