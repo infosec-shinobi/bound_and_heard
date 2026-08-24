@@ -67,6 +67,110 @@
 
   <section class="card mb-4">
     <div class="card-body">
+      <h2 class="h5 mb-3">Populate From Libby Series Page</h2>
+      {% if can_write %}
+        <div class="alert app-status-alert mb-3" role="status">
+          {% if latest_libby_series_snapshot %}
+            Last Libby series pull: {{ latest_libby_series_snapshot_age }} with {{ latest_libby_series_snapshot.parsed_entry_count or 0 }} unique parsed works.
+          {% else %}
+            No Libby series page has been pulled for this series yet.
+          {% endif %}
+        </div>
+
+        <form class="row g-3 align-items-end mb-4" method="post" action="/series/{{ series.id }}/libby/scrape">
+          <div class="col-lg-9">
+            <label class="form-label" for="libby_series_url">Libby series URL</label>
+            <input class="form-control" id="libby_series_url" name="libby_series_url" value="{{ suggested_libby_series_url }}" placeholder="https://libbyapp.com/shelf/series-503231/page-1">
+            <div class="form-text app-muted">Pull once at the series level, then preview and apply from the saved snapshot.</div>
+          </div>
+          <div class="col-lg-3 d-grid">
+            <button class="btn btn-outline-primary" type="submit">Scrape Series Page</button>
+          </div>
+        </form>
+
+        {% if latest_libby_series_snapshot %}
+          <form class="mb-4" method="post" action="/series/{{ series.id }}/libby/populate">
+            <input type="hidden" name="use_latest_snapshot" value="true">
+            <div class="form-check mb-3">
+              <input class="form-check-input" id="latest_include_unmatched" name="include_unmatched" type="checkbox" value="true">
+              <label class="form-check-label" for="latest_include_unmatched">Create planned entries for unmatched Libby titles when applying</label>
+            </div>
+            <button class="btn btn-outline-primary" type="submit">Preview Latest Scraped Page</button>
+          </form>
+        {% endif %}
+
+        <form class="row g-3" method="post" action="/series/{{ series.id }}/libby/populate">
+          {% if libby_series_snapshot_id %}<input type="hidden" name="libby_series_snapshot_id" value="{{ libby_series_snapshot_id }}">{% endif %}
+          <div class="col-12">
+            <label class="form-label" for="libby_series_page_content">Libby series page HTML</label>
+            <textarea class="form-control" id="libby_series_page_content" name="libby_series_page_content" rows="5" placeholder="Paste saved Libby /shelf/series page HTML">{{ libby_series_page_content or '' }}</textarea>
+            <div class="form-text app-muted">Optional fallback for ad hoc checks. Preview parses Libby title IDs, order labels, titles, authors, and formats before anything is changed.</div>
+          </div>
+          <div class="col-12">
+            <div class="form-check">
+              <input class="form-check-input" id="include_unmatched" name="include_unmatched" type="checkbox" value="true" {% if libby_include_unmatched %}checked{% endif %}>
+              <label class="form-check-label" for="include_unmatched">Create planned entries for unmatched Libby titles when applying</label>
+            </div>
+          </div>
+          <div class="col-12 d-flex flex-wrap gap-2">
+            <button class="btn btn-outline-primary" type="submit">Preview Libby Page</button>
+            {% if libby_series_preview %}
+              <button class="btn btn-primary" type="submit" name="confirm" value="true">Apply Preview</button>
+            {% endif %}
+          </div>
+        </form>
+
+        {% if libby_series_preview %}
+          <div class="mt-4">
+            <h3 class="h6 mb-2">Libby Preview</h3>
+            <p class="app-muted small mb-3">
+              Parsed {{ libby_series_preview.page.entries|length }} unique works{% if libby_series_preview.page.series_name %} for {{ libby_series_preview.page.series_name }}{% endif %}.
+              {{ libby_series_preview.add_book_count }} matched books, {{ libby_series_preview.planned_count }} planned entries, {{ libby_series_preview.skip_count }} skipped.
+            </p>
+            <div class="table-responsive">
+              <table class="table table-dark table-sm table-hover align-middle mb-0 app-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Order</th>
+                    <th scope="col">Libby Title</th>
+                    <th scope="col">Format</th>
+                    <th scope="col">Match</th>
+                    <th scope="col">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for item in libby_series_preview.items %}
+                    <tr>
+                      <td>{% if item.entry.position is not none and item.entry.position_end is not none %}{{ '%g'|format(item.entry.position) }}-{{ '%g'|format(item.entry.position_end) }}{% elif item.entry.position is not none %}{{ '%g'|format(item.entry.position) }}{% elif item.entry.raw_position_label %}{{ item.entry.raw_position_label }}{% else %}<span class="app-muted">Unknown</span>{% endif %}</td>
+                      <td>
+                        <span class="fw-semibold">{{ item.entry.title }}</span>
+                        {% if item.entry.author %}<div class="small app-muted">{{ item.entry.author }}</div>{% endif %}
+                        {% if item.entry.libby_title_id %}<div class="small app-muted">Libby title {{ item.entry.libby_title_id }}</div>{% endif %}
+                      </td>
+                      <td>{{ item.entry.display_format }}</td>
+                      <td>
+                        {% if item.matched_book %}
+                          <a class="app-link" href="/books/{{ item.matched_book.id }}">{{ item.matched_book.title }}</a>
+                        {% else %}
+                          <span class="app-muted">None</span>
+                        {% endif %}
+                      </td>
+                      <td>{{ item.reason }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        {% endif %}
+      {% else %}
+        <p class="app-muted mb-0">{{ write_disabled_reason }}</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="card mb-4">
+    <div class="card-body">
       <h2 class="h5 mb-3">Assign Existing Book</h2>
       {% if can_write %}
         <form class="row g-3 align-items-end mb-3" method="get" action="/series/{{ series.id }}">
@@ -166,7 +270,7 @@
             <tbody>
               {% for item in entries %}
                 <tr {% if item.is_next_unread %}class="table-primary"{% endif %}>
-                  <td>{% if item.entry.position is not none %}{{ '%g'|format(item.entry.position) }}{% else %}<span class="app-muted">Unknown</span>{% endif %}</td>
+                    <td>{% if item.entry.position is not none and item.entry.position_end is not none %}{{ '%g'|format(item.entry.position) }}-{{ '%g'|format(item.entry.position_end) }}{% elif item.entry.position is not none %}{{ '%g'|format(item.entry.position) }}{% else %}<span class="app-muted">Unknown</span>{% endif %}</td>
                   <td>
                     {% if item.entry.book %}
                       <a class="fw-semibold app-link" href="/books/{{ item.entry.book.id }}">{{ item.title }}</a>
@@ -176,6 +280,8 @@
                     {% if item.author %}<div class="small app-muted">{{ item.author }}</div>{% endif %}
                     {% if item.entry.notes %}<div class="small app-muted">{{ item.entry.notes }}</div>{% endif %}
                     {% if item.is_next_unread %}<span class="badge app-badge-success mt-1">Next unread</span>{% endif %}
+                    {% if item.is_collection %}<span class="badge app-badge-muted mt-1">Collection</span>{% endif %}
+                    {% if item.is_covered_by_collection %}<span class="badge app-badge-success mt-1">Covered by collection</span>{% endif %}
                   </td>
                   <td>{{ item.entry_type.title() }}</td>
                   <td>{% if item.book_format %}{{ item.book_format.replace('_', ' ').title() }}{% else %}<span class="app-muted">Unknown</span>{% endif %}</td>

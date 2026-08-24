@@ -4,8 +4,9 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
-from app.models import ScrapeJob, ScrapeJobItem
+from app.models import ScrapeJob, ScrapeJobItem, Series
 from app.scrapers.libby_progress import parse_libby_progress
+from app.services.libby_series import absolute_libby_url, preserve_libby_series_snapshot
 from app.services.scrape_progress import apply_scraped_progress
 from app.services.scrape_safety import wait_polite_delay
 from app.services.scrape_snapshots import preserve_scrape_snapshot
@@ -24,6 +25,35 @@ JOURNEY_READY_SCRIPT = r"""
 }
 """
 
+SERIES_READY_SCRIPT = r"""
+() => {
+  const text = document.body?.innerText || '';
+  const stillLoading = /Updating|LOADING|Loading/.test(text);
+  const hasSeriesSignal = /Page\s+\d+\s+of\s+\d+|\btitle-tile\b|\bin series\b/i.test(document.body?.innerHTML || text);
+  return !stillLoading && hasSeriesSignal;
+}
+"""
+
+SERIES_SCROLL_SCRIPT = r"""
+async () => {
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const scrollers = Array.from(document.querySelectorAll('.native-scrollable-y, .scroller'));
+  const targets = [document.scrollingElement || document.documentElement, ...scrollers].filter(Boolean);
+  for (let pass = 0; pass < 8; pass += 1) {
+    for (const target of targets) {
+      target.scrollTop = target.scrollHeight;
+    }
+    window.scrollTo(0, document.body.scrollHeight);
+    await sleep(350);
+  }
+  for (const target of targets) {
+    target.scrollTop = 0;
+  }
+  window.scrollTo(0, 0);
+  await sleep(250);
+}
+"""
+
 
 def scrape_url_for_item(item: ScrapeJobItem) -> str:
     book = item.book
@@ -37,6 +67,83 @@ def has_parseable_progress(parsed: object) -> bool:
         getattr(parsed, field_name, None) is not None
         for field_name in ("progress_percent", "position_pages", "position_seconds")
     )
+
+
+def prepare_libby_series_page(page: object) -> None:
+    from playwright.sync_api import Error as PlaywrightError
+
+    try:
+        page.wait_for_function(SERIES_READY_SCRIPT, timeout=30_000)
+    except PlaywrightError:
+        pass
+    try:
+        page.evaluate(SERIES_SCROLL_SCRIPT)
+        page.wait_for_function(SERIES_READY_SCRIPT, timeout=10_000)
+    except PlaywrightError:
+        pass
+
+
+def collect_libby_series_html(page: object, *, url: str) -> tuple[str, list[str]]:
+    captured: list[tuple[str, str]] = []
+    page.goto(url, wait_until="domcontentloaded")
+    prepare_libby_series_page(page)
+    captured.append(("initial", page.content()))
+
+    for label in ("books", "audiobooks"):
+        page.goto(url, wait_until="domcontentloaded")
+        prepare_libby_series_page(page)
+        try:
+            button = page.locator("button.filter-button.data-category_format").filter(has_text=label).first
+            if button.count() == 0:
+                continue
+            button.click()
+            prepare_libby_series_page(page)
+            captured.append((label, page.content()))
+        except Exception:
+            continue
+
+    combined = "\n".join(f"<!-- libby-series-filter: {label} -->\n{content}" for label, content in captured)
+    return combined, [label for label, _ in captured]
+
+
+def scrape_libby_series_page(
+    db: Session,
+    *,
+    series: Series,
+    libby_series_url: str,
+    profile_dir: str,
+    scraped_dir: str,
+) -> dict[str, object]:
+    from playwright.sync_api import sync_playwright
+
+    playwright = sync_playwright().start()
+    context = None
+    try:
+        context = playwright.chromium.launch_persistent_context(user_data_dir=profile_dir, headless=False, locale="en-US")
+        page = context.pages[0] if context.pages else context.new_page()
+        page.set_default_timeout(10_000)
+        page.set_default_navigation_timeout(30_000)
+        target_url = absolute_libby_url(libby_series_url)
+        html, captured_filters = collect_libby_series_html(page, url=target_url)
+        preserved = preserve_libby_series_snapshot(
+            db,
+            series=series,
+            base_dir=scraped_dir,
+            libby_series_url=page.url,
+            content=html,
+            content_type="text/html",
+            raw_data={"url": page.url, "captured_filters": captured_filters},
+        )
+        db.flush()
+        return {
+            "snapshot_id": preserved.snapshot.id,
+            "url": page.url,
+            "entry_count": preserved.snapshot.parsed_entry_count or 0,
+        }
+    finally:
+        if context is not None:
+            context.close()
+        playwright.stop()
 
 
 def run_libby_scrape_job(

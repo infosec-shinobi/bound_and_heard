@@ -1,5 +1,6 @@
 from collections.abc import Generator
 from datetime import date, datetime, timezone
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
@@ -11,7 +12,7 @@ from app.core.config import Settings
 from app.core.database import Base, get_db
 from app.importers.libby_json import parse_libby_export
 from app.main import create_app
-from app.models import Book, BookProgress, ReadingEvent, ScrapeJob, ScrapeJobItem, Series, SeriesBook, User
+from app.models import Book, BookProgress, LibbySeriesSnapshot, ReadingEvent, ScrapeJob, ScrapeJobItem, Series, SeriesBook, User
 from app.scrapers.libby_progress import parse_libby_progress
 from app.services.import_service import process_libby_timeline_items
 from app.services.scrape_progress import apply_scraped_progress
@@ -82,6 +83,7 @@ def add_book(
     completed_on: date | None = None,
     manual_progress_percent: float | None = None,
     metadata_source: str | None = None,
+    libby_title_id: str | None = None,
 ) -> Book:
     with session_factory() as db:
         book = Book(
@@ -93,6 +95,7 @@ def add_book(
             completed_on=completed_on,
             manual_progress_percent=manual_progress_percent,
             metadata_source=metadata_source,
+            libby_title_id=libby_title_id,
         )
         db.add(book)
         db.commit()
@@ -105,6 +108,7 @@ def add_series_entry(
     series_id: int,
     *,
     position: float,
+    position_end: float | None = None,
     book_id: int | None = None,
     planned_title: str | None = None,
     planned_author_name: str | None = None,
@@ -116,6 +120,7 @@ def add_series_entry(
                 series_id=series_id,
                 book_id=book_id,
                 position=position,
+                position_end=position_end,
                 planned_title=planned_title,
                 planned_author_name=planned_author_name,
                 planned_format=planned_format if book_id is None else None,
@@ -1035,6 +1040,32 @@ def test_series_detail_completed_status_warns_when_entries_remain() -> None:
     assert "Unread Book" in response.text
 
 
+def test_completed_collection_entry_satisfies_covered_series_positions() -> None:
+    client, session_factory = make_series_client()
+    series = add_series(session_factory, name="Scot Harvath")
+    first = add_book(session_factory, title="The Lions of Lucerne", author="Brad Thor", status="want_to_read")
+    second = add_book(session_factory, title="Path of the Assassin", author="Brad Thor", status="want_to_read")
+    third = add_book(session_factory, title="State of the Union", author="Brad Thor", status="want_to_read")
+    collection = add_book(
+        session_factory,
+        title="Brad Thor Collectors' Edition 1",
+        author="Brad Thor",
+        status="completed",
+    )
+    add_series_entry(session_factory, series.id, position=1, book_id=first.id)
+    add_series_entry(session_factory, series.id, position=2, book_id=second.id)
+    add_series_entry(session_factory, series.id, position=3, book_id=third.id)
+    add_series_entry(session_factory, series.id, position=1, position_end=3, book_id=collection.id)
+
+    response = client.get(f"/series/{series.id}")
+
+    assert response.status_code == 200
+    assert "3 / 3" in response.text
+    assert "All tracked entries are complete or read. Series status remains manual." in response.text
+    assert "Collection" in response.text
+    assert response.text.count("Covered by collection") == 3
+
+
 def test_series_detail_paused_and_abandoned_keep_next_unread_visible() -> None:
     client, session_factory = make_series_client()
     paused = add_series(session_factory, name="Paused Series", status="paused")
@@ -1188,3 +1219,175 @@ def test_scraped_progress_preserves_manual_series_state() -> None:
         assert updated_book.status == "completed"
 
     assert client.get(f"/series/{series.id}").status_code == 200
+
+
+def test_populate_series_from_libby_page_requires_admin_login() -> None:
+    client, session_factory = make_series_client()
+    series = add_series(session_factory, name="Protected Libby")
+
+    response = client.post(
+        f"/series/{series.id}/libby/populate",
+        data={"libby_series_page_content": "<html></html>"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 403
+    assert "Admin login is required for write actions." in response.text
+
+
+def test_populate_series_from_libby_page_previews_and_applies() -> None:
+    client, session_factory = make_series_client()
+    login_as_admin(client)
+    series = add_series(session_factory, name="Jack Reacher")
+    book = add_book(
+        session_factory,
+        title="Killing Floor",
+        author="Lee Child",
+        book_format="ebook",
+        metadata_source="libby",
+        libby_title_id="203736",
+    )
+    html = """
+    <title>Libby - Jack Reacher</title>
+    <div class="title-tile data-title-tile-format_book data-title_203736">
+      <button class="series-number">#1 in series</button>
+      <div class="title-tile-author">Lee Child</div>
+      <a class="title-tile-action" href="https://libbyapp.com/shelf/series-503231/page-1/203736"><span class="title-tile-title">Killing Floor</span></a>
+    </div>
+    <div class="title-tile data-title-tile-format_book data-title_213622">
+      <button class="series-number">#2 in series</button>
+      <div class="title-tile-author">Lee Child</div>
+      <a class="title-tile-action" href="https://libbyapp.com/shelf/series-503231/page-1/213622"><span class="title-tile-title">Die Trying</span></a>
+    </div>
+    """
+
+    preview_response = client.post(
+        f"/series/{series.id}/libby/populate",
+        data={"libby_series_page_content": html, "include_unmatched": "true"},
+    )
+
+    assert preview_response.status_code == 200
+    assert "Libby Preview" in preview_response.text
+    assert "1 matched books, 1 planned entries, 0 skipped" in preview_response.text
+    assert "Killing Floor" in preview_response.text
+    assert "Die Trying" in preview_response.text
+
+    apply_response = client.post(
+        f"/series/{series.id}/libby/populate",
+        data={"libby_series_page_content": html, "include_unmatched": "true", "confirm": "true"},
+        follow_redirects=False,
+    )
+
+    assert apply_response.status_code == 303
+    assert "Libby+series+population+applied" in apply_response.headers["location"]
+    with session_factory() as db:
+        entries = db.scalars(select(SeriesBook).where(SeriesBook.series_id == series.id).order_by(SeriesBook.position)).all()
+        assert len(entries) == 2
+        assert entries[0].book_id == book.id
+        assert entries[0].position == 1
+        assert entries[1].book_id is None
+        assert entries[1].planned_title == "Die Trying"
+        assert entries[1].position == 2
+
+
+def test_series_detail_shows_latest_libby_series_snapshot_age() -> None:
+    client, session_factory = make_series_client()
+    login_as_admin(client)
+    series = add_series(session_factory, name="Snapshot Series")
+    with session_factory() as db:
+        db.add(
+            LibbySeriesSnapshot(
+                user_id=DEFAULT_LOCAL_USER_ID,
+                series_id=series.id,
+                libby_series_key="series-123",
+                libby_series_url="https://libbyapp.com/shelf/series-123/page-1",
+                file_path="data/scraped/test.html",
+                checksum="abc",
+                content_type="text/html",
+                parsed_entry_count=12,
+                raw_data={"parser": "test"},
+            )
+        )
+        db.commit()
+
+    response = client.get(f"/series/{series.id}")
+
+    assert response.status_code == 200
+    assert "Last Libby series pull:" in response.text
+    assert "12 unique parsed works" in response.text
+    assert "Preview Latest Scraped Page" in response.text
+
+
+def test_scrape_series_libby_page_requires_admin_login() -> None:
+    client, session_factory = make_series_client()
+    series = add_series(session_factory, name="Protected Scrape")
+
+    response = client.post(
+        f"/series/{series.id}/libby/scrape",
+        data={"libby_series_url": "https://libbyapp.com/shelf/series-123/page-1"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 403
+    assert "Admin login is required for write actions." in response.text
+
+
+def test_scrape_series_libby_page_persists_snapshot_and_preview_uses_latest(monkeypatch, tmp_path: Path) -> None:
+    client, session_factory = make_series_client()
+    login_as_admin(client)
+    series = add_series(session_factory, name="Jack Reacher")
+    add_book(
+        session_factory,
+        title="Killing Floor",
+        author="Lee Child",
+        book_format="ebook",
+        metadata_source="libby",
+        libby_title_id="203736",
+    )
+    html = """
+    <title>Libby - Jack Reacher</title>
+    <div class="title-tile data-title-tile-format_book data-title_203736">
+      <button class="series-number">#1 in series</button>
+      <div class="title-tile-author">Lee Child</div>
+      <a class="title-tile-action" href="https://libbyapp.com/shelf/series-503231/page-1/203736"><span class="title-tile-title">Killing Floor</span></a>
+    </div>
+    """
+
+    def fake_scrape(db: Session, *, series: Series, libby_series_url: str, profile_dir: str, scraped_dir: str) -> dict[str, object]:
+        snapshot_path = tmp_path / "series.html"
+        snapshot_path.write_text(html, encoding="utf-8")
+        snapshot = LibbySeriesSnapshot(
+            user_id=DEFAULT_LOCAL_USER_ID,
+            series_id=series.id,
+            libby_series_key="series-503231",
+            libby_series_url=libby_series_url,
+            file_path=snapshot_path.as_posix(),
+            checksum="abc",
+            content_type="text/html",
+            parsed_entry_count=1,
+            raw_data={"parser": "test"},
+        )
+        db.add(snapshot)
+        db.flush()
+        return {"snapshot_id": snapshot.id, "url": libby_series_url, "entry_count": 1}
+
+    monkeypatch.setattr("app.services.libby_scrape_runner.scrape_libby_series_page", fake_scrape)
+
+    scrape_response = client.post(
+        f"/series/{series.id}/libby/scrape",
+        data={"libby_series_url": "https://libbyapp.com/shelf/series-503231/page-1"},
+        follow_redirects=False,
+    )
+
+    assert scrape_response.status_code == 303
+    assert "Scraped+Libby+series+page+with+1+unique+parsed+works" in scrape_response.headers["location"]
+
+    preview_response = client.post(
+        f"/series/{series.id}/libby/populate",
+        data={"use_latest_snapshot": "true"},
+    )
+
+    assert preview_response.status_code == 200
+    assert "Libby Preview" in preview_response.text
+    assert "1 matched books, 0 planned entries, 0 skipped" in preview_response.text
+    assert "Killing Floor" in preview_response.text

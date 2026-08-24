@@ -141,6 +141,24 @@ Derived from `docs/ROADMAP.md` MVP 6 - Metadata Enrichment, with continuity from
 - [ ] Keep all manual-book enrichment mutations admin-only
 - [ ] Add tests for manual-book enrichment, fallback lookup, overwrite protection, and permissions
 
+## Chunk 10.7 - Libby Series Population
+
+- [x] Parse Libby series page HTML
+- [x] Extract series page title, listed books, authors, formats, Libby title IDs or title URLs when available
+- [x] Extract or infer series positions when Libby exposes ordering
+- [x] Match parsed Libby series entries to existing local books by Libby title ID first, then conservative title/author/format matching
+- [x] Preview planned series changes before applying them
+- [x] Add admin-only action to populate an existing local series from a Libby series hint/page
+- [x] Create `series_books` rows for matched existing books only when not already assigned to that series
+- [x] Create planned entries for unmatched Libby series titles only after explicit confirmation
+- [x] Preserve existing manual series entries, positions, notes, and planned entries
+- [x] Avoid duplicate planned entries by normalized title/author/format/position matching
+- [x] Store raw Libby series page context or parse metadata for traceability
+- [x] Add tests for parsing, matching, preview, permissions, duplicate avoidance, and manual preservation
+- [x] Parse Libby collection ranges such as `1-3 in series`
+- [x] Track collection range coverage without inflating series progress totals
+- [x] Count a completed collection as satisfying individual works covered by its range
+
 ## Chunk 11 - Tests
 
 - [x] Test enrichment/cache model and migration fields

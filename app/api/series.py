@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timezone
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Form, Query, Request, status as http_status
@@ -12,7 +12,15 @@ from app.core.bootstrap import DEFAULT_LOCAL_USER_ID
 from app.core.database import get_db
 from app.core.templates import template_context, templates
 from app.core.write_protection import require_write_access
-from app.models import Book, Series, SeriesBook
+from app.models import Book, LibbySeriesSnapshot, Series, SeriesBook
+from app.services import libby_scrape_runner
+from app.services.libby_series import (
+    apply_libby_series_population,
+    build_libby_series_population_preview,
+    latest_libby_series_snapshot,
+    read_libby_series_snapshot_content,
+    suggested_libby_series_url,
+)
 
 
 router = APIRouter(prefix="/series", tags=["series"])
@@ -50,6 +58,8 @@ class SeriesDetailEntry:
     source: str | None
     is_completed: bool
     is_next_unread: bool
+    is_collection: bool
+    is_covered_by_collection: bool
 
 
 def is_series_entry_completed(entry: SeriesBook) -> bool:
@@ -58,6 +68,31 @@ def is_series_entry_completed(entry: SeriesBook) -> bool:
     if entry.book.status == "completed":
         return True
     return bool(entry.book.progress and entry.book.progress.progress_percent == 100)
+
+
+def is_collection_entry(entry: SeriesBook) -> bool:
+    return entry.position is not None and entry.position_end is not None and entry.position_end > entry.position
+
+
+def collection_covers_position(entry: SeriesBook, position: float | None) -> bool:
+    if position is None or not is_collection_entry(entry):
+        return False
+    return bool(entry.position is not None and entry.position <= position <= entry.position_end)
+
+
+def countable_series_entries(entries: list[SeriesBook]) -> list[SeriesBook]:
+    non_collection_entries = [entry for entry in entries if not is_collection_entry(entry)]
+    return non_collection_entries or entries
+
+
+def completed_collection_entries(entries: list[SeriesBook]) -> list[SeriesBook]:
+    return [entry for entry in entries if is_collection_entry(entry) and is_series_entry_completed(entry)]
+
+
+def is_entry_satisfied(entry: SeriesBook, completed_collections: list[SeriesBook]) -> bool:
+    return is_series_entry_completed(entry) or any(
+        collection_covers_position(collection, entry.position) for collection in completed_collections
+    )
 
 
 def series_entry_title(entry: SeriesBook) -> str:
@@ -100,13 +135,15 @@ def series_entry_sort_key(entry: SeriesBook) -> tuple[int, float, str]:
 
 def build_series_list_item(series: Series) -> SeriesListItem:
     entries = sorted(series.books, key=series_entry_sort_key)
-    completed_count = sum(1 for entry in entries if is_series_entry_completed(entry))
-    next_unread = next((entry for entry in entries if not is_series_entry_completed(entry)), None)
+    completed_collections = completed_collection_entries(entries)
+    countable_entries = countable_series_entries(entries)
+    completed_count = sum(1 for entry in countable_entries if is_entry_satisfied(entry, completed_collections))
+    next_unread = next((entry for entry in countable_entries if not is_entry_satisfied(entry, completed_collections)), None)
 
     return SeriesListItem(
         series=series,
         completed_count=completed_count,
-        total_count=len(entries),
+        total_count=len(countable_entries),
         next_unread_title=series_entry_title(next_unread) if next_unread else None,
         next_unread_author=series_entry_author(next_unread) if next_unread else None,
         continuation_notice=series_continuation_notice(series, series_entry_title(next_unread) if next_unread else None),
@@ -115,11 +152,14 @@ def build_series_list_item(series: Series) -> SeriesListItem:
 
 def build_series_detail_entries(series: Series) -> list[SeriesDetailEntry]:
     entries = sorted(series.books, key=series_entry_sort_key)
-    next_unread = next((entry for entry in entries if not is_series_entry_completed(entry)), None)
+    completed_collections = completed_collection_entries(entries)
+    countable_entries = countable_series_entries(entries)
+    next_unread = next((entry for entry in countable_entries if not is_entry_satisfied(entry, completed_collections)), None)
     detail_entries: list[SeriesDetailEntry] = []
 
     for entry in entries:
         is_planned = entry.book is None
+        covered_by_collection = any(collection_covers_position(collection, entry.position) for collection in completed_collections)
         detail_entries.append(
             SeriesDetailEntry(
                 entry=entry,
@@ -131,8 +171,10 @@ def build_series_detail_entries(series: Series) -> list[SeriesDetailEntry]:
                 completed_on=None if is_planned else entry.book.completed_on,
                 progress_percent=series_entry_progress(entry),
                 source=series_entry_source(entry),
-                is_completed=is_series_entry_completed(entry),
+                is_completed=is_series_entry_completed(entry) or covered_by_collection,
                 is_next_unread=entry is next_unread,
+                is_collection=is_collection_entry(entry),
+                is_covered_by_collection=covered_by_collection and not is_collection_entry(entry),
             )
         )
 
@@ -251,6 +293,8 @@ def get_local_series_statement(series_id: int):
         select(Series)
         .options(
             joinedload(Series.books).joinedload(SeriesBook.book).joinedload(Book.progress),
+            joinedload(Series.books).joinedload(SeriesBook.book).joinedload(Book.libby_series_hints),
+            joinedload(Series.libby_snapshots),
         )
         .where(Series.id == series_id, Series.user_id == DEFAULT_LOCAL_USER_ID)
     )
@@ -292,6 +336,79 @@ def selectable_books_statement(book_q: str | None):
             )
         )
     return statement
+
+
+def relative_age_text(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    now = datetime.now(timezone.utc)
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    seconds = max(0, int((now - value).total_seconds()))
+    if seconds < 60:
+        return "just now"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes} minute{'s' if minutes != 1 else ''} ago"
+    hours = minutes // 60
+    if hours < 48:
+        return f"{hours} hour{'s' if hours != 1 else ''} ago"
+    days = hours // 24
+    return f"{days} day{'s' if days != 1 else ''} ago"
+
+
+def render_series_detail_view(
+    *,
+    request: Request,
+    db: Session,
+    series: Series,
+    book_q: str | None,
+    message: str | None,
+    error: str | None,
+    libby_series_preview: object | None = None,
+    libby_series_page_content: str = "",
+    libby_include_unmatched: bool = False,
+    libby_series_snapshot_id: int | None = None,
+) -> HTMLResponse:
+    entries = build_series_detail_entries(series)
+    countable_entries = [entry for entry in entries if not entry.is_collection] or entries
+    completed_count = sum(1 for entry in countable_entries if entry.is_completed)
+    next_unread = next((entry for entry in entries if entry.is_next_unread), None)
+    progress_note = series_progress_note(series, completed_count, len(countable_entries), next_unread)
+    continuation_notice = series_continuation_notice(series, next_unread.title if next_unread else None)
+    selectable_books = db.scalars(selectable_books_statement(book_q)).all()
+    latest_snapshot = latest_libby_series_snapshot(db, series_id=series.id, user_id=DEFAULT_LOCAL_USER_ID)
+
+    return templates.TemplateResponse(
+        request,
+        "series/detail.html",
+        template_context(
+            request,
+            page_title=series.name,
+            series=series,
+            entries=entries,
+            completed_count=completed_count,
+            total_count=len(countable_entries),
+            next_unread=next_unread,
+            remaining_count=len(countable_entries) - completed_count,
+            progress_note=progress_note,
+            continuation_notice=continuation_notice,
+            selectable_books=selectable_books,
+            book_options={book.id: book_option_label(book) for book in selectable_books},
+            book_q=book_q or "",
+            series_book_formats=SERIES_BOOK_FORMATS,
+            ordering_help=SERIES_ORDERING_HELP,
+            message=message,
+            error=error,
+            libby_series_preview=libby_series_preview,
+            libby_series_page_content=libby_series_page_content,
+            libby_include_unmatched=libby_include_unmatched,
+            libby_series_snapshot_id=libby_series_snapshot_id,
+            latest_libby_series_snapshot=latest_snapshot,
+            latest_libby_series_snapshot_age=relative_age_text(latest_snapshot.created_at if latest_snapshot else None),
+            suggested_libby_series_url=suggested_libby_series_url(db, series=series) or "",
+        ),
+    )
 
 
 @router.get("", response_class=HTMLResponse)
@@ -696,6 +813,109 @@ async def convert_planned_entry_to_existing_book(
     return series_detail_redirect(series.id, message=f"Converted planned entry to {book.title}.")
 
 
+@router.post("/{series_id}/libby/populate")
+async def populate_series_from_libby_page(
+    series_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_write_access),
+    libby_series_page_content: str = Form(default=""),
+    libby_series_snapshot_id: int | None = Form(default=None),
+    use_latest_snapshot: bool = Form(default=False),
+    include_unmatched: bool = Form(default=False),
+    confirm: str | None = Form(default=None),
+) -> Response:
+    series = db.scalars(get_local_series_statement(series_id)).unique().one_or_none()
+    if series is None:
+        return series_redirect(error="Series not found.")
+
+    snapshot: LibbySeriesSnapshot | None = None
+    if libby_series_snapshot_id is not None:
+        snapshot = db.get(LibbySeriesSnapshot, libby_series_snapshot_id)
+        if snapshot is None or snapshot.series_id != series.id or snapshot.user_id != DEFAULT_LOCAL_USER_ID:
+            return series_detail_redirect(series.id, error="Libby series snapshot not found.")
+    elif use_latest_snapshot:
+        snapshot = latest_libby_series_snapshot(db, series_id=series.id, user_id=DEFAULT_LOCAL_USER_ID)
+        if snapshot is None:
+            return series_detail_redirect(series.id, error="No scraped Libby series page is available yet.")
+
+    content = libby_series_page_content
+    if snapshot is not None:
+        content = read_libby_series_snapshot_content(snapshot)
+
+    if not clean_optional(content):
+        return series_detail_redirect(series.id, error="Libby series page HTML is required.")
+
+    if confirm == "true":
+        result = apply_libby_series_population(
+            db,
+            user_id=DEFAULT_LOCAL_USER_ID,
+            series_id=series.id,
+            content=content,
+            include_unmatched=include_unmatched,
+        )
+        db.commit()
+        return series_detail_redirect(
+            series.id,
+            message=(
+                "Libby series population applied: "
+                f"{result.added_books} books added, {result.added_planned} planned entries added, {result.skipped} skipped."
+            ),
+        )
+
+    preview = build_libby_series_population_preview(
+        db,
+        user_id=DEFAULT_LOCAL_USER_ID,
+        series_id=series.id,
+        content=content,
+        include_unmatched=include_unmatched,
+    )
+    return render_series_detail_view(
+        request=request,
+        db=db,
+        series=series,
+        book_q=None,
+        message="Preview Libby series population before applying.",
+        error=None,
+        libby_series_preview=preview,
+        libby_series_page_content="" if snapshot is not None else libby_series_page_content,
+        libby_include_unmatched=include_unmatched,
+        libby_series_snapshot_id=snapshot.id if snapshot is not None else None,
+    )
+
+
+@router.post("/{series_id}/libby/scrape")
+def scrape_series_libby_page(
+    series_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_write_access),
+    libby_series_url: str = Form(default=""),
+) -> Response:
+    series = db.scalars(get_local_series_statement(series_id)).unique().one_or_none()
+    if series is None:
+        return series_redirect(error="Series not found.")
+    clean_url = clean_optional(libby_series_url)
+    if clean_url is None:
+        return series_detail_redirect(series.id, error="Libby series URL is required.")
+    try:
+        result = libby_scrape_runner.scrape_libby_series_page(
+            db,
+            series=series,
+            libby_series_url=clean_url,
+            profile_dir=request.app.state.settings.libby_browser_profile_dir,
+            scraped_dir=request.app.state.settings.scraped_dir,
+        )
+    except Exception as exc:
+        db.rollback()
+        return series_detail_redirect(series.id, error=f"Libby series scrape failed: {exc}")
+    db.commit()
+    return series_detail_redirect(
+        series.id,
+        message=f"Scraped Libby series page with {result['entry_count']} unique parsed works. Preview the latest scraped page to apply changes.",
+    )
+
+
 @router.get("/{series_id}", response_class=HTMLResponse)
 async def series_detail(
     series_id: int,
@@ -714,33 +934,11 @@ async def series_detail(
             status_code=http_status.HTTP_404_NOT_FOUND,
         )
 
-    entries = build_series_detail_entries(series)
-    completed_count = sum(1 for entry in entries if entry.is_completed)
-    next_unread = next((entry for entry in entries if entry.is_next_unread), None)
-    progress_note = series_progress_note(series, completed_count, len(entries), next_unread)
-    continuation_notice = series_continuation_notice(series, next_unread.title if next_unread else None)
-    selectable_books = db.scalars(selectable_books_statement(book_q)).all()
-
-    return templates.TemplateResponse(
-        request,
-        "series/detail.html",
-        template_context(
-            request,
-            page_title=series.name,
-            series=series,
-            entries=entries,
-            completed_count=completed_count,
-            total_count=len(entries),
-            next_unread=next_unread,
-            remaining_count=len(entries) - completed_count,
-            progress_note=progress_note,
-            continuation_notice=continuation_notice,
-            selectable_books=selectable_books,
-            book_options={book.id: book_option_label(book) for book in selectable_books},
-            book_q=book_q or "",
-            series_book_formats=SERIES_BOOK_FORMATS,
-            ordering_help=SERIES_ORDERING_HELP,
-            message=message,
-            error=error,
-        ),
+    return render_series_detail_view(
+        request=request,
+        db=db,
+        series=series,
+        book_q=book_q,
+        message=message,
+        error=error,
     )
