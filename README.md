@@ -142,6 +142,68 @@ Book detail pages show series memberships and link back to series detail pages. 
 
 Future metadata enrichment may suggest series candidates, but suggestions should not overwrite manual series records or assignments unless the user explicitly chooses to do so.
 
+## Metadata Enrichment
+
+MVP 6 adds admin-only metadata enrichment for filling missing book details from external providers while preserving manual edits.
+
+Supported providers:
+
+- Open Library
+- Google Books
+
+No provider API keys are required for the current MVP 6 clients. Enrichment performs outbound HTTPS requests to the provider APIs unless a matching cached response already exists locally.
+
+### Book Detail Enrichment
+
+1. Log in as admin.
+2. Open a book detail page.
+3. Use the enrichment action to look up metadata.
+4. Review the result status, provider/cache context, and any candidates shown.
+
+Lookup behavior:
+
+- ISBN lookup is attempted first when `isbn13` or `isbn10` exists.
+- Title/author lookup is used when ISBN lookup is unavailable or does not produce a usable candidate.
+- Ambiguous or low-confidence matches are shown for review and are not silently applied.
+- Manual cache refresh can bypass existing cached responses when you intentionally want a fresh provider response.
+
+Applied fields are fill-empty only by default:
+
+- subtitle
+- publisher
+- published date/year
+- ISBN-10 or ISBN-13
+- page count
+- cover URL
+- genres/categories
+- `metadata_source` only when it is empty and at least one field was applied
+
+Enrichment does not overwrite title, author, notes, rating, status, progress, completion date, reading events, Libby import attribution, or series assignments.
+
+### Import Review Bulk Enrichment
+
+The import review page can enrich selected books or the current filtered review result set. Bulk enrichment reuses the same lookup, cache, confidence, and fill-empty rules as book detail enrichment. It does not mark books reviewed automatically.
+
+### Metadata Cache
+
+Provider responses are cached in the local database by provider, lookup type, normalized query, response checksum, status, HTTP status, and fetch timestamp. Cached raw responses are reused to avoid repeated provider calls and to keep enrichment auditable. Failed or empty responses are cached enough to avoid tight retry loops.
+
+### Genres And Categories
+
+Provider categories are normalized into local genre labels and attached through `genres` and `book_genres`. Existing genre links are preserved, duplicate labels are avoided case-insensitively, and the raw provider label is retained on the book-genre link.
+
+### Libby Series Enrichment
+
+Libby series data is handled separately from external metadata providers because Libby journey and series pages can expose stronger local context for Libby books.
+
+- Journey scraping can store Libby series hints without changing local series assignments.
+- Book detail and review pages show Libby series suggestions for admin review.
+- Series detail pages can scrape a Libby series page once at the series level, show when it was last pulled, preview unique works, and apply matched/planned entries only after confirmation.
+- Libby series pages can contain both ebook and audiobook rows for the same work; preview collapses those into one work while showing all available formats.
+- Collection rows such as `1-3 in series` are tracked as ranges and a completed collection can satisfy covered individual works.
+
+Raw Libby series page snapshots are stored under `data/scraped/libby/series/` by default and may contain private account/library data. Keep `data/**` untracked.
+
 ## Libby Progress Scraping Setup
 
 MVP 4 uses Playwright with a persistent local browser profile so you can log in to Libby manually and reuse that browser session for progress scraping. The default profile directory is `data/browser/libby-profile`, which is ignored by Git through the existing `data/**` rule.

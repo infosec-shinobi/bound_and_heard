@@ -179,25 +179,25 @@ Derived from `docs/ROADMAP.md` MVP 6 - Metadata Enrichment, with continuity from
 
 ## Chunk 12 - Documentation
 
-- [ ] Update README with metadata enrichment workflow
-- [ ] Document provider configuration and network behavior
-- [ ] Document metadata cache behavior
-- [ ] Document fill-empty-fields-only policy
-- [ ] Document manual overwrite protection
-- [ ] Document provider attribution and raw response preservation
-- [ ] Update database documentation for enrichment/cache tables and genre/category fields
-- [ ] Document series metadata research and future suggestion-only direction
+- [x] Update README with metadata enrichment workflow
+- [x] Document provider configuration and network behavior
+- [x] Document metadata cache behavior
+- [x] Document fill-empty-fields-only policy
+- [x] Document manual overwrite protection
+- [x] Document provider attribution and raw response preservation
+- [x] Update database documentation for enrichment/cache tables and genre/category fields
+- [x] Document series metadata research and future suggestion-only direction
 
 ## MVP 6 Done Criteria
 
-- [ ] User can enrich a book by ISBN when an ISBN exists
-- [ ] User can enrich a book by title/author when ISBN lookup is unavailable or unhelpful
-- [ ] Provider responses are cached locally and reused
-- [ ] Cover URL can be filled when empty
-- [ ] Page count can be filled when empty
-- [ ] Publication year/date can be filled when supported
-- [ ] Genre/category values can be filled or attached when supported
-- [ ] Manual edits are not silently overwritten
-- [ ] Libby import data, scraped progress, reading events, and series assignments are preserved
-- [ ] Ambiguous or low-confidence results are not silently applied
-- [ ] Basic tests pass
+- [x] User can enrich a book by ISBN when an ISBN exists
+- [x] User can enrich a book by title/author when ISBN lookup is unavailable or unhelpful
+- [x] Provider responses are cached locally and reused
+- [x] Cover URL can be filled when empty
+- [x] Page count can be filled when empty
+- [x] Publication year/date can be filled when supported
+- [x] Genre/category values can be filled or attached when supported
+- [x] Manual edits are not silently overwritten
+- [x] Libby import data, scraped progress, reading events, and series assignments are preserved
+- [x] Ambiguous or low-confidence results are not silently applied
+- [x] Basic tests pass

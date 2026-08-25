@@ -229,6 +229,31 @@ Add an explainable AI reading advisor.
 
 The app recommends useful next reads and explains why.
 
+## MVP 9 - Operationalize
+
+### Goals
+
+Create an easy-to-deploy, secure, and recoverable application deployment model for self-hosted use.
+
+### Deliverables
+
+- Container image
+- Docker Compose example for local/self-hosted deployment
+- Persistent volume layout for database, imports, scraped snapshots, browser profile, recaps, and exports
+- Environment variable documentation for secrets, database URL, storage paths, and app settings
+- Secure runtime defaults: non-root container user, minimal exposed ports, health checks, and read-only mode when the admin password is missing
+- Startup and migration workflow for containerized deployments
+- Backup strategy and supporting scripts
+- Restore strategy and supporting scripts
+- Backup verification or dry-run restore guidance
+- Upgrade guidance for pulling a new image, applying migrations, and preserving local data
+- Log and troubleshooting guidance for common deployment failures
+- Optional reverse proxy notes for TLS and private-network access
+
+### Success Criteria
+
+The application can be deployed predictably via a container, updated without losing local data, and recovered from a documented backup with clear security defaults.
+
 ## Future Enhancements
 
 - Multi-user login
@@ -236,7 +261,6 @@ The app recommends useful next reads and explains why.
 - Password-protected imports and edits per user
 - Role-based access
 - Public read-only recap links
-- Docker deployment
 - Postgres support
 - Mobile-friendly recap pages
 - Third-party series metadata enrichment

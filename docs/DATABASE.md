@@ -33,11 +33,17 @@ users
   |     +-- scrape_job_items
   |     +-- book_genres
   |     +-- series_books
+  |     +-- metadata_enrichment_runs
+  |     +-- libby_series_hints
   |
   +-- imports
   +-- scrape_jobs
+  +-- genres
+  +-- libby_series_snapshots
   +-- recaps
   +-- recommendations
+
+metadata_cache_entries stores provider responses globally by lookup query and checksum.
 ```
 
 ## Tables
@@ -352,6 +358,7 @@ Fields:
 - series_id
 - book_id
 - position
+- position_end
 - planned_title
 - planned_author_name
 - planned_format
@@ -370,21 +377,82 @@ Ordering semantics:
 - Decimal positions are intended for novellas or side stories.
 - Negative positions can represent prequels.
 - Null position means unknown order.
+- `position_end` is set only for collection rows or other ranges, such as Libby's `1-3 in series` label.
 - Unknown-position entries appear after numbered entries and sort by title.
 
-Series progress is derived from ordered `series_books` rows. Existing books count as complete when `books.status = completed` or latest progress is `100%`. Planned entries count toward the total and remain unread until linked to a completed book. The next unread item is the first ordered row that is not complete.
+Series progress is derived from ordered `series_books` rows. Existing books count as complete when `books.status = completed` or latest progress is `100%`. Planned entries count toward the total and remain unread until linked to a completed book. Collection/range rows can satisfy covered individual works, but collection rows are excluded from progress totals when individual covered rows exist. The next unread item is the first ordered row that is not complete or covered by a completed collection.
+
+### libby_series_hints
+
+Stores series hints parsed from Libby reading journey pages.
+
+Hints are source observations, not confirmed local series assignments. They can be displayed on book detail and import review pages and applied only through an explicit admin action.
+
+Fields:
+
+- id
+- user_id
+- book_id
+- scrape_item_id
+- libby_series_key
+- libby_series_url
+- raw_label
+- series_name
+- position
+- status
+- applied_at
+- created_at
+- updated_at
+
+Constraints and indexes:
+
+- `uq_libby_series_hints_book_id_series_key` prevents duplicate Libby hints for the same book and Libby series.
+- `user_id`, `book_id`, `scrape_item_id`, `libby_series_key`, `series_name`, `position`, `status`, and `applied_at` are indexed for review and apply workflows.
+
+Recommended status values:
+
+- pending
+- applied
+- ignored
+
+### libby_series_snapshots
+
+Stores local references to raw Libby series page snapshots used to populate an existing local series.
+
+Fields:
+
+- id
+- user_id
+- series_id
+- libby_series_key
+- libby_series_url
+- file_path
+- checksum
+- content_type
+- parsed_entry_count
+- raw_data
+- created_at
+
+Series snapshots are written under the configured scraped data directory, usually `data/scraped/libby/series/`. `raw_data` stores parser and scrape context such as discovered page variants, combined-format counts, and source metadata. Snapshot files may contain private Libby account or library context and should stay untracked.
 
 ### genres
 
-Stores genre labels.
+Stores user-scoped genre labels.
 
 Fields:
 
 - id
 - user_id
 - name
+- normalized_name
 - source
 - created_at
+- updated_at
+
+Constraints and indexes:
+
+- `uq_genres_user_id_normalized_name` avoids duplicate labels case-insensitively within one user's library.
+- `user_id`, `name`, `normalized_name`, and `source` are indexed.
 
 ### book_genres
 
@@ -397,7 +465,16 @@ Fields:
 - book_id
 - genre_id
 - source
+- raw_label
 - created_at
+- updated_at
+
+Constraints and indexes:
+
+- `uq_book_genres_book_id_genre_id` prevents duplicate book-to-genre links.
+- `user_id`, `book_id`, `genre_id`, and `source` are indexed.
+
+Provider categories are normalized into `genres.normalized_name` and attached without removing existing manual labels. `book_genres.raw_label` preserves the original provider category string for traceability.
 
 ### jobs
 
@@ -464,20 +541,83 @@ Fields:
 - started_at
 - completed_at
 
-### metadata_cache
+### metadata_cache_entries
 
-Caches external metadata responses.
+Caches external provider responses for metadata enrichment.
+
+The cache is global rather than user-owned because entries are keyed by provider and normalized lookup input, not by local book. Raw successful, empty, malformed, and failed responses can be stored so repeated identical lookups avoid tight provider retry loops.
+
+Fields:
+
+- id
+- provider
+- lookup_type
+- normalized_query
+- response_checksum
+- status
+- http_status
+- error_message
+- raw_response
+- fetched_at
+- created_at
+- updated_at
+
+Constraints and indexes:
+
+- `uq_metadata_cache_provider_lookup_query_checksum` prevents duplicate cache rows for the same provider, lookup type, normalized query, and response checksum.
+- `provider`, `lookup_type`, `normalized_query`, `response_checksum`, `status`, `http_status`, and `fetched_at` are indexed.
+
+Recommended provider values:
+
+- open_library
+- google_books
+
+Recommended lookup_type values:
+
+- isbn
+- title_author
+
+Recommended status values:
+
+- succeeded
+- no_results
+- failed
+- malformed
+- rate_limited
+- invalid_query
+
+### metadata_enrichment_runs
+
+Stores per-book enrichment attempts and apply results.
 
 Fields:
 
 - id
 - user_id
+- book_id
 - provider
-- lookup_key
-- external_id
-- payload
-- cached_at
-- expires_at
+- lookup_type
+- normalized_query
+- status
+- cache_entry_id
+- fields_applied
+- error_message
+- started_at
+- finished_at
+- created_at
+- updated_at
+
+`fields_applied` records the fields that were filled and the source provider value used. A run can be linked to a cache entry even when no fields were applied because the book already had manual/local values.
+
+Recommended status values:
+
+- pending
+- completed
+- skipped
+- ambiguous
+- low_confidence
+- no_candidates
+- failed
 
 ### recaps
 
