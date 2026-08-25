@@ -71,6 +71,49 @@ def test_parse_no_progress_yet_from_journey_text() -> None:
     assert result.status_inferred == "borrowed"
 
 
+def test_parse_title_timeline_direct_borrowed_date_as_start_date() -> None:
+    result = parse_libby_progress(
+        "Reading Journey No progress yet. Title Timeline Borrowed. 7 MAY 2018 7 MAY '18 At Your Libraries",
+        content_type="text/plain",
+    )
+
+    assert result.started_on is not None
+    assert result.started_on.isoformat() == "2018-05-07"
+    assert result.latest_borrowed_on is not None
+    assert result.latest_borrowed_on.isoformat() == "2018-05-07"
+
+
+def test_parse_title_timeline_uses_tagged_date_before_dateless_borrowed_event() -> None:
+    result = parse_libby_progress(
+        "Reading Journey Starting on 14 Nov 2021, you picked up this audiobook 23 times, reading for 12 hours, 5 minutes. "
+        "Title Timeline Tagged with Tag: receipt 14 NOV 2021 14 NOV '21 Borrowed. At Your Libraries",
+        content_type="text/plain",
+    )
+
+    assert result.started_on is not None
+    assert result.started_on.isoformat() == "2021-11-14"
+    assert result.latest_borrowed_on is not None
+    assert result.latest_borrowed_on.isoformat() == "2021-11-14"
+
+
+def test_parse_title_timeline_tracks_earliest_and_latest_borrowed_dates() -> None:
+    result = parse_libby_progress(
+        "Completed. Title Timeline Borrowed. 3 AUG 2022 3 AUG '22 Borrowed. 16 MAY 2025 16 MAY '25 At Your Libraries",
+        content_type="text/plain",
+    )
+
+    assert result.started_on is not None
+    assert result.started_on.isoformat() == "2022-08-03"
+    assert result.latest_borrowed_on is not None
+    assert result.latest_borrowed_on.isoformat() == "2025-05-16"
+
+
+def test_infer_completed_status_starts_at_98_percent() -> None:
+    result = parse_libby_progress("98%", content_type="text/plain")
+
+    assert result.status_inferred == "completed"
+
+
 def test_parse_journey_listened_and_time_left_text() -> None:
     result = parse_libby_progress("Reading journey You have listened 2 hr 30 min 7 hr 30 min left", content_type="text/plain")
 

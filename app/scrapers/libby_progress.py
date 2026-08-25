@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from datetime import date
 from html.parser import HTMLParser
 import re
 
@@ -43,6 +44,26 @@ NO_PROGRESS_PATTERN = re.compile(r"\bno progress yet\b", re.IGNORECASE)
 WHITESPACE_PATTERN = re.compile(r"\s+")
 SERIES_HREF_PATTERN = re.compile(r"^/shelf/(?P<key>series-\d+)/page-\d+")
 SERIES_LABEL_PATTERN = re.compile(r"^#(?P<position>\d+(?:\.\d+)?)\s+in\s+(?P<name>.+)$", re.IGNORECASE)
+MONTHS = {
+    "jan": 1,
+    "feb": 2,
+    "mar": 3,
+    "apr": 4,
+    "may": 5,
+    "jun": 6,
+    "jul": 7,
+    "aug": 8,
+    "sep": 9,
+    "sept": 9,
+    "oct": 10,
+    "nov": 11,
+    "dec": 12,
+}
+DATE_PATTERN = re.compile(
+    r"\b(?P<day>\d{1,2})\s+(?P<month>jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+(?P<year>\d{4}|'\d{2})\b",
+    re.IGNORECASE,
+)
+TITLE_TIMELINE_END_PATTERN = re.compile(r"\b(?:At Your Libraries|Search Library Menu|Shelf Tags)\b", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -68,6 +89,8 @@ class LibbyProgressParseResult:
     status_inferred: str | None = None
     progress_text: str | None = None
     remaining_seconds: int | None = None
+    started_on: date | None = None
+    latest_borrowed_on: date | None = None
     series_hint: LibbySeriesHintParseResult | None = None
 
     def as_book_progress_values(self) -> dict[str, object]:
@@ -84,7 +107,11 @@ class LibbyProgressParseResult:
         }
 
     def as_snapshot_raw_data(self) -> dict[str, object]:
-        return asdict(self)
+        values = asdict(self)
+        for field_name in ("started_on", "latest_borrowed_on"):
+            if values[field_name] is not None:
+                values[field_name] = values[field_name].isoformat()
+        return values
 
 
 class TextExtractor(HTMLParser):
@@ -189,6 +216,51 @@ def infer_status(progress_percent: float | None) -> str | None:
     return "borrowed"
 
 
+def parse_libby_date(value: str) -> date | None:
+    match = DATE_PATTERN.search(value)
+    if not match:
+        return None
+    return _date_from_match(match)
+
+
+def parse_libby_dates(value: str) -> tuple[date, ...]:
+    return tuple(parsed for match in DATE_PATTERN.finditer(value) if (parsed := _date_from_match(match)) is not None)
+
+
+def _date_from_match(match: re.Match[str]) -> date | None:
+    month = MONTHS.get(match.group("month").casefold())
+    if month is None:
+        return None
+    year_text = match.group("year")
+    year = 2000 + int(year_text[1:]) if year_text.startswith("'") else int(year_text)
+    try:
+        return date(year, month, int(match.group("day")))
+    except ValueError:
+        return None
+
+
+def parse_title_timeline_borrow_dates(text: str) -> tuple[date, ...]:
+    timeline_start = text.casefold().find("title timeline")
+    if timeline_start == -1:
+        return ()
+    timeline = text[timeline_start + len("title timeline") :]
+    end_match = TITLE_TIMELINE_END_PATTERN.search(timeline)
+    if end_match:
+        timeline = timeline[: end_match.start()]
+
+    dates: list[date] = []
+    seen: set[date] = set()
+    for borrowed_match in re.finditer(r"\bBorrowed\.?", timeline, flags=re.IGNORECASE):
+        after_text = timeline[borrowed_match.end() : borrowed_match.end() + 120]
+        before_text = timeline[max(0, borrowed_match.start() - 160) : borrowed_match.start()]
+        before_dates = parse_libby_dates(before_text)
+        borrowed_date = parse_libby_date(after_text) or (before_dates[-1] if before_dates else None)
+        if borrowed_date is not None and borrowed_date not in seen:
+            dates.append(borrowed_date)
+            seen.add(borrowed_date)
+    return tuple(dates)
+
+
 def parse_libby_progress(content: str, *, content_type: str | None = None) -> LibbyProgressParseResult:
     needle_match = PROGRESS_NEEDLE_PATTERN.search(content) if content_type == "text/html" else None
     series_hint = parse_libby_series_hint(content, content_type=content_type)
@@ -250,6 +322,8 @@ def parse_libby_progress(content: str, *, content_type: str | None = None) -> Li
     if progress_percent is None and COMPLETED_PATTERN.search(text):
         progress_percent = 100
 
+    borrowed_dates = parse_title_timeline_borrow_dates(text)
+
     return LibbyProgressParseResult(
         progress_percent=progress_percent,
         position_pages=position_pages,
@@ -261,5 +335,7 @@ def parse_libby_progress(content: str, *, content_type: str | None = None) -> Li
         status_inferred=infer_status(progress_percent),
         progress_text=text or None,
         remaining_seconds=remaining_seconds,
+        started_on=min(borrowed_dates) if borrowed_dates else None,
+        latest_borrowed_on=max(borrowed_dates) if borrowed_dates else None,
         series_hint=series_hint,
     )

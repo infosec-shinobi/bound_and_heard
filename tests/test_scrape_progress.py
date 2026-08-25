@@ -92,9 +92,80 @@ def test_apply_scraped_completed_progress_sets_safe_completion_fields() -> None:
         db.commit()
 
         assert book.status == "completed"
-        assert book.completed_on == observed_at.date()
+        assert book.completed_on is not None
+        assert book.completed_on.isoformat() == "2026-07-11"
         event = db.query(ReadingEvent).filter_by(book_id=book.id, source="scraped").one()
         assert event.event_type == "completed"
+        assert event.event_date.date().isoformat() == "2026-07-11"
+
+
+def test_apply_scraped_progress_sets_start_date_from_title_timeline() -> None:
+    session_factory = make_session_factory()
+    with session_factory() as db:
+        book = add_book(db)
+        item = add_scrape_item(db, book=book)
+
+        apply_scraped_progress(
+            db,
+            item=item,
+            parsed=parse_libby_progress(
+                "Reading Journey No progress yet. Title Timeline Borrowed. 7 MAY 2018 7 MAY '18 At Your Libraries",
+                content_type="text/plain",
+            ),
+        )
+        db.commit()
+
+        assert book.started_on is not None
+        assert book.started_on.isoformat() == "2018-05-07"
+
+
+def test_apply_scraped_completed_progress_uses_latest_timeline_borrow_plus_three_weeks() -> None:
+    session_factory = make_session_factory()
+    observed_at = datetime(2026, 8, 25, 12, tzinfo=timezone.utc)
+    with session_factory() as db:
+        book = add_book(db)
+        item = add_scrape_item(db, book=book)
+
+        apply_scraped_progress(
+            db,
+            item=item,
+            parsed=parse_libby_progress(
+                "100% Title Timeline Borrowed. 3 AUG 2022 3 AUG '22 Borrowed. 16 MAY 2025 16 MAY '25 At Your Libraries",
+                content_type="text/plain",
+            ),
+            observed_at=observed_at,
+        )
+        db.commit()
+
+        assert book.started_on is not None
+        assert book.started_on.isoformat() == "2022-08-03"
+        assert book.completed_on is not None
+        assert book.completed_on.isoformat() == "2025-06-06"
+        event = db.query(ReadingEvent).filter_by(book_id=book.id, source="scraped").one()
+        assert event.event_date.date().isoformat() == "2025-06-06"
+        assert event.raw_data["latest_borrowed_on"] == "2025-05-16"
+        assert event.raw_data["inferred_completed_on"] == "2025-06-06"
+
+
+def test_apply_scraped_progress_preserves_existing_start_date() -> None:
+    session_factory = make_session_factory()
+    with session_factory() as db:
+        book = add_book(db)
+        book.started_on = datetime(2020, 1, 1, tzinfo=timezone.utc).date()
+        item = add_scrape_item(db, book=book)
+
+        apply_scraped_progress(
+            db,
+            item=item,
+            parsed=parse_libby_progress(
+                "Reading Journey No progress yet. Title Timeline Borrowed. 7 MAY 2018 7 MAY '18 At Your Libraries",
+                content_type="text/plain",
+            ),
+        )
+        db.commit()
+
+        assert book.started_on is not None
+        assert book.started_on.isoformat() == "2020-01-01"
 
 
 def test_apply_scraped_progress_does_not_overwrite_manual_progress() -> None:

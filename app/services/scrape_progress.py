@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -25,8 +25,17 @@ def has_manual_correction(db: Session, *, book_id: int, field_name: str) -> bool
     return False
 
 
-def approximate_completion_date(observed_at: datetime) -> date:
-    return observed_at.date()
+def date_to_datetime(value: date) -> datetime:
+    return datetime.combine(value, time.min, tzinfo=timezone.utc)
+
+
+def approximate_completion_date(parsed: LibbyProgressParseResult, item: ScrapeJobItem) -> date | None:
+    latest_borrowed_on = parsed.latest_borrowed_on
+    if latest_borrowed_on is None and item.latest_borrowed_at is not None:
+        latest_borrowed_on = item.latest_borrowed_at.date()
+    if latest_borrowed_on is None:
+        return None
+    return latest_borrowed_on + timedelta(weeks=3)
 
 
 def apply_scraped_progress(
@@ -67,6 +76,8 @@ def apply_scraped_progress(
     progress.status_inferred = parsed.status_inferred
 
     event_type = "completed" if parsed.status_inferred == "completed" else "progress_seen"
+    inferred_completed_on = approximate_completion_date(parsed, item) if parsed.status_inferred == "completed" else None
+    event_date = date_to_datetime(inferred_completed_on) if inferred_completed_on is not None else observed_at
     source_event_id = f"scrape_item:{item.id}:{event_type}"
     event = db.scalars(
         select(ReadingEvent).where(
@@ -82,20 +93,37 @@ def apply_scraped_progress(
             source="scraped",
             source_event_id=source_event_id,
             event_type=event_type,
-            event_date=observed_at,
+            event_date=event_date,
         )
         db.add(event)
     event.event_type = event_type
-    event.event_date = observed_at
+    event.event_date = event_date
     event.progress_percent = parsed.progress_percent
-    event.raw_data = {"parser_version": parsed.parser_version, "progress_text": parsed.progress_text}
+    event.raw_data = {
+        "parser_version": parsed.parser_version,
+        "progress_text": parsed.progress_text,
+        "started_on": parsed.started_on.isoformat() if parsed.started_on else None,
+        "latest_borrowed_on": parsed.latest_borrowed_on.isoformat() if parsed.latest_borrowed_on else None,
+        "inferred_completed_on": inferred_completed_on.isoformat() if inferred_completed_on else None,
+    }
 
     if parsed.series_hint is not None:
         upsert_libby_series_hint(db, item=item, parsed=parsed)
 
+    if parsed.started_on is not None and book.started_on is None and not has_manual_correction(
+        db,
+        book_id=book.id,
+        field_name="started_on",
+    ):
+        book.started_on = parsed.started_on
+
     if parsed.status_inferred == "completed":
-        if book.completed_on is None and not has_manual_correction(db, book_id=book.id, field_name="completed_on"):
-            book.completed_on = approximate_completion_date(observed_at)
+        if inferred_completed_on is not None and book.completed_on is None and not has_manual_correction(
+            db,
+            book_id=book.id,
+            field_name="completed_on",
+        ):
+            book.completed_on = inferred_completed_on
         if book.status not in {"completed", "abandoned"} and not has_manual_correction(
             db,
             book_id=book.id,
