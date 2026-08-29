@@ -85,6 +85,20 @@ def add_completion_event(db: Session, book: Book, when: date, *, event_type: str
     return event
 
 
+def add_borrowed_event(db: Session, book: Book, when: date) -> ReadingEvent:
+    event = ReadingEvent(
+        user_id=book.user_id,
+        book_id=book.id,
+        source="libby",
+        source_event_id=f"{book.id}:borrowed:{when.isoformat()}",
+        event_type="borrowed",
+        event_date=datetime(when.year, when.month, when.day, 12, tzinfo=timezone.utc),
+    )
+    db.add(event)
+    db.flush()
+    return event
+
+
 def add_genre(db: Session, book: Book, name: str) -> None:
     genre = db.query(Genre).filter_by(user_id=book.user_id, normalized_name=name.casefold()).first()
     if genre is None:
@@ -242,6 +256,41 @@ def test_repeat_counts_are_derived_from_completion_events_only() -> None:
         assert counts.rereads == 1
         assert counts.relistens == 1
         assert counts.repeat_completions == 1
+
+
+def test_repeat_counts_include_lower_confidence_likely_libby_relistens() -> None:
+    session_factory = make_session_factory()
+    with session_factory() as db:
+        add_user(db)
+        book = add_book(db, title="Likely Relisten", book_format="audiobook", audio_seconds=3600)
+        add_borrowed_event(db, book, date(2025, 1, 1))
+        add_borrowed_event(db, book, date(2026, 1, 1))
+        db.add(BookProgress(user_id=book.user_id, book_id=book.id, source="scraped", enjoyed_seconds=7200, read_count=12))
+        db.commit()
+
+        counts = repeat_counts(db, user_id=DEFAULT_LOCAL_USER_ID, period=year_range(2026))
+
+        assert counts.relistens == 0
+        assert counts.likely_relistens == 1
+
+
+def test_repeat_counts_do_not_infer_repeats_from_picked_up_count_or_borrows_alone() -> None:
+    session_factory = make_session_factory()
+    with session_factory() as db:
+        add_user(db)
+        picked_up = add_book(db, title="Picked Up", book_format="audiobook", audio_seconds=3600)
+        add_borrowed_event(db, picked_up, date(2025, 1, 1))
+        db.add(BookProgress(user_id=picked_up.user_id, book_id=picked_up.id, source="scraped", read_count=12))
+        borrowed = add_book(db, title="Borrowed Twice", book_format="audiobook", audio_seconds=3600)
+        add_borrowed_event(db, borrowed, date(2025, 1, 1))
+        add_borrowed_event(db, borrowed, date(2026, 1, 1))
+        db.add(BookProgress(user_id=borrowed.user_id, book_id=borrowed.id, source="scraped", enjoyed_seconds=1800))
+        db.commit()
+
+        counts = repeat_counts(db, user_id=DEFAULT_LOCAL_USER_ID, period=year_range(2026))
+
+        assert counts.relistens == 0
+        assert counts.likely_relistens == 0
 
 
 def test_prior_manual_completion_entries_count_as_completed_books() -> None:

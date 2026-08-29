@@ -57,6 +57,9 @@ class RepeatCounts:
     rereads: int
     relistens: int
     repeat_completions: int
+    likely_rereads: int = 0
+    likely_relistens: int = 0
+    likely_repeat_completions: int = 0
 
 
 def month_range(year: int, month: int) -> PeriodRange:
@@ -193,6 +196,7 @@ def repeat_counts(db: Session, *, user_id: int, period: PeriodRange | None = Non
     rereads = 0
     relistens = 0
     unknown = 0
+    likely_relistens = 0
     for book, events in _completion_events_by_book(db, user_id=user_id).items():
         for index, event in enumerate(events):
             if index == 0 or not period.contains(event.event_date.date()):
@@ -203,7 +207,9 @@ def repeat_counts(db: Session, *, user_id: int, period: PeriodRange | None = Non
                 rereads += 1
             else:
                 unknown += 1
-    return RepeatCounts(rereads=rereads, relistens=relistens, repeat_completions=unknown)
+    for book in _analytics_books(db, user_id=user_id):
+        likely_relistens += _likely_libby_relistens(book, period=period)
+    return RepeatCounts(rereads=rereads, relistens=relistens, repeat_completions=unknown, likely_relistens=likely_relistens)
 
 
 @dataclass(frozen=True)
@@ -276,3 +282,23 @@ def _completion_events_by_book(db: Session, *, user_id: int) -> dict[Book, list[
         if events:
             grouped[book] = events
     return grouped
+
+
+def _likely_libby_relistens(book: Book, *, period: PeriodRange) -> int:
+    if book.format != "audiobook" or book.progress is None or book.progress.enjoyed_seconds is None:
+        return 0
+    duration = book.audio_seconds or book.progress.total_seconds
+    if duration is None or duration <= 0:
+        return 0
+    borrowed_events = sorted(
+        (event for event in book.reading_events if event.source == "libby" and event.event_type == "borrowed"),
+        key=lambda event: event.event_date,
+    )
+    if len(borrowed_events) < 2:
+        return 0
+    likely_consumptions = int(book.progress.enjoyed_seconds // (duration * COMPLETION_PROGRESS_THRESHOLD / 100))
+    likely_repeats = max(0, min(len(borrowed_events) - 1, likely_consumptions - 1))
+    confirmed_repeats = max(0, len([event for event in book.reading_events if event.event_type in COMPLETION_EVENT_TYPES]) - 1)
+    likely_repeats = max(0, likely_repeats - confirmed_repeats)
+    repeat_borrow_dates = [event.event_date.date() for event in borrowed_events[1 : 1 + likely_repeats]]
+    return sum(1 for borrowed_on in repeat_borrow_dates if period.contains(borrowed_on))

@@ -52,6 +52,15 @@ Rules:
 - Format determines label: audiobook repeats are re-listens; ebook/physical repeats are re-reads; unknown format uses repeat completion.
 - Repeats should be period-filtered by the repeat completion event date.
 
+Lower-confidence Libby repeat heuristics must stay separate from true repeat counts.
+
+- A likely Libby re-listen requires at least two Libby `borrowed` events for the audiobook.
+- A likely Libby re-listen also requires lifetime `book_progress.enjoyed_seconds` to cover another completion-level duration using the same `>=98%` threshold.
+- Heuristic repeat dates use the later borrow dates and are period-filtered by those dates.
+- Heuristics must be capped by additional borrow events and reduced by confirmed completion-event repeats so the same repeat is not double-counted.
+- `book_progress.read_count` from Libby's picked-up text must not create true or likely repeat counts by itself.
+- Heuristics must not create or modify reading events.
+
 ## Prior Read/Listen Entries
 
 Books consumed before tracking began should be represented as local reading events when possible.

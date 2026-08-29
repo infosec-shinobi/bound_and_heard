@@ -62,13 +62,13 @@ Derived from `docs/ROADMAP.md` MVP 7 - Analytics and Recaps, with continuity fro
 
 ## Chunk 5 - Repeat Read/Listen Heuristics
 
-- [ ] Identify timeline and duration signals that suggest repeated consumption
-- [ ] Derive repeat counts from completed events before using weaker heuristics
-- [ ] Avoid inferring true completion from Libby `picked up` session count alone
-- [ ] Detect likely repeated Libby borrows/listens conservatively
-- [ ] Surface heuristic-derived repeat counts as lower confidence if displayed
-- [ ] Avoid automatically creating completion events from weak heuristic signals
-- [ ] Add tests for repeat-count derivation and false-positive prevention
+- [x] Identify timeline and duration signals that suggest repeated consumption
+- [x] Derive repeat counts from completed events before using weaker heuristics
+- [x] Avoid inferring true completion from Libby `picked up` session count alone
+- [x] Detect likely repeated Libby borrows/listens conservatively
+- [x] Surface heuristic-derived repeat counts as lower confidence if displayed
+- [x] Avoid automatically creating completion events from weak heuristic signals
+- [x] Add tests for repeat-count derivation and false-positive prevention
 
 ## Chunk 6 - Analytics UI Dashboard
 
