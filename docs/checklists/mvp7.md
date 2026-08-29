@@ -23,18 +23,18 @@ Derived from `docs/ROADMAP.md` MVP 7 - Analytics and Recaps, with continuity fro
 
 ## Chunk 2 - Analytics Service Layer
 
-- [ ] Add service functions for period range calculation
-- [ ] Add service function for books completed by month
-- [ ] Add service function for books completed by quarter/year
-- [ ] Add service function for format breakdown
-- [ ] Add service function for top authors
-- [ ] Add service function for top genres
-- [ ] Add service function for pages read when known
-- [ ] Add service function for audiobook hours when known
-- [ ] Add service function for partial progress summaries
-- [ ] Add service function for repeat read/listen counts
-- [ ] Keep service functions independent from templates and route state
-- [ ] Add tests for analytics calculations and date boundaries
+- [x] Add service functions for period range calculation
+- [x] Add service function for books completed by month
+- [x] Add service function for books completed by quarter/year
+- [x] Add service function for format breakdown
+- [x] Add service function for top authors
+- [x] Add service function for top genres
+- [x] Add service function for pages read when known
+- [x] Add service function for audiobook hours when known
+- [x] Add service function for partial progress summaries
+- [x] Add service function for repeat read/listen counts
+- [x] Keep service functions independent from templates and route state
+- [x] Add tests for analytics calculations and date boundaries
 
 ## Chunk 3 - Prior Read/Listen Entry Workflow
 
