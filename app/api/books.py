@@ -1,6 +1,7 @@
 from datetime import date, datetime, time, timezone
 import re
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Form, Query, Request, status
 from fastapi.responses import RedirectResponse, Response
@@ -296,6 +297,11 @@ def book_detail_redirect(book_id: int, **params: str) -> RedirectResponse:
     return RedirectResponse(target, status_code=status.HTTP_303_SEE_OTHER)
 
 
+def is_prior_completion_event(event: ReadingEvent) -> bool:
+    raw_data = event.raw_data if isinstance(event.raw_data, dict) else {}
+    return event.source == "manual" and event.event_type == "manually_completed" and raw_data.get("prior_entry") is True
+
+
 def enrichment_message_for_status(enrichment_status: str, applied_fields: list[str] | None = None) -> str:
     if enrichment_status == "matched":
         if applied_fields:
@@ -375,6 +381,7 @@ def book_detail_response(
         .where(LibbySeriesHint.book_id == book.id, LibbySeriesHint.user_id == DEFAULT_LOCAL_USER_ID)
         .order_by(LibbySeriesHint.created_at.desc(), LibbySeriesHint.id.desc())
     ).all()
+    prior_event_ids = {event.id for event in events if is_prior_completion_event(event)}
 
     return templates.TemplateResponse(
         request,
@@ -394,6 +401,7 @@ def book_detail_response(
             enrichment_runs=enrichment_runs,
             enrichment_candidates=enrichment_candidates,
             libby_series_hints=libby_series_hints,
+            prior_event_ids=prior_event_ids,
         ),
     )
 
@@ -1623,6 +1631,71 @@ async def clear_book_scraped_progress(
         f"/books/{book.id}?{urlencode({'message': message})}",
         status_code=status.HTTP_303_SEE_OTHER,
     )
+
+
+@router.post("/{book_id}/prior-completions")
+async def add_prior_completion(
+    book_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_write_access),
+    completed_on: str | None = Form(default=None),
+) -> Response:
+    book = db.get(Book, book_id)
+    if book is None or book.user_id != DEFAULT_LOCAL_USER_ID:
+        return templates.TemplateResponse(
+            request,
+            "books/not_found.html",
+            template_context(request, page_title="Book Not Found"),
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+
+    errors: list[str] = []
+    parsed_completed_on = parse_optional_date(completed_on, "Prior completion date", errors)
+    if parsed_completed_on is None:
+        errors.append("Prior completion date is required.")
+    if errors:
+        return book_detail_redirect(book.id, message=errors[0])
+
+    event = ReadingEvent(
+        user_id=book.user_id,
+        book_id=book.id,
+        source="manual",
+        source_event_id=f"manual_prior:{book.id}:{parsed_completed_on.isoformat()}:{uuid4().hex}",
+        event_type="manually_completed",
+        event_date=date_to_datetime(parsed_completed_on),
+        progress_percent=100,
+        raw_data={"prior_entry": True, "entry_method": "book_detail"},
+    )
+    db.add(event)
+    db.commit()
+    label = "prior listen" if book.format == "audiobook" else "prior read"
+    return book_detail_redirect(book.id, message=f"Added {label} entry for {parsed_completed_on.isoformat()}.")
+
+
+@router.post("/{book_id}/prior-completions/{event_id}/delete")
+async def delete_prior_completion(
+    book_id: int,
+    event_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_write_access),
+) -> Response:
+    book = db.get(Book, book_id)
+    if book is None or book.user_id != DEFAULT_LOCAL_USER_ID:
+        return templates.TemplateResponse(
+            request,
+            "books/not_found.html",
+            template_context(request, page_title="Book Not Found"),
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+    event = db.get(ReadingEvent, event_id)
+    if event is None or event.book_id != book.id or event.user_id != DEFAULT_LOCAL_USER_ID or not is_prior_completion_event(event):
+        return book_detail_redirect(book.id, message="Prior read/listen entry not found.")
+
+    db.delete(event)
+    db.commit()
+    return book_detail_redirect(book.id, message="Prior read/listen entry removed.")
 
 
 @router.post("/{book_id}/series/add")

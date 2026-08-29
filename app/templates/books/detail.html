@@ -290,7 +290,21 @@
 
   <section class="card mt-4">
     <div class="card-body">
-      <h2 class="h5 mb-3">Reading Event History</h2>
+      <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 mb-3">
+        <div>
+          <h2 class="h5 mb-1">Reading Event History</h2>
+          <p class="app-muted mb-0">Prior read/listen entries count as manual completion events for analytics.</p>
+        </div>
+        {% if can_write %}
+          <form class="d-flex flex-column flex-sm-row align-items-sm-end gap-2" method="post" action="/books/{{ book.id }}/prior-completions">
+            <div>
+              <label class="form-label small" for="prior_completed_on">Prior completion date</label>
+              <input class="form-control form-control-sm" id="prior_completed_on" name="completed_on" type="date" required>
+            </div>
+            <button class="btn btn-sm btn-outline-primary" type="submit">Add Prior {% if book.format == 'audiobook' %}Listen{% else %}Read{% endif %}</button>
+          </form>
+        {% endif %}
+      </div>
       {% if events %}
         <div class="table-responsive">
           <table class="table table-dark table-hover align-middle mb-0 app-table">
@@ -300,15 +314,28 @@
                 <th scope="col">Event</th>
                 <th scope="col">Source</th>
                 <th scope="col">Progress</th>
+                <th scope="col">Actions</th>
               </tr>
             </thead>
             <tbody>
               {% for event in events %}
                 <tr>
                   <td>{{ event.event_date.date() }}</td>
-                  <td>{{ event.event_type.replace('_', ' ').title() }}</td>
+                  <td>
+                    {{ event.event_type.replace('_', ' ').title() }}
+                    {% if event.id in prior_event_ids %}<span class="badge app-badge-muted ms-2">Prior</span>{% endif %}
+                  </td>
                   <td>{{ event.source.title() }}</td>
                   <td>{% if event.progress_percent is not none %}{{ '%.0f'|format(event.progress_percent) }}%{% else %}<span class="app-muted">Not set</span>{% endif %}</td>
+                  <td>
+                    {% if can_write and event.id in prior_event_ids %}
+                      <form method="post" action="/books/{{ book.id }}/prior-completions/{{ event.id }}/delete" onsubmit="return confirm('Remove this prior read/listen entry?');">
+                        <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
+                      </form>
+                    {% else %}
+                      <span class="app-muted">None</span>
+                    {% endif %}
+                  </td>
                 </tr>
               {% endfor %}
             </tbody>

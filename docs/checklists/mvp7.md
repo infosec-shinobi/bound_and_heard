@@ -38,16 +38,16 @@ Derived from `docs/ROADMAP.md` MVP 7 - Analytics and Recaps, with continuity fro
 
 ## Chunk 3 - Prior Read/Listen Entry Workflow
 
-- [ ] Decide whether prior consumption is stored as `reading_events` or a dedicated table
-- [ ] Add schema changes if current `reading_events` cannot represent prior consumption cleanly
-- [ ] Add protected UI for adding prior read/listen entries to a book
-- [ ] Support prior completion date when known
-- [ ] Support approximate prior period when exact date is unknown if needed
-- [ ] Support format-specific prior read/listen entries
-- [ ] Ensure prior entries increment true read/listen counts
-- [ ] Ensure prior entries do not corrupt Libby import or scrape history
-- [ ] Add edit/delete controls for prior entries if needed
-- [ ] Add tests for prior entry creation, counting, permissions, and source attribution
+- [x] Decide whether prior consumption is stored as `reading_events` or a dedicated table
+- [x] Add schema changes if current `reading_events` cannot represent prior consumption cleanly
+- [x] Add protected UI for adding prior read/listen entries to a book
+- [x] Support prior completion date when known
+- [x] Decide approximate prior period support is deferred until there is a concrete need
+- [x] Support format-specific prior read/listen entries
+- [x] Ensure prior entries increment true read/listen counts
+- [x] Ensure prior entries do not corrupt Libby import or scrape history
+- [x] Add delete/re-add controls for prior entries instead of full event editing
+- [x] Add tests for prior entry creation, counting, permissions, and source attribution
 
 ## Chunk 4 - Lifetime Enjoyed Time
 

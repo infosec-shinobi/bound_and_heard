@@ -217,3 +217,14 @@ def test_repeat_counts_are_derived_from_completion_events_only() -> None:
         assert counts.rereads == 1
         assert counts.relistens == 1
         assert counts.repeat_completions == 1
+
+
+def test_prior_manual_completion_entries_count_as_completed_books() -> None:
+    session_factory = make_session_factory()
+    with session_factory() as db:
+        add_user(db)
+        book = add_book(db, title="Prior Book", book_format="ebook")
+        add_completion_event(db, book, date(2020, 1, 1), event_type="manually_completed")
+        db.commit()
+
+        assert books_completed_by_period(db, user_id=DEFAULT_LOCAL_USER_ID, period=year_range(2020)) == 1

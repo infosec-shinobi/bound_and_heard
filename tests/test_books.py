@@ -1,5 +1,5 @@
 from collections.abc import Generator
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -1994,6 +1994,100 @@ def test_book_detail_shows_metadata_progress_stats_and_events() -> None:
     assert "Line one" in response.text
     assert "Manually Completed" in response.text
     assert "2026-06-03" in response.text
+
+
+def test_book_detail_shows_prior_entry_form_for_admin() -> None:
+    client, session_factory = make_books_client()
+    client.post("/admin/login", data={"password": "secret"})
+    book = add_book(session_factory, title="Prior Form", author="Author", book_format="audiobook")
+
+    response = client.get(f"/books/{book.id}")
+
+    assert response.status_code == 200
+    assert f'action="/books/{book.id}/prior-completions"' in response.text
+    assert "Add Prior Listen" in response.text
+
+
+def test_add_prior_completion_requires_admin_login() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Protected Prior", author="Author")
+
+    response = client.post(f"/books/{book.id}/prior-completions", data={"completed_on": "2020-01-01"})
+
+    assert response.status_code == 403
+
+
+def test_add_prior_completion_creates_manual_completion_event_without_mutating_book() -> None:
+    client, session_factory = make_books_client()
+    client.post("/admin/login", data={"password": "secret"})
+    book = add_book(session_factory, title="Prior Read", author="Author", book_format="ebook", status="started")
+
+    response = client.post(f"/books/{book.id}/prior-completions", data={"completed_on": "2020-01-01"}, follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"].startswith(f"/books/{book.id}?message=Added+prior+read+entry")
+    with session_factory() as db:
+        updated = db.get(Book, book.id)
+        assert updated is not None
+        assert updated.status == "started"
+        assert updated.completed_on is None
+        event = db.query(ReadingEvent).filter_by(book_id=book.id, event_type="manually_completed").one()
+        assert event.source == "manual"
+        assert event.event_date.date() == date(2020, 1, 1)
+        assert event.progress_percent == 100
+        assert event.source_event_id is not None
+        assert event.source_event_id.startswith(f"manual_prior:{book.id}:2020-01-01:")
+        assert event.raw_data == {"prior_entry": True, "entry_method": "book_detail"}
+
+
+def test_add_prior_completion_validates_date() -> None:
+    client, session_factory = make_books_client()
+    client.post("/admin/login", data={"password": "secret"})
+    book = add_book(session_factory, title="Prior Date", author="Author")
+
+    response = client.post(f"/books/{book.id}/prior-completions", data={"completed_on": "bad-date"}, follow_redirects=False)
+
+    assert response.status_code == 303
+    assert "Prior+completion+date+must+be+a+valid+date" in response.headers["location"]
+    with session_factory() as db:
+        assert db.query(ReadingEvent).filter_by(book_id=book.id, event_type="manually_completed").count() == 0
+
+
+def test_delete_prior_completion_removes_only_prior_entry() -> None:
+    client, session_factory = make_books_client()
+    client.post("/admin/login", data={"password": "secret"})
+    book = add_book(session_factory, title="Delete Prior", author="Author")
+    with session_factory() as db:
+        prior = ReadingEvent(
+            user_id=DEFAULT_LOCAL_USER_ID,
+            book_id=book.id,
+            source="manual",
+            source_event_id="manual_prior:test",
+            event_type="manually_completed",
+            event_date=datetime(2020, 1, 1, tzinfo=timezone.utc),
+            progress_percent=100,
+            raw_data={"prior_entry": True},
+        )
+        normal = ReadingEvent(
+            user_id=DEFAULT_LOCAL_USER_ID,
+            book_id=book.id,
+            source="manual",
+            source_event_id="manual_normal:test",
+            event_type="manually_completed",
+            event_date=datetime(2021, 1, 1, tzinfo=timezone.utc),
+            progress_percent=100,
+        )
+        db.add_all([prior, normal])
+        db.commit()
+        prior_id = prior.id
+        normal_id = normal.id
+
+    response = client.post(f"/books/{book.id}/prior-completions/{prior_id}/delete", follow_redirects=False)
+
+    assert response.status_code == 303
+    with session_factory() as db:
+        assert db.get(ReadingEvent, prior_id) is None
+        assert db.get(ReadingEvent, normal_id) is not None
 
 
 def test_book_detail_shows_archived_state() -> None:
