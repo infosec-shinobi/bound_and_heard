@@ -10,16 +10,16 @@ Derived from `docs/ROADMAP.md` MVP 7 - Analytics and Recaps, with continuity fro
 
 ## Chunk 1 - Analytics Scope And Definitions
 
-- [ ] Define which records count as consumed books for analytics
-- [ ] Define period boundaries for month, quarter, year, and all-time views
-- [ ] Define how completed books are counted from `reading_events` and `books.status`
-- [ ] Define how re-reads and re-listens are derived from completed events
-- [ ] Define how prior read/listen entries affect totals and recaps
-- [ ] Define page totals when page count is missing or format is audiobook
-- [ ] Define audiobook-hour totals when audio duration is missing or format is ebook/physical
-- [ ] Define partial-progress metrics for in-progress and abandoned books
-- [ ] Define how Libby `picked up` session counts differ from completed read/listen counts
-- [ ] Document analytics assumptions before building UI
+- [x] Define which records count as consumed books for analytics
+- [x] Define period boundaries for month, quarter, year, and all-time views
+- [x] Define how completed books are counted from `reading_events` and `books.status`
+- [x] Define how re-reads and re-listens are derived from completed events
+- [x] Define how prior read/listen entries affect totals and recaps
+- [x] Define page totals when page count is missing or format is audiobook
+- [x] Define audiobook-hour totals when audio duration is missing or format is ebook/physical
+- [x] Define partial-progress metrics for in-progress and abandoned books
+- [x] Define how Libby `picked up` session counts differ from completed read/listen counts
+- [x] Document analytics assumptions before building UI
 
 ## Chunk 2 - Analytics Service Layer
 
