@@ -91,8 +91,10 @@
             </div>
           </div>
           <dl class="row mb-0 app-detail-list">
-            <dt class="col-6">Enjoyed For</dt>
+            <dt class="col-6">Lifetime Enjoyed</dt>
             <dd class="col-6">{{ enjoyed_duration or 'Not set' }}</dd>
+            <dt class="col-6">Current Position</dt>
+            <dd class="col-6">{{ current_position_duration or 'Not set' }}</dd>
             <dt class="col-6">Read Count</dt>
             <dd class="col-6">{{ book.progress.read_count if book.progress and book.progress.read_count is not none else 'Not set' }}</dd>
             <dt class="col-6">Progress Source</dt>

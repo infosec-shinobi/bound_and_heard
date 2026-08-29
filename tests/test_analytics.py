@@ -14,6 +14,7 @@ from app.services.analytics import (
     books_completed_by_month,
     books_completed_by_period,
     format_breakdown,
+    lifetime_enjoyed_seconds,
     month_range,
     pages_read,
     partial_progress_summary,
@@ -165,6 +166,30 @@ def test_audiobook_seconds_can_use_progress_total_when_book_duration_missing() -
         db.commit()
 
         assert audiobook_seconds(db, user_id=DEFAULT_LOCAL_USER_ID, period=year_range(2026)) == 3600
+
+
+def test_lifetime_enjoyed_seconds_prefers_scraped_enjoyed_time_and_counts_manual_audio_completions() -> None:
+    session_factory = make_session_factory()
+    with session_factory() as db:
+        add_user(db)
+        scraped = add_book(db, title="Scraped Audio", book_format="audiobook", audio_seconds=7200)
+        db.add(
+            BookProgress(
+                user_id=scraped.user_id,
+                book_id=scraped.id,
+                source="scraped",
+                enjoyed_seconds=9000,
+                read_count=12,
+            )
+        )
+        manual = add_book(db, title="Manual Audio", book_format="audiobook", audio_seconds=3600)
+        add_completion_event(db, manual, date(2025, 1, 1), event_type="manually_completed")
+        add_completion_event(db, manual, date(2026, 1, 1), event_type="manually_completed")
+        ebook = add_book(db, title="Manual Ebook", book_format="ebook", audio_seconds=9999)
+        add_completion_event(db, ebook, date(2026, 1, 1), event_type="manually_completed")
+        db.commit()
+
+        assert lifetime_enjoyed_seconds(db, user_id=DEFAULT_LOCAL_USER_ID) == 16200
 
 
 def test_partial_progress_summary_uses_manual_progress_before_scraped_progress() -> None:

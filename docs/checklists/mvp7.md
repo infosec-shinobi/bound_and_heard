@@ -51,14 +51,14 @@ Derived from `docs/ROADMAP.md` MVP 7 - Analytics and Recaps, with continuity fro
 
 ## Chunk 4 - Lifetime Enjoyed Time
 
-- [ ] Define lifetime enjoyed time separately from current-loan progress
-- [ ] Use Libby scraped `enjoyed_seconds` when available
-- [ ] Avoid treating Libby `picked up` session count as true read/listen count
-- [ ] Decide how manual audiobook completions contribute to lifetime enjoyed time when duration is known
-- [ ] Show lifetime enjoyed time on book detail where useful
-- [ ] Include lifetime enjoyed time in analytics summaries
-- [ ] Preserve current-loan progress values separately from lifetime totals
-- [ ] Add tests for enjoyed time aggregation and display
+- [x] Define lifetime enjoyed time separately from current-loan progress
+- [x] Use Libby scraped `enjoyed_seconds` when available
+- [x] Avoid treating Libby `picked up` session count as true read/listen count
+- [x] Decide how manual audiobook completions contribute to lifetime enjoyed time when duration is known
+- [x] Show lifetime enjoyed time on book detail where useful
+- [x] Include lifetime enjoyed time in analytics summaries
+- [x] Preserve current-loan progress values separately from lifetime totals
+- [x] Add tests for enjoyed time aggregation and display
 
 ## Chunk 5 - Repeat Read/Listen Heuristics
 

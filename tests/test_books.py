@@ -464,7 +464,7 @@ def test_enrich_book_metadata_shows_ambiguous_candidates_without_applying() -> N
         assert db.query(MetadataEnrichmentRun).filter_by(book_id=book.id).count() == 0
 
 
-def test_book_detail_shows_enjoyed_for_and_read_count_in_progress_stats() -> None:
+def test_book_detail_shows_lifetime_enjoyed_current_position_and_read_count_in_progress_stats() -> None:
     client, session_factory = make_books_client()
     book = add_book(session_factory, title="Enjoyed Stats Book", author="Author")
     with session_factory() as db:
@@ -474,6 +474,7 @@ def test_book_detail_shows_enjoyed_for_and_read_count_in_progress_stats() -> Non
                 book_id=book.id,
                 source="scraped",
                 progress_percent=50,
+                position_seconds=3600,
                 enjoyed_seconds=20520,
                 read_count=2,
             )
@@ -483,8 +484,10 @@ def test_book_detail_shows_enjoyed_for_and_read_count_in_progress_stats() -> Non
     response = client.get(f"/books/{book.id}")
 
     assert response.status_code == 200
-    assert "Enjoyed For" in response.text
+    assert "Lifetime Enjoyed" in response.text
     assert "5 hr 42 min" in response.text
+    assert "Current Position" in response.text
+    assert "1 hr" in response.text
     assert "Read Count" in response.text
     assert "2" in response.text
 
@@ -1989,7 +1992,7 @@ def test_book_detail_shows_metadata_progress_stats_and_events() -> None:
     assert "5.0 / 5" in response.text
     assert "123456789X" in response.text
     assert "100%" in response.text
-    assert "Enjoyed For" in response.text
+    assert "Lifetime Enjoyed" in response.text
     assert "1 hr 1 min" in response.text
     assert "Line one" in response.text
     assert "Manually Completed" in response.text

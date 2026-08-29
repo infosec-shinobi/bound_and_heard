@@ -394,6 +394,7 @@ def book_detail_response(
             progress_percent=display_progress(book),
             audio_duration=format_audio_seconds(book.audio_seconds),
             enjoyed_duration=format_enjoyed_seconds(book.progress.enjoyed_seconds if book.progress else None),
+            current_position_duration=format_audio_seconds(book.progress.position_seconds if book.progress else None),
             series_entries=series_entries,
             available_series=available_series,
             message=message,

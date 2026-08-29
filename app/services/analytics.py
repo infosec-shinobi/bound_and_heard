@@ -143,6 +143,20 @@ def audiobook_seconds(db: Session, *, user_id: int, period: PeriodRange | None =
     return total
 
 
+def lifetime_enjoyed_seconds(db: Session, *, user_id: int) -> int:
+    total = 0
+    for book in _analytics_books(db, user_id=user_id):
+        if book.format != "audiobook":
+            continue
+        if book.progress is not None and book.progress.enjoyed_seconds is not None:
+            total += book.progress.enjoyed_seconds
+            continue
+        duration = book.audio_seconds or (book.progress.total_seconds if book.progress is not None else None)
+        if duration is not None:
+            total += duration * len(_completion_dates(book))
+    return total
+
+
 def partial_progress_summary(db: Session, *, user_id: int) -> PartialProgressSummary:
     books = _analytics_books(db, user_id=user_id)
     progress_values: list[float] = []
