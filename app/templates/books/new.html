@@ -21,6 +21,10 @@
         </div>
       {% endif %}
 
+      {% if message %}
+        <div class="alert alert-info" role="status">{{ message }}</div>
+      {% endif %}
+
       <form class="card" method="post" action="{{ form_action }}">
         <div class="card-body">
           <div class="row g-3">
@@ -48,7 +52,33 @@
 
             <div class="col-md-6">
               <label class="form-label" for="isbn">ISBN</label>
-              <input class="form-control" id="isbn" name="isbn" value="{{ form.get('isbn', '') }}" inputmode="numeric" autocomplete="off" placeholder="ISBN-10 or ISBN-13">
+              <div class="input-group">
+                <input class="form-control" id="isbn" name="isbn" value="{{ form.get('isbn', '') }}" inputmode="numeric" autocomplete="off" placeholder="ISBN-10 or ISBN-13">
+                {% if show_lookup %}
+                  <button class="btn btn-outline-primary" type="submit" formaction="{{ lookup_action }}" formnovalidate>Lookup ISBN</button>
+                {% endif %}
+              </div>
+              {% if show_lookup %}
+                <div class="form-check mt-2">
+                  <input class="form-check-input" id="force_refresh" name="force_refresh" type="checkbox" value="true">
+                  <label class="form-check-label small app-muted" for="force_refresh">Refresh cached provider response</label>
+                </div>
+              {% endif %}
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label" for="publisher">Publisher</label>
+              <input class="form-control" id="publisher" name="publisher" value="{{ form.get('publisher', '') }}">
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label" for="published_on">Published date</label>
+              <input class="form-control" id="published_on" name="published_on" type="date" value="{{ form.get('published_on', '') }}">
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label" for="publication_year">Publication year</label>
+              <input class="form-control" id="publication_year" name="publication_year" type="number" min="1" step="1" value="{{ form.get('publication_year', '') }}">
             </div>
 
             <div class="col-md-4">
@@ -84,6 +114,11 @@
             <div class="col-md-6">
               <label class="form-label" for="audio_hours">Audio duration (hours)</label>
               <input class="form-control" id="audio_hours" name="audio_hours" type="number" min="0" step="0.01" value="{{ form.get('audio_hours', '') }}">
+            </div>
+
+            <div class="col-12">
+              <label class="form-label" for="cover_url">Cover URL</label>
+              <input class="form-control" id="cover_url" name="cover_url" type="url" value="{{ form.get('cover_url', '') }}" placeholder="https://...">
             </div>
 
             <div class="col-12">

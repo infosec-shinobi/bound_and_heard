@@ -50,6 +50,12 @@ def test_settings_allow_overriding_libby_browser_profile_dir() -> None:
     assert settings.libby_browser_profile_dir == "custom/libby-profile"
 
 
+def test_settings_allow_optional_google_books_api_key() -> None:
+    settings = Settings(BOUND_AND_HEARD_GOOGLE_BOOKS_API_KEY="test-key")
+
+    assert settings.google_books_api_key == "test-key"
+
+
 def test_ensure_default_user_creates_default_local_user() -> None:
     session_factory = make_session_factory()
 

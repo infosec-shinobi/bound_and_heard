@@ -13,6 +13,7 @@ from app.core.database import Base, get_db
 from app.api.books import get_metadata_providers
 from app.main import create_app
 from app.models import Book, BookProgress, LibbySeriesHint, MetadataEnrichmentRun, ReadingEvent, Series, SeriesBook, User
+from app.services.metadata_cache import store_metadata_lookup_response
 from app.services.metadata_providers import MetadataLookupResponse, MetadataResult
 
 
@@ -153,10 +154,11 @@ def add_series_entry(
 
 
 class FakeMetadataProvider:
-    def __init__(self, *, results: tuple[MetadataResult, ...], status: str = "succeeded") -> None:
+    def __init__(self, *, results: tuple[MetadataResult, ...], status: str = "succeeded", http_status: int = 200) -> None:
         self.name = "fake_provider"
         self.results = results
         self.status = status
+        self.http_status = http_status
         self.isbn_calls = 0
         self.title_calls = 0
 
@@ -169,7 +171,7 @@ class FakeMetadataProvider:
             status=self.status,
             results=self.results if self.status == "succeeded" else (),
             raw_response={"results": [result.title for result in self.results]},
-            http_status=200,
+            http_status=self.http_status,
         )
 
     def lookup_title_author(self, title: str, author: str | None = None) -> MetadataLookupResponse:
@@ -182,7 +184,7 @@ class FakeMetadataProvider:
             status=self.status,
             results=self.results if self.status == "succeeded" else (),
             raw_response={"results": [result.title for result in self.results]},
-            http_status=200,
+            http_status=self.http_status,
         )
 
     def parse_cached_response(
@@ -1691,6 +1693,148 @@ def test_add_book_form_is_available_after_admin_login() -> None:
     assert response.status_code == 200
     assert "Add Book" in response.text
     assert "Create Book" in response.text
+    assert "Lookup ISBN" in response.text
+
+
+def test_lookup_new_book_metadata_requires_admin_login() -> None:
+    client, _ = make_books_client()
+
+    response = client.post("/books/new/lookup", data={"isbn": "9781234567890"})
+
+    assert response.status_code == 403
+
+
+def test_lookup_new_book_metadata_prefills_form_without_creating_book() -> None:
+    client, session_factory = make_books_client()
+    client.post("/admin/login", data={"password": "secret"})
+    provider = FakeMetadataProvider(
+        results=(
+            MetadataResult(
+                provider="fake_provider",
+                title="Lookup Title",
+                subtitle="Lookup Subtitle",
+                authors=("Lookup Author",),
+                publisher="Lookup Press",
+                published_on=datetime(2020, 5, 4, tzinfo=timezone.utc).date(),
+                publication_year=2020,
+                isbn13="9781234567890",
+                page_count=222,
+                cover_url="https://example.test/lookup-cover.jpg",
+                confidence=0.98,
+            ),
+        )
+    )
+    client.app.dependency_overrides[get_metadata_providers] = lambda: [provider]
+
+    response = client.post(
+        "/books/new/lookup",
+        data={"isbn": "978-1-234-56789-0", "format": "ebook", "status": "want_to_read"},
+    )
+
+    assert response.status_code == 200
+    assert "Found metadata from Fake Provider" in response.text
+    assert 'name="title" value="Lookup Title"' in response.text
+    assert 'name="subtitle" value="Lookup Subtitle"' in response.text
+    assert 'name="primary_author_name" value="Lookup Author"' in response.text
+    assert 'name="isbn" value="9781234567890"' in response.text
+    assert 'name="publisher" value="Lookup Press"' in response.text
+    assert 'name="published_on" type="date" value="2020-05-04"' in response.text
+    assert 'name="publication_year" type="number" min="1" step="1" value="2020"' in response.text
+    assert 'name="page_count" type="number" min="1" step="1" value="222"' in response.text
+    assert 'name="cover_url" type="url" value="https://example.test/lookup-cover.jpg"' in response.text
+    assert provider.isbn_calls == 1
+    assert provider.title_calls == 0
+    with session_factory() as db:
+        assert db.query(Book).count() == 0
+
+
+def test_lookup_new_book_metadata_preserves_user_entered_fields() -> None:
+    client, _ = make_books_client()
+    client.post("/admin/login", data={"password": "secret"})
+    provider = FakeMetadataProvider(results=(provider_result(title="Provider Title", author="Provider Author"),))
+    client.app.dependency_overrides[get_metadata_providers] = lambda: [provider]
+
+    response = client.post(
+        "/books/new/lookup",
+        data={
+            "title": "Typed Title",
+            "primary_author_name": "Typed Author",
+            "isbn": "9781234567890",
+            "page_count": "123",
+        },
+    )
+
+    assert response.status_code == 200
+    assert 'name="title" value="Typed Title"' in response.text
+    assert 'name="primary_author_name" value="Typed Author"' in response.text
+    assert 'name="page_count" type="number" min="1" step="1" value="123"' in response.text
+
+
+def test_lookup_new_book_metadata_validates_isbn() -> None:
+    client, session_factory = make_books_client()
+    client.post("/admin/login", data={"password": "secret"})
+
+    response = client.post("/books/new/lookup", data={"isbn": "123"})
+
+    assert response.status_code == 400
+    assert "ISBN must be a valid ISBN-10 or ISBN-13." in response.text
+    with session_factory() as db:
+        assert db.query(Book).count() == 0
+
+
+def test_lookup_new_book_metadata_reports_provider_attempt_statuses() -> None:
+    client, _ = make_books_client()
+    client.post("/admin/login", data={"password": "secret"})
+    provider = FakeMetadataProvider(results=(), status="no_results")
+    client.app.dependency_overrides[get_metadata_providers] = lambda: [provider]
+
+    response = client.post("/books/new/lookup", data={"isbn": "9781234567890"})
+
+    assert response.status_code == 200
+    assert "No useful metadata enrichment candidates were found." in response.text
+    assert "Tried Fake Provider: no results (200)." in response.text
+
+
+def test_lookup_new_book_metadata_labels_provider_503_as_temporarily_unavailable() -> None:
+    client, _ = make_books_client()
+    client.post("/admin/login", data={"password": "secret"})
+    provider = FakeMetadataProvider(results=(), status="failed", http_status=503)
+    client.app.dependency_overrides[get_metadata_providers] = lambda: [provider]
+
+    response = client.post("/books/new/lookup", data={"isbn": "9781234567890"})
+
+    assert response.status_code == 200
+    assert "Tried Fake Provider: temporarily unavailable (503)." in response.text
+
+
+def test_lookup_new_book_metadata_can_force_refresh_cached_failure() -> None:
+    client, session_factory = make_books_client()
+    client.post("/admin/login", data={"password": "secret"})
+    with session_factory() as db:
+        store_metadata_lookup_response(
+            db,
+            MetadataLookupResponse(
+                provider="fake_provider",
+                lookup_type="isbn",
+                normalized_query="9781234567890",
+                status="no_results",
+                raw_response={"results": []},
+                http_status=200,
+            ),
+        )
+        db.commit()
+
+    succeeding_provider = FakeMetadataProvider(results=(provider_result(title="Fresh Title"),))
+    client.app.dependency_overrides[get_metadata_providers] = lambda: [succeeding_provider]
+
+    cached_response = client.post("/books/new/lookup", data={"isbn": "9781234567890"})
+    refreshed_response = client.post("/books/new/lookup", data={"isbn": "9781234567890", "force_refresh": "true"})
+
+    assert "Fresh Title" not in cached_response.text
+    assert "Fresh Title" in refreshed_response.text
+    assert succeeding_provider.isbn_calls == 1
+    with session_factory() as db:
+        assert db.query(Book).count() == 0
 
 
 def test_create_book_saves_supported_fields_and_redirects_to_detail() -> None:
@@ -1704,6 +1848,9 @@ def test_create_book_saves_supported_fields_and_redirects_to_detail() -> None:
             "subtitle": "Monk and Robot",
             "primary_author_name": "Becky Chambers",
             "isbn": "978-1250236210",
+            "publisher": "Tordotcom",
+            "published_on": "2021-07-13",
+            "publication_year": "2021",
             "format": "audiobook",
             "status": "started",
             "rating": "4.5",
@@ -1711,6 +1858,7 @@ def test_create_book_saves_supported_fields_and_redirects_to_detail() -> None:
             "started_on": "2026-06-01",
             "page_count": "160",
             "audio_hours": "4.25",
+            "cover_url": "https://example.test/psalm.jpg",
             "manual_progress_percent": "35",
         },
         follow_redirects=False,
@@ -1725,12 +1873,17 @@ def test_create_book_saves_supported_fields_and_redirects_to_detail() -> None:
         assert book.primary_author_name == "Becky Chambers"
         assert book.isbn13 == "9781250236210"
         assert book.isbn10 is None
+        assert book.publisher == "Tordotcom"
+        assert book.published_on is not None
+        assert book.published_on.isoformat() == "2021-07-13"
+        assert book.publication_year == 2021
         assert book.format == "audiobook"
         assert book.status == "started"
         assert book.rating == 4.5
         assert book.notes == "Cozy robots."
         assert book.page_count == 160
         assert book.audio_seconds == 15300
+        assert book.cover_url == "https://example.test/psalm.jpg"
         assert book.manual_progress_percent == 35
 
 

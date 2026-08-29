@@ -228,8 +228,9 @@ class GoogleBooksClient:
     name = "google_books"
     base_url = "https://www.googleapis.com/books/v1/volumes"
 
-    def __init__(self, http_client: JsonHttpClient | None = None) -> None:
+    def __init__(self, http_client: JsonHttpClient | None = None, api_key: str | None = None) -> None:
         self.http_client = http_client or JsonHttpClient()
+        self.api_key = api_key.strip() if api_key and api_key.strip() else None
 
     def lookup_isbn(self, isbn: str) -> MetadataLookupResponse:
         normalized_query = normalize_isbn_query(isbn)
@@ -245,6 +246,8 @@ class GoogleBooksClient:
     def _lookup(self, lookup_type: str, normalized_query: str, params: dict[str, str]) -> MetadataLookupResponse:
         if not normalized_query:
             return MetadataLookupResponse(self.name, lookup_type, normalized_query, "invalid_query", error_message="Missing lookup query.")
+        if self.api_key is not None:
+            params = {**params, "key": self.api_key}
         raw_response, http_status, headers, error_message = self.http_client.get_json(f"{self.base_url}?{urlencode(params)}")
         response = self.parse_cached_response(
             lookup_type=lookup_type,

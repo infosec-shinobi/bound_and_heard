@@ -32,6 +32,8 @@ Create a local `.env` file if you want write actions enabled:
 ```dotenv
 BOUND_AND_HEARD_ADMIN_PASSWORD=change-me
 BOUND_AND_HEARD_SESSION_SECRET=change-this-dev-secret
+# Optional: improves Google Books metadata lookup quota behavior.
+BOUND_AND_HEARD_GOOGLE_BOOKS_API_KEY=
 ```
 
 Run database migrations:
@@ -81,6 +83,10 @@ Directory used to preserve Libby scrape snapshots. Defaults to `data/scraped`. S
 `BOUND_AND_HEARD_APP_NAME`
 
 Application display name. Defaults to `Bound & Heard`.
+
+`BOUND_AND_HEARD_GOOGLE_BOOKS_API_KEY`
+
+Optional Google Books API key used for Google Books metadata lookups. Open Library does not require a key, and Google Books can work without one, but unauthenticated Google Books requests may hit rate limits. See `docs/GOOGLE_BOOKS_API_KEY.md`.
 
 ## Libby JSON Imports
 
@@ -151,7 +157,7 @@ Supported providers:
 - Open Library
 - Google Books
 
-No provider API keys are required for the current MVP 6 clients. Enrichment performs outbound HTTPS requests to the provider APIs unless a matching cached response already exists locally.
+No provider API keys are required for basic metadata enrichment. Open Library does not require a key. Google Books can be used without a key, but setting `BOUND_AND_HEARD_GOOGLE_BOOKS_API_KEY` is recommended if you hit Google Books rate limits. Enrichment performs outbound HTTPS requests to the provider APIs unless a matching cached response already exists locally.
 
 ### Book Detail Enrichment
 

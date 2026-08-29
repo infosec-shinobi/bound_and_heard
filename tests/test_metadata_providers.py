@@ -1,4 +1,5 @@
 from datetime import date
+from urllib.parse import parse_qs, urlsplit
 
 from app.services.metadata_providers import (
     GoogleBooksClient,
@@ -112,6 +113,26 @@ def test_google_books_parses_common_result_shape_and_keeps_raw_response() -> Non
     assert result.categories == ("Fiction",)
     assert result.description == "A useful description."
     assert result.raw_record == raw_response["items"][0]
+
+
+def test_google_books_lookup_omits_api_key_when_unconfigured() -> None:
+    http_client = StubHttpClient({"items": []})
+
+    GoogleBooksClient(http_client).lookup_isbn("9781234567890")
+
+    query = parse_qs(urlsplit(http_client.urls[0]).query)
+    assert query["q"] == ["isbn:9781234567890"]
+    assert "key" not in query
+
+
+def test_google_books_lookup_includes_api_key_when_configured() -> None:
+    http_client = StubHttpClient({"items": []})
+
+    GoogleBooksClient(http_client, api_key=" test-key ").lookup_isbn("9781234567890")
+
+    query = parse_qs(urlsplit(http_client.urls[0]).query)
+    assert query["q"] == ["isbn:9781234567890"]
+    assert query["key"] == ["test-key"]
 
 
 def test_provider_returns_no_results_for_empty_result_sets() -> None:

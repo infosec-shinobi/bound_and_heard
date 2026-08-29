@@ -36,6 +36,10 @@ class Settings(BaseSettings):
         default="data/scraped",
         validation_alias="BOUND_AND_HEARD_SCRAPED_DIR",
     )
+    google_books_api_key: str | None = Field(
+        default=None,
+        validation_alias="BOUND_AND_HEARD_GOOGLE_BOOKS_API_KEY",
+    )
 
     @property
     def writes_enabled(self) -> bool:

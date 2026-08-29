@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, joinedload
 from starlette.responses import HTMLResponse
 
 from app.core.bootstrap import DEFAULT_LOCAL_USER_ID
+from app.core.config import Settings, get_settings
 from app.core.database import get_db
 from app.core.templates import template_context, templates
 from app.core.write_protection import require_write_access
@@ -49,8 +50,33 @@ TITLE_FALLBACK_VALUES = ["untitled libby book"]
 WHITESPACE_PATTERN = re.compile(r"\s+")
 
 
-def get_metadata_providers() -> list[MetadataProvider]:
-    return [OpenLibraryClient(), GoogleBooksClient()]
+def get_metadata_providers(settings: Settings = Depends(get_settings)) -> list[MetadataProvider]:
+    return [OpenLibraryClient(), GoogleBooksClient(api_key=settings.google_books_api_key)]
+
+
+def new_book_template_context(
+    request: Request,
+    *,
+    errors: list[str] | None = None,
+    form: dict[str, str] | None = None,
+    message: str | None = None,
+) -> dict[str, object]:
+    return template_context(
+        request,
+        page_title="Add Book",
+        heading="Add Book",
+        description="Create a local book record. Lookup can prefill metadata before you save.",
+        form_action="/books/new",
+        lookup_action="/books/new/lookup",
+        cancel_href="/books",
+        submit_label="Create Book",
+        errors=errors or [],
+        form=form or {},
+        message=message,
+        book_statuses=BOOK_STATUSES,
+        book_formats=BOOK_FORMATS,
+        show_lookup=True,
+    )
 
 
 def clean_optional(value: str | None) -> str | None:
@@ -58,6 +84,10 @@ def clean_optional(value: str | None) -> str | None:
         return None
     value = value.strip()
     return value or None
+
+
+def provider_label(value: str) -> str:
+    return value.replace("_", " ").title()
 
 
 def normalize_duplicate_text(value: str | None) -> str | None:
@@ -280,6 +310,26 @@ def enrichment_message_for_status(enrichment_status: str, applied_fields: list[s
     return "Metadata enrichment could not be completed."
 
 
+def lookup_attempt_summary(attempts: object) -> str:
+    parts = []
+    for attempt in attempts:
+        provider = provider_label(attempt.provider)
+        status_label = attempt.status.replace("_", " ")
+        if attempt.status == "failed" and attempt.http_status in {500, 502, 503, 504}:
+            status_label = "temporarily unavailable"
+        detail = f"{provider}: {status_label}"
+        if attempt.http_status is not None:
+            detail = f"{detail} ({attempt.http_status})"
+        parts.append(detail)
+    return "; ".join(parts)
+
+
+def enrichment_message_with_attempts(enrichment_status: str, attempts: object) -> str:
+    message = enrichment_message_for_status(enrichment_status)
+    summary = lookup_attempt_summary(attempts)
+    return f"{message} Tried {summary}." if summary else message
+
+
 def bulk_enrichment_summary_message(summary: dict[str, int]) -> str:
     return (
         "Bulk enrichment checked {checked} book(s): {updated} updated, {skipped} skipped, "
@@ -365,6 +415,9 @@ def book_form_values(book: Book) -> dict[str, str]:
         "subtitle": book.subtitle or "",
         "primary_author_name": book.primary_author_name or "",
         "isbn": book.isbn13 or book.isbn10 or "",
+        "publisher": book.publisher or "",
+        "published_on": book.published_on.isoformat() if book.published_on else "",
+        "publication_year": str(book.publication_year) if book.publication_year is not None else "",
         "format": book.format,
         "status": book.status,
         "rating": f"{book.rating:g}" if book.rating is not None else "",
@@ -373,6 +426,7 @@ def book_form_values(book: Book) -> dict[str, str]:
         "completed_on": book.completed_on.isoformat() if book.completed_on else "",
         "page_count": str(book.page_count) if book.page_count is not None else "",
         "audio_hours": audio_seconds_to_hours(book.audio_seconds),
+        "cover_url": book.cover_url or "",
         "manual_progress_percent": f"{book.manual_progress_percent:g}"
         if book.manual_progress_percent is not None
         else "",
@@ -385,6 +439,9 @@ def submitted_form_values(
     subtitle: str | None,
     primary_author_name: str | None,
     isbn: str | None,
+    publisher: str | None,
+    published_on: str | None,
+    publication_year: str | None,
     format: str,
     status_value: str,
     rating: str | None,
@@ -393,6 +450,7 @@ def submitted_form_values(
     completed_on: str | None,
     page_count: str | None,
     audio_hours: str | None,
+    cover_url: str | None,
     manual_progress_percent: str | None,
 ) -> dict[str, str]:
     return {
@@ -400,6 +458,9 @@ def submitted_form_values(
         "subtitle": subtitle or "",
         "primary_author_name": primary_author_name or "",
         "isbn": isbn or "",
+        "publisher": publisher or "",
+        "published_on": published_on or "",
+        "publication_year": publication_year or "",
         "format": format,
         "status": status_value,
         "rating": rating or "",
@@ -408,6 +469,7 @@ def submitted_form_values(
         "completed_on": completed_on or "",
         "page_count": page_count or "",
         "audio_hours": audio_hours or "",
+        "cover_url": cover_url or "",
         "manual_progress_percent": manual_progress_percent or "",
     }
 
@@ -1082,19 +1144,7 @@ async def new_book_form(
     return templates.TemplateResponse(
         request,
         "books/new.html",
-        template_context(
-            request,
-            page_title="Add Book",
-            heading="Add Book",
-            description="Create a local book record. Imports and enrichment can fill in more later.",
-            form_action="/books/new",
-            cancel_href="/books",
-            submit_label="Create Book",
-            errors=[],
-            form={},
-            book_statuses=BOOK_STATUSES,
-            book_formats=BOOK_FORMATS,
-        ),
+        new_book_template_context(request),
     )
 
 
@@ -1107,6 +1157,9 @@ async def create_book(
     subtitle: str | None = Form(default=None),
     primary_author_name: str | None = Form(default=None),
     isbn: str | None = Form(default=None),
+    publisher: str | None = Form(default=None),
+    published_on: str | None = Form(default=None),
+    publication_year: str | None = Form(default=None),
     format: str = Form(default="unknown"),
     status_value: str = Form(default="unknown", alias="status"),
     rating: str | None = Form(default=None),
@@ -1115,6 +1168,7 @@ async def create_book(
     completed_on: str | None = Form(default=None),
     page_count: str | None = Form(default=None),
     audio_hours: str | None = Form(default=None),
+    cover_url: str | None = Form(default=None),
     manual_progress_percent: str | None = Form(default=None),
 ) -> Response:
     form = submitted_form_values(
@@ -1122,6 +1176,9 @@ async def create_book(
         subtitle=subtitle,
         primary_author_name=primary_author_name,
         isbn=isbn,
+        publisher=publisher,
+        published_on=published_on,
+        publication_year=publication_year,
         format=format,
         status_value=status_value,
         rating=rating,
@@ -1130,6 +1187,7 @@ async def create_book(
         completed_on=completed_on,
         page_count=page_count,
         audio_hours=audio_hours,
+        cover_url=cover_url,
         manual_progress_percent=manual_progress_percent,
     )
     errors: list[str] = []
@@ -1144,6 +1202,8 @@ async def create_book(
     parsed_rating = parse_optional_float(rating, "Rating", errors, minimum=0, maximum=5)
     parsed_started_on = parse_optional_date(started_on, "Started date", errors)
     parsed_completed_on = parse_optional_date(completed_on, "Completed date", errors)
+    parsed_published_on = parse_optional_date(published_on, "Published date", errors)
+    parsed_publication_year = parse_optional_int(publication_year, "Publication year", errors, minimum=1)
     parsed_page_count = parse_optional_int(page_count, "Page count", errors, minimum=1)
     parsed_audio_hours = parse_optional_float(audio_hours, "Audio duration", errors, minimum=0)
     parsed_isbn10, parsed_isbn13 = parse_optional_isbn(isbn, errors)
@@ -1162,19 +1222,7 @@ async def create_book(
         return templates.TemplateResponse(
             request,
             "books/new.html",
-            template_context(
-                request,
-                page_title="Add Book",
-                heading="Add Book",
-                description="Create a local book record. Imports and enrichment can fill in more later.",
-                form_action="/books/new",
-                cancel_href="/books",
-                submit_label="Create Book",
-                errors=errors,
-                form=form,
-                book_statuses=BOOK_STATUSES,
-                book_formats=BOOK_FORMATS,
-            ),
+            new_book_template_context(request, errors=errors, form=form),
             status_code=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -1185,6 +1233,9 @@ async def create_book(
         primary_author_name=clean_optional(primary_author_name),
         isbn10=parsed_isbn10,
         isbn13=parsed_isbn13,
+        publisher=clean_optional(publisher),
+        published_on=parsed_published_on,
+        publication_year=parsed_publication_year,
         format=format,
         status=status_value,
         rating=parsed_rating,
@@ -1193,6 +1244,7 @@ async def create_book(
         completed_on=parsed_completed_on,
         page_count=parsed_page_count,
         audio_seconds=round(parsed_audio_hours * 3600) if parsed_audio_hours is not None else None,
+        cover_url=clean_optional(cover_url),
         manual_progress_percent=parsed_progress,
         title_source="manual",
         author_source="manual" if clean_optional(primary_author_name) else None,
@@ -1206,6 +1258,114 @@ async def create_book(
 
     db.commit()
     return RedirectResponse(f"/books/{book.id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/new/lookup", response_class=HTMLResponse)
+async def lookup_new_book_metadata(
+    request: Request,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_write_access),
+    providers: list[MetadataProvider] = Depends(get_metadata_providers),
+    title: str = Form(default=""),
+    subtitle: str | None = Form(default=None),
+    primary_author_name: str | None = Form(default=None),
+    isbn: str | None = Form(default=None),
+    publisher: str | None = Form(default=None),
+    published_on: str | None = Form(default=None),
+    publication_year: str | None = Form(default=None),
+    format: str = Form(default="unknown"),
+    status_value: str = Form(default="unknown", alias="status"),
+    rating: str | None = Form(default=None),
+    notes: str | None = Form(default=None),
+    started_on: str | None = Form(default=None),
+    completed_on: str | None = Form(default=None),
+    page_count: str | None = Form(default=None),
+    audio_hours: str | None = Form(default=None),
+    cover_url: str | None = Form(default=None),
+    manual_progress_percent: str | None = Form(default=None),
+    force_refresh: bool = Form(default=False),
+) -> HTMLResponse:
+    form = submitted_form_values(
+        title=title,
+        subtitle=subtitle,
+        primary_author_name=primary_author_name,
+        isbn=isbn,
+        publisher=publisher,
+        published_on=published_on,
+        publication_year=publication_year,
+        format=format,
+        status_value=status_value,
+        rating=rating,
+        notes=notes,
+        started_on=started_on,
+        completed_on=completed_on,
+        page_count=page_count,
+        audio_hours=audio_hours,
+        cover_url=cover_url,
+        manual_progress_percent=manual_progress_percent,
+    )
+    errors: list[str] = []
+    parsed_isbn10, parsed_isbn13 = parse_optional_isbn(isbn, errors)
+    normalized_isbn = parsed_isbn13 or parsed_isbn10
+    if normalized_isbn is not None:
+        form["isbn"] = normalized_isbn
+    if not clean_optional(isbn):
+        errors.append("ISBN is required for lookup.")
+    if errors:
+        return templates.TemplateResponse(
+            request,
+            "books/new.html",
+            new_book_template_context(request, errors=errors, form=form),
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    lookup_book = Book(
+        user_id=DEFAULT_LOCAL_USER_ID,
+        title="",
+        subtitle=clean_optional(subtitle),
+        primary_author_name=clean_optional(primary_author_name),
+        isbn10=parsed_isbn10,
+        isbn13=parsed_isbn13,
+        format=format if format in BOOK_FORMATS else "unknown",
+        status=status_value if status_value in BOOK_STATUSES else "unknown",
+    )
+    outcome = lookup_book_metadata(db, book=lookup_book, providers=providers, force_refresh=force_refresh)
+    candidate = outcome.best_candidate
+    if candidate is None or outcome.status != "matched":
+        message = enrichment_message_with_attempts(outcome.status, outcome.attempted_lookups)
+        return templates.TemplateResponse(
+            request,
+            "books/new.html",
+            new_book_template_context(request, form=form, message=message),
+            status_code=status.HTTP_200_OK,
+        )
+
+    result = candidate.result
+    if not clean_optional(form["title"]):
+        form["title"] = result.title
+    if not clean_optional(form["subtitle"]):
+        form["subtitle"] = result.subtitle or ""
+    if not clean_optional(form["primary_author_name"]):
+        form["primary_author_name"] = result.authors[0] if result.authors else ""
+    if not clean_optional(form["isbn"]):
+        form["isbn"] = result.isbn13 or result.isbn10 or ""
+    if not clean_optional(form["publisher"]):
+        form["publisher"] = result.publisher or ""
+    if not clean_optional(form["published_on"]):
+        form["published_on"] = result.published_on.isoformat() if result.published_on else ""
+    if not clean_optional(form["publication_year"]):
+        form["publication_year"] = str(result.publication_year) if result.publication_year is not None else ""
+    if not clean_optional(form["page_count"]):
+        form["page_count"] = str(result.page_count) if result.page_count is not None else ""
+    if not clean_optional(form["cover_url"]):
+        form["cover_url"] = result.cover_url or ""
+
+    message = f"Found metadata from {provider_label(result.provider)}. Review the prefilled fields, then create the book."
+    return templates.TemplateResponse(
+        request,
+        "books/new.html",
+        new_book_template_context(request, form=form, message=message),
+    )
 
 
 @router.get("/{book_id}/edit", response_class=HTMLResponse)
@@ -1253,6 +1413,9 @@ async def update_book(
     subtitle: str | None = Form(default=None),
     primary_author_name: str | None = Form(default=None),
     isbn: str | None = Form(default=None),
+    publisher: str | None = Form(default=None),
+    published_on: str | None = Form(default=None),
+    publication_year: str | None = Form(default=None),
     format: str = Form(default="unknown"),
     status_value: str = Form(default="unknown", alias="status"),
     rating: str | None = Form(default=None),
@@ -1261,6 +1424,7 @@ async def update_book(
     completed_on: str | None = Form(default=None),
     page_count: str | None = Form(default=None),
     audio_hours: str | None = Form(default=None),
+    cover_url: str | None = Form(default=None),
     manual_progress_percent: str | None = Form(default=None),
 ) -> Response:
     book = db.get(Book, book_id)
@@ -1277,6 +1441,9 @@ async def update_book(
         subtitle=subtitle,
         primary_author_name=primary_author_name,
         isbn=isbn,
+        publisher=publisher,
+        published_on=published_on,
+        publication_year=publication_year,
         format=format,
         status_value=status_value,
         rating=rating,
@@ -1285,6 +1452,7 @@ async def update_book(
         completed_on=completed_on,
         page_count=page_count,
         audio_hours=audio_hours,
+        cover_url=cover_url,
         manual_progress_percent=manual_progress_percent,
     )
     errors: list[str] = []
@@ -1299,6 +1467,8 @@ async def update_book(
     parsed_rating = parse_optional_float(rating, "Rating", errors, minimum=0, maximum=5)
     parsed_started_on = parse_optional_date(started_on, "Started date", errors)
     parsed_completed_on = parse_optional_date(completed_on, "Completed date", errors)
+    parsed_published_on = parse_optional_date(published_on, "Published date", errors)
+    parsed_publication_year = parse_optional_int(publication_year, "Publication year", errors, minimum=1)
     parsed_page_count = parse_optional_int(page_count, "Page count", errors, minimum=1)
     parsed_audio_hours = parse_optional_float(audio_hours, "Audio duration", errors, minimum=0)
     parsed_isbn10, parsed_isbn13 = parse_optional_isbn(isbn, errors)
@@ -1341,6 +1511,9 @@ async def update_book(
     book.primary_author_name = clean_optional(primary_author_name)
     book.isbn10 = parsed_isbn10
     book.isbn13 = parsed_isbn13
+    book.publisher = clean_optional(publisher)
+    book.published_on = parsed_published_on
+    book.publication_year = parsed_publication_year
     book.format = format
     book.status = status_value
     book.rating = parsed_rating
@@ -1349,6 +1522,7 @@ async def update_book(
     book.completed_on = parsed_completed_on
     book.page_count = parsed_page_count
     book.audio_seconds = round(parsed_audio_hours * 3600) if parsed_audio_hours is not None else None
+    book.cover_url = clean_optional(cover_url)
     book.manual_progress_percent = parsed_progress
     book.title_source = "manual"
     book.author_source = "manual" if clean_optional(primary_author_name) else None
