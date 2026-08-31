@@ -72,20 +72,20 @@ Derived from `docs/ROADMAP.md` MVP 7 - Analytics and Recaps, with continuity fro
 
 ## Chunk 6 - Analytics UI Dashboard
 
-- [ ] Add analytics route and navigation entry
-- [ ] Show books by month
-- [ ] Show books completed by selected period
-- [ ] Show format breakdown
-- [ ] Show top authors
-- [ ] Show top genres
-- [ ] Show pages read when known
-- [ ] Show audiobook hours when known
-- [ ] Show partial-progress summaries
-- [ ] Show re-read and re-listen counts
-- [ ] Show lifetime enjoyed time where available
-- [ ] Add period filters for year, quarter, and all-time where useful
-- [ ] Keep dashboard usable on desktop and mobile
-- [ ] Keep analytics pages read-only for non-admin users
+- [x] Add analytics route and navigation entry
+- [x] Show books by month
+- [x] Show books completed by selected period
+- [x] Show format breakdown
+- [x] Show top authors
+- [x] Show top genres
+- [x] Show pages read when known
+- [x] Show audiobook hours when known
+- [x] Show partial-progress summaries
+- [x] Show re-read and re-listen counts
+- [x] Show lifetime enjoyed time where available
+- [x] Add period filters for year, quarter, and all-time where useful
+- [x] Keep dashboard usable on desktop and mobile
+- [x] Keep analytics pages read-only for non-admin users
 
 ## Chunk 7 - Series Analytics
 

@@ -9,6 +9,7 @@ from starlette.datastructures import URL
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.api.admin import router as admin_router
+from app.api.analytics import router as analytics_router
 from app.api.books import router as books_router
 from app.api.imports import router as imports_router
 from app.api.pages import router as pages_router
@@ -81,6 +82,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
     app.include_router(admin_router)
+    app.include_router(analytics_router)
     app.include_router(books_router)
     app.include_router(imports_router)
     app.include_router(scraping_router)

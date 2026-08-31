@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <div class="row align-items-center gy-3 mb-4">
+    <div class="col-lg-7">
+      <p class="app-kicker small fw-semibold mb-2">Reading analytics</p>
+      <h1 class="display-6 mb-2">Analytics</h1>
+      <p class="lead app-muted mb-0">Read-only trends and totals from your local reading history.</p>
+    </div>
+    <div class="col-lg-5">
+      <form class="card" method="get" action="/analytics">
+        <div class="card-body">
+          <div class="row g-2 align-items-end">
+            <div class="col-sm-4">
+              <label class="form-label" for="period">Period</label>
+              <select class="form-select" id="period" name="period">
+                <option value="all" {% if period_key == 'all' %}selected{% endif %}>All time</option>
+                <option value="year" {% if period_key == 'year' %}selected{% endif %}>Year</option>
+                <option value="quarter" {% if period_key == 'quarter' %}selected{% endif %}>Quarter</option>
+              </select>
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label" for="year">Year</label>
+              <input class="form-control" id="year" name="year" type="number" min="1900" max="2200" value="{{ selected_year or current_year }}">
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label" for="quarter">Quarter</label>
+              <select class="form-select" id="quarter" name="quarter">
+                {% for value in [1, 2, 3, 4] %}
+                  <option value="{{ value }}" {% if selected_quarter == value %}selected{% endif %}>Q{{ value }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-12 text-sm-end">
+              <button class="btn btn-primary" type="submit">Apply Filters</button>
+            </div>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-sm-6 col-xl-3">
+      <section class="card h-100"><div class="card-body"><p class="app-muted mb-1">Completed</p><p class="display-6 mb-0">{{ format_count(completed_count) }}</p></div></section>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+      <section class="card h-100"><div class="card-body"><p class="app-muted mb-1">Pages Read</p><p class="display-6 mb-0">{{ format_count(pages_total) }}</p></div></section>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+      <section class="card h-100"><div class="card-body"><p class="app-muted mb-1">Audiobook Time</p><p class="display-6 mb-0">{{ format_hours(audiobook_seconds_total) }}</p></div></section>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+      <section class="card h-100"><div class="card-body"><p class="app-muted mb-1">Lifetime Enjoyed</p><p class="display-6 mb-0">{{ format_hours(lifetime_enjoyed_seconds_total) }}</p></div></section>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-lg-7">
+      <section class="card h-100">
+        <div class="card-body">
+          <h2 class="h5 mb-3">Books By Month</h2>
+          <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+              <thead><tr><th>Month</th><th class="text-end">Completed</th></tr></thead>
+              <tbody>
+                {% for item in month_counts %}
+                  <tr><td>{{ item.year }}-{{ '%02d'|format(item.month) }}</td><td class="text-end">{{ item.count }}</td></tr>
+                {% else %}
+                  <tr><td colspan="2" class="app-muted">No completed books for this selection.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
+    <div class="col-lg-5">
+      <section class="card h-100">
+        <div class="card-body">
+          <h2 class="h5 mb-3">Format Breakdown</h2>
+          <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+              <thead><tr><th>Format</th><th class="text-end">Books</th></tr></thead>
+              <tbody>
+                {% for label, count in format_counts.items() %}
+                  <tr><td>{{ label|replace('_', ' ')|title }}</td><td class="text-end">{{ count }}</td></tr>
+                {% else %}
+                  <tr><td colspan="2" class="app-muted">No format data.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div class="row g-4 mt-1">
+    <div class="col-lg-6">
+      <section class="card h-100">
+        <div class="card-body">
+          <h2 class="h5 mb-3">Top Authors</h2>
+          <ol class="list-group list-group-numbered">
+            {% for item in top_authors %}
+              <li class="list-group-item d-flex justify-content-between align-items-center"><span>{{ item.label }}</span><span class="badge text-bg-secondary rounded-pill">{{ item.count }}</span></li>
+            {% else %}
+              <li class="list-group-item app-muted">No author data.</li>
+            {% endfor %}
+          </ol>
+        </div>
+      </section>
+    </div>
+    <div class="col-lg-6">
+      <section class="card h-100">
+        <div class="card-body">
+          <h2 class="h5 mb-3">Top Genres</h2>
+          <ol class="list-group list-group-numbered">
+            {% for item in top_genres %}
+              <li class="list-group-item d-flex justify-content-between align-items-center"><span>{{ item.label }}</span><span class="badge text-bg-secondary rounded-pill">{{ item.count }}</span></li>
+            {% else %}
+              <li class="list-group-item app-muted">No genre data.</li>
+            {% endfor %}
+          </ol>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div class="row g-4 mt-1">
+    <div class="col-lg-6">
+      <section class="card h-100">
+        <div class="card-body">
+          <h2 class="h5 mb-3">Partial Progress</h2>
+          <dl class="row mb-0 app-detail-list">
+            <dt class="col-7">In Progress</dt><dd class="col-5 text-end">{{ partial_summary.book_count }}</dd>
+            <dt class="col-7">Abandoned With Progress</dt><dd class="col-5 text-end">{{ partial_summary.abandoned_count }}</dd>
+            <dt class="col-7">Average Progress</dt><dd class="col-5 text-end">{% if partial_summary.average_progress_percent is not none %}{{ '%.1f'|format(partial_summary.average_progress_percent) }}%{% else %}Not set{% endif %}</dd>
+            <dt class="col-7">Pages In Progress</dt><dd class="col-5 text-end">{{ format_count(partial_summary.pages_in_progress) }}</dd>
+            <dt class="col-7">Audio In Progress</dt><dd class="col-5 text-end">{{ format_hours(partial_summary.audiobook_seconds_in_progress) }}</dd>
+          </dl>
+        </div>
+      </section>
+    </div>
+    <div class="col-lg-6">
+      <section class="card h-100">
+        <div class="card-body">
+          <h2 class="h5 mb-3">Repeats</h2>
+          <dl class="row mb-0 app-detail-list">
+            <dt class="col-7">Re-reads</dt><dd class="col-5 text-end">{{ repeats.rereads }}</dd>
+            <dt class="col-7">Re-listens</dt><dd class="col-5 text-end">{{ repeats.relistens }}</dd>
+            <dt class="col-7">Other Repeat Completions</dt><dd class="col-5 text-end">{{ repeats.repeat_completions }}</dd>
+            <dt class="col-7">Likely Re-listens</dt><dd class="col-5 text-end">{{ repeats.likely_relistens }} <span class="app-muted">lower confidence</span></dd>
+          </dl>
+        </div>
+      </section>
+    </div>
+  </div>
+{% endblock %}
