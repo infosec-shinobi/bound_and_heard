@@ -100,15 +100,15 @@ Derived from `docs/ROADMAP.md` MVP 7 - Analytics and Recaps, with continuity fro
 
 ## Chunk 8 - Recap Data Model And Generation
 
-- [ ] Decide final `recaps` table fields and generated artifact storage
-- [ ] Add Alembic migration if recap storage needs to change
-- [ ] Add recap generation service for quarterly recaps
-- [ ] Add recap generation service for yearly recaps
-- [ ] Store generated recap metadata and output path
-- [ ] Avoid overwriting existing generated recaps unless explicitly requested
-- [ ] Make recap generation deterministic for the same source data when practical
-- [ ] Add tests for recap generation, persistence, and overwrite protection
-- [ ] Verify `alembic upgrade head` if migrations are added
+- [x] Decide final `recaps` table fields and generated artifact storage
+- [x] Add Alembic migration if recap storage needs to change
+- [x] Add recap generation service for quarterly recaps
+- [x] Add recap generation service for yearly recaps
+- [x] Store generated recap metadata and output path
+- [x] Avoid overwriting existing generated recaps unless explicitly requested
+- [x] Make recap generation deterministic for the same source data when practical
+- [x] Add tests for recap generation, persistence, and overwrite protection
+- [x] Verify `alembic upgrade head` if migrations are added
 
 ## Chunk 9 - Recap Pages
 

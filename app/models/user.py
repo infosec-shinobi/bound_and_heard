@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from app.models.book import Book
     from app.models.progress import BookProgress
     from app.models.reading_event import ReadingEvent
+    from app.models.recap import Recap
     from app.models.scrape import ScrapeJob
     from app.models.series import LibbySeriesHint, LibbySeriesSnapshot, Series
 
@@ -48,3 +49,4 @@ class User(Base):
     metadata_enrichment_runs: Mapped[list[MetadataEnrichmentRun]] = relationship(back_populates="user")
     genres: Mapped[list[Genre]] = relationship(back_populates="user")
     book_genres: Mapped[list[BookGenre]] = relationship(back_populates="user")
+    recaps: Mapped[list[Recap]] = relationship(back_populates="user")

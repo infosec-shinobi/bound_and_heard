@@ -634,11 +634,14 @@ Fields:
 - title
 - summary
 - output_path
+- payload
 
 Recommended period_type values:
 
 - quarter
 - year
+
+Yearly recaps store `quarter = 0` so the user/period uniqueness constraint works consistently across SQLite and future database engines.
 
 ### recommendations
 
