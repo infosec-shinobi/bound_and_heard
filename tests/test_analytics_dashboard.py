@@ -10,7 +10,7 @@ from app.core.bootstrap import DEFAULT_LOCAL_USER_ID
 from app.core.config import Settings
 from app.core.database import Base, get_db
 from app.main import create_app
-from app.models import Book, BookGenre, BookProgress, Genre, ReadingEvent, User
+from app.models import Book, BookGenre, BookProgress, Genre, ReadingEvent, Series, SeriesBook, User
 
 
 def make_analytics_client(admin_password: str | None = "secret") -> tuple[TestClient, sessionmaker[Session]]:
@@ -95,6 +95,13 @@ def add_genre(db: Session, book: Book, name: str) -> None:
     db.flush()
 
 
+def add_series(db: Session, name: str, *, status: str = "active") -> Series:
+    series = Series(user_id=DEFAULT_LOCAL_USER_ID, name=name, status=status, wants_to_continue="yes")
+    db.add(series)
+    db.flush()
+    return series
+
+
 def seed_dashboard_data(session_factory: sessionmaker[Session]) -> None:
     with session_factory() as db:
         ebook = add_book(db, title="Quarter Ebook", author="Alice", book_format="ebook", page_count=300)
@@ -119,6 +126,11 @@ def seed_dashboard_data(session_factory: sessionmaker[Session]) -> None:
         db.add(BookProgress(user_id=started.user_id, book_id=started.id, source="manual", progress_percent=25))
         add_genre(db, ebook, "Sci Fi")
         add_genre(db, audio, "Mystery")
+        series = add_series(db, "Dashboard Saga")
+        db.add(SeriesBook(series_id=series.id, book_id=ebook.id, position=1))
+        db.add(SeriesBook(series_id=series.id, book_id=audio.id, position=2, position_end=3))
+        db.add(SeriesBook(series_id=series.id, book_id=started.id, position=4))
+        db.add(SeriesBook(series_id=series.id, position=5, planned_title="Dashboard Saga Five"))
         db.commit()
 
 
@@ -151,6 +163,12 @@ def test_analytics_dashboard_shows_period_metrics_and_nav_link() -> None:
     assert "Re-listens" in response.text
     assert "Likely Re-listens" in response.text
     assert "lower confidence" in response.text
+    assert "Series Summary" in response.text
+    assert "Series Activity" in response.text
+    assert "Dashboard Saga" in response.text
+    assert "Collection Ranges" in response.text
+    assert "Dashboard Saga Five" not in response.text
+    assert "Started Ebook" in response.text
 
 
 def test_analytics_dashboard_is_available_read_only_without_admin_password() -> None:

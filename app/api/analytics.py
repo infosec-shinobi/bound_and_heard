@@ -20,6 +20,7 @@ from app.services.analytics import (
     partial_progress_summary,
     quarter_range,
     repeat_counts,
+    series_activity_summary,
     top_authors,
     top_genres,
     year_range,
@@ -66,6 +67,7 @@ async def analytics_dashboard(
     month_year = selected_year if period_key in {"year", "quarter"} else None
     partial_summary = partial_progress_summary(db, user_id=DEFAULT_LOCAL_USER_ID)
     repeats = repeat_counts(db, user_id=DEFAULT_LOCAL_USER_ID, period=selected_period)
+    series_summary = series_activity_summary(db, user_id=DEFAULT_LOCAL_USER_ID, period=selected_period)
 
     return templates.TemplateResponse(
         request,
@@ -87,6 +89,7 @@ async def analytics_dashboard(
             lifetime_enjoyed_seconds_total=lifetime_enjoyed_seconds(db, user_id=DEFAULT_LOCAL_USER_ID),
             partial_summary=partial_summary,
             repeats=repeats,
+            series_summary=series_summary,
             format_count=format_count,
             format_hours=format_hours,
         ),

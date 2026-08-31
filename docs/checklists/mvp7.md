@@ -89,14 +89,14 @@ Derived from `docs/ROADMAP.md` MVP 7 - Analytics and Recaps, with continuity fro
 
 ## Chunk 7 - Series Analytics
 
-- [ ] Add service function for series activity in a selected period
-- [ ] Count completed series entries using MVP 5/MVP 6 completion rules
-- [ ] Include collection/range coverage without inflating totals
-- [ ] Identify active series based on recent completions or progress
-- [ ] Identify completed, paused, abandoned, and unknown series counts
-- [ ] Show favorite or most-active series candidates
-- [ ] Show next unread series book where relevant
-- [ ] Add tests for series analytics, planned entries, and collection ranges
+- [x] Add service function for series activity in a selected period
+- [x] Count completed series entries using MVP 5/MVP 6 completion rules
+- [x] Include collection/range coverage without inflating totals
+- [x] Identify active series based on recent completions or progress
+- [x] Identify completed, paused, abandoned, and unknown series counts
+- [x] Show favorite or most-active series candidates
+- [x] Show next unread series book where relevant
+- [x] Add tests for series analytics, planned entries, and collection ranges
 
 ## Chunk 8 - Recap Data Model And Generation
 

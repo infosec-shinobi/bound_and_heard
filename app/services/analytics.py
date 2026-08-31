@@ -7,7 +7,7 @@ from datetime import date, datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import Book, BookGenre, Genre, ReadingEvent
+from app.models import Book, BookGenre, Genre, ReadingEvent, Series, SeriesBook
 
 
 COMPLETION_EVENT_TYPES = {"completed", "manually_completed"}
@@ -60,6 +60,34 @@ class RepeatCounts:
     likely_rereads: int = 0
     likely_relistens: int = 0
     likely_repeat_completions: int = 0
+
+
+@dataclass(frozen=True)
+class SeriesActivityCandidate:
+    series_id: int
+    name: str
+    completed_entries: int
+
+
+@dataclass(frozen=True)
+class SeriesNextUnread:
+    series_id: int
+    series_name: str
+    title: str
+    position: float | None
+
+
+@dataclass(frozen=True)
+class SeriesActivitySummary:
+    total_series: int
+    completed_series_entries: int
+    active_series_count: int
+    planned_entries: int
+    collection_range_entries: int
+    collection_covered_positions: int
+    status_counts: dict[str, int]
+    most_active_series: list[SeriesActivityCandidate]
+    next_unread: list[SeriesNextUnread]
 
 
 def month_range(year: int, month: int) -> PeriodRange:
@@ -212,6 +240,58 @@ def repeat_counts(db: Session, *, user_id: int, period: PeriodRange | None = Non
     return RepeatCounts(rereads=rereads, relistens=relistens, repeat_completions=unknown, likely_relistens=likely_relistens)
 
 
+def series_activity_summary(
+    db: Session, *, user_id: int, period: PeriodRange | None = None, limit: int = 5
+) -> SeriesActivitySummary:
+    period = period or all_time_range()
+    series_rows = _analytics_series(db, user_id=user_id)
+    status_counts: Counter[str] = Counter()
+    completed_by_series: Counter[int] = Counter()
+    active_series_ids: set[int] = set()
+    series_names: dict[int, str] = {}
+    planned_entries = 0
+    collection_range_entries = 0
+    collection_covered_positions = 0
+    next_unread: list[SeriesNextUnread] = []
+
+    for series in series_rows:
+        status_counts[series.status or "unknown"] += 1
+        series_names[series.id] = series.name
+        unread_entry = _next_unread_series_entry(series)
+        if unread_entry is not None:
+            next_unread.append(unread_entry)
+        for entry in series.books:
+            if entry.book_id is None:
+                planned_entries += 1
+            if entry.position is not None and entry.position_end is not None and entry.position_end > entry.position:
+                collection_range_entries += 1
+                collection_covered_positions += round(entry.position_end - entry.position + 1)
+            if entry.book is None:
+                continue
+            completed_dates = _completion_dates(entry.book)
+            if any(period.contains(completed_on) for completed_on in completed_dates):
+                completed_by_series[series.id] += 1
+                active_series_ids.add(series.id)
+            if _current_progress_percent(entry.book) is not None and _current_progress_percent(entry.book) < COMPLETION_PROGRESS_THRESHOLD:
+                active_series_ids.add(series.id)
+
+    ranked = sorted(completed_by_series.items(), key=lambda item: (-item[1], series_names[item[0]].casefold()))[:limit]
+    return SeriesActivitySummary(
+        total_series=len(series_rows),
+        completed_series_entries=sum(completed_by_series.values()),
+        active_series_count=len(active_series_ids),
+        planned_entries=planned_entries,
+        collection_range_entries=collection_range_entries,
+        collection_covered_positions=collection_covered_positions,
+        status_counts=dict(sorted(status_counts.items())),
+        most_active_series=[
+            SeriesActivityCandidate(series_id=series_id, name=series_names[series_id], completed_entries=count)
+            for series_id, count in ranked
+        ],
+        next_unread=next_unread[:limit],
+    )
+
+
 @dataclass(frozen=True)
 class _CompletedBook:
     book: Book
@@ -229,6 +309,22 @@ def _analytics_books(db: Session, *, user_id: int) -> list[Book]:
             select(Book)
             .where(Book.user_id == user_id, Book.archived_at.is_(None))
             .options(selectinload(Book.reading_events), selectinload(Book.progress), selectinload(Book.genre_entries))
+        ).all()
+    )
+
+
+def _analytics_series(db: Session, *, user_id: int) -> list[Series]:
+    return list(
+        db.scalars(
+            select(Series)
+            .where(Series.user_id == user_id)
+            .options(
+                selectinload(Series.books)
+                .selectinload(SeriesBook.book)
+                .selectinload(Book.reading_events),
+                selectinload(Series.books).selectinload(SeriesBook.book).selectinload(Book.progress),
+            )
+            .order_by(Series.name.asc())
         ).all()
     )
 
@@ -302,3 +398,24 @@ def _likely_libby_relistens(book: Book, *, period: PeriodRange) -> int:
     likely_repeats = max(0, likely_repeats - confirmed_repeats)
     repeat_borrow_dates = [event.event_date.date() for event in borrowed_events[1 : 1 + likely_repeats]]
     return sum(1 for borrowed_on in repeat_borrow_dates if period.contains(borrowed_on))
+
+
+def _next_unread_series_entry(series: Series) -> SeriesNextUnread | None:
+    for entry in sorted(series.books, key=lambda item: (item.position is None, item.position or 0, item.id)):
+        if entry.book is None:
+            if entry.planned_title:
+                return SeriesNextUnread(
+                    series_id=series.id,
+                    series_name=series.name,
+                    title=entry.planned_title,
+                    position=entry.position,
+                )
+            continue
+        if not _completion_dates(entry.book):
+            return SeriesNextUnread(
+                series_id=series.id,
+                series_name=series.name,
+                title=entry.book.title,
+                position=entry.position,
+            )
+    return None

@@ -156,4 +156,62 @@
       </section>
     </div>
   </div>
+
+  <div class="row g-4 mt-1">
+    <div class="col-lg-5">
+      <section class="card h-100">
+        <div class="card-body">
+          <h2 class="h5 mb-3">Series Summary</h2>
+          <dl class="row mb-0 app-detail-list">
+            <dt class="col-7">Total Series</dt><dd class="col-5 text-end">{{ series_summary.total_series }}</dd>
+            <dt class="col-7">Completed Entries</dt><dd class="col-5 text-end">{{ series_summary.completed_series_entries }}</dd>
+            <dt class="col-7">Active Series</dt><dd class="col-5 text-end">{{ series_summary.active_series_count }}</dd>
+            <dt class="col-7">Planned Entries</dt><dd class="col-5 text-end">{{ series_summary.planned_entries }}</dd>
+            <dt class="col-7">Collection Ranges</dt><dd class="col-5 text-end">{{ series_summary.collection_range_entries }}</dd>
+            <dt class="col-7">Covered Positions</dt><dd class="col-5 text-end">{{ series_summary.collection_covered_positions }}</dd>
+          </dl>
+          <h3 class="h6 mt-4 mb-2">Series Statuses</h3>
+          <div class="d-flex flex-wrap gap-2">
+            {% for label, count in series_summary.status_counts.items() %}
+              <span class="badge text-bg-secondary">{{ label|replace('_', ' ')|title }}: {{ count }}</span>
+            {% else %}
+              <span class="app-muted">No series yet.</span>
+            {% endfor %}
+          </div>
+        </div>
+      </section>
+    </div>
+    <div class="col-lg-7">
+      <section class="card h-100">
+        <div class="card-body">
+          <h2 class="h5 mb-3">Series Activity</h2>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <h3 class="h6">Most Active</h3>
+              <ol class="list-group list-group-numbered">
+                {% for item in series_summary.most_active_series %}
+                  <li class="list-group-item d-flex justify-content-between align-items-center"><span>{{ item.name }}</span><span class="badge text-bg-secondary rounded-pill">{{ item.completed_entries }}</span></li>
+                {% else %}
+                  <li class="list-group-item app-muted">No series completions for this selection.</li>
+                {% endfor %}
+              </ol>
+            </div>
+            <div class="col-md-6">
+              <h3 class="h6">Next Unread</h3>
+              <div class="list-group">
+                {% for item in series_summary.next_unread %}
+                  <a class="list-group-item list-group-item-action" href="/series/{{ item.series_id }}">
+                    <span class="d-block fw-semibold">{{ item.series_name }}</span>
+                    <span class="app-muted">{% if item.position is not none %}#{{ item.position }}: {% endif %}{{ item.title }}</span>
+                  </a>
+                {% else %}
+                  <div class="list-group-item app-muted">No unread series entries.</div>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
 {% endblock %}

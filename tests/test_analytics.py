@@ -8,7 +8,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.bootstrap import DEFAULT_LOCAL_USER_ID
 from app.core.database import Base
-from app.models import Book, BookGenre, BookProgress, Genre, ReadingEvent, User
+from app.models import Book, BookGenre, BookProgress, Genre, ReadingEvent, Series, SeriesBook, User
 from app.services.analytics import (
     audiobook_seconds,
     books_completed_by_month,
@@ -20,6 +20,7 @@ from app.services.analytics import (
     partial_progress_summary,
     quarter_range,
     repeat_counts,
+    series_activity_summary,
     top_authors,
     top_genres,
     year_range,
@@ -107,6 +108,34 @@ def add_genre(db: Session, book: Book, name: str) -> None:
         db.flush()
     db.add(BookGenre(user_id=book.user_id, book_id=book.id, genre_id=genre.id, source="manual"))
     db.flush()
+
+
+def add_series(db: Session, name: str, *, status: str = "active") -> Series:
+    series = Series(user_id=DEFAULT_LOCAL_USER_ID, name=name, status=status, wants_to_continue="yes")
+    db.add(series)
+    db.flush()
+    return series
+
+
+def add_series_entry(
+    db: Session,
+    series: Series,
+    *,
+    book: Book | None = None,
+    position: float | None = None,
+    position_end: float | None = None,
+    planned_title: str | None = None,
+) -> SeriesBook:
+    entry = SeriesBook(
+        series_id=series.id,
+        book_id=book.id if book is not None else None,
+        position=position,
+        position_end=position_end,
+        planned_title=planned_title,
+    )
+    db.add(entry)
+    db.flush()
+    return entry
 
 
 def test_period_range_helpers_are_inclusive() -> None:
@@ -302,3 +331,59 @@ def test_prior_manual_completion_entries_count_as_completed_books() -> None:
         db.commit()
 
         assert books_completed_by_period(db, user_id=DEFAULT_LOCAL_USER_ID, period=year_range(2020)) == 1
+
+
+def test_series_activity_summary_counts_series_entries_without_inflating_collection_ranges() -> None:
+    session_factory = make_session_factory()
+    with session_factory() as db:
+        add_user(db)
+        active = add_series(db, "Active Saga", status="active")
+        completed_one = add_book(db, title="Active One")
+        completed_collection = add_book(db, title="Active Collection")
+        unread = add_book(db, title="Active Three")
+        add_completion_event(db, completed_one, date(2026, 1, 1))
+        add_completion_event(db, completed_collection, date(2026, 2, 1))
+        add_series_entry(db, active, book=completed_one, position=1)
+        add_series_entry(db, active, book=completed_collection, position=2, position_end=3)
+        add_series_entry(db, active, book=unread, position=4)
+
+        planned = add_series(db, "Planned Saga", status="unknown")
+        add_series_entry(db, planned, position=1, planned_title="Planned One")
+        paused = add_series(db, "Paused Saga", status="paused")
+        abandoned = add_series(db, "Abandoned Saga", status="abandoned")
+        completed_series = add_series(db, "Completed Saga", status="completed")
+        old = add_book(db, title="Old Series Book")
+        add_completion_event(db, old, date(2025, 1, 1))
+        add_series_entry(db, completed_series, book=old, position=1)
+        db.commit()
+
+        summary = series_activity_summary(db, user_id=DEFAULT_LOCAL_USER_ID, period=year_range(2026))
+
+        assert summary.total_series == 5
+        assert summary.completed_series_entries == 2
+        assert summary.active_series_count == 1
+        assert summary.planned_entries == 1
+        assert summary.collection_range_entries == 1
+        assert summary.collection_covered_positions == 2
+        assert summary.status_counts == {"abandoned": 1, "active": 1, "completed": 1, "paused": 1, "unknown": 1}
+        assert [(item.name, item.completed_entries) for item in summary.most_active_series] == [("Active Saga", 2)]
+        assert [(item.series_name, item.title, item.position) for item in summary.next_unread] == [
+            ("Active Saga", "Active Three", 4),
+            ("Planned Saga", "Planned One", 1),
+        ]
+
+
+def test_series_activity_summary_marks_series_active_for_partial_progress() -> None:
+    session_factory = make_session_factory()
+    with session_factory() as db:
+        add_user(db)
+        series = add_series(db, "Progress Saga", status="unknown")
+        started = add_book(db, title="Started Book", status="started", manual_progress_percent=50)
+        add_series_entry(db, series, book=started, position=1)
+        db.commit()
+
+        summary = series_activity_summary(db, user_id=DEFAULT_LOCAL_USER_ID, period=year_range(2026))
+
+        assert summary.completed_series_entries == 0
+        assert summary.active_series_count == 1
+        assert [(item.series_name, item.title) for item in summary.next_unread] == [("Progress Saga", "Started Book")]
