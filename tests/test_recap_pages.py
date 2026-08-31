@@ -17,7 +17,7 @@ from app.models import Book, Recap, ReadingEvent, User
 
 
 def make_recaps_client(
-    admin_password: str | None = "secret", *, recaps_dir: str = "data/recaps"
+    admin_password: str | None = "secret", *, recaps_dir: str = "data/recaps", exports_dir: str = "data/exports"
 ) -> tuple[TestClient, sessionmaker[Session]]:
     engine = create_engine(
         "sqlite://",
@@ -38,6 +38,7 @@ def make_recaps_client(
             session_secret="test-session-secret",
             database_url="sqlite:///:memory:",
             recaps_dir=recaps_dir,
+            exports_dir=exports_dir,
         )
     )
 
@@ -249,6 +250,55 @@ def test_quarterly_recap_page_shows_recap_metrics() -> None:
     assert "estimated" in response.text
     assert "Series Progress" in response.text
     assert "Planned Entries" in response.text
+
+
+def test_admin_can_export_recap_markdown_from_detail_page(tmp_path: Path) -> None:
+    client, session_factory = make_recaps_client(exports_dir=str(tmp_path))
+    recap = add_recap(session_factory)
+    client.post("/admin/login", data={"password": "secret"})
+
+    detail = client.get("/recaps/quarter/2026/2")
+    assert detail.status_code == 200
+    assert "Export Markdown" in detail.text
+
+    response = client.post(f"/recaps/{recap.id}/export", follow_redirects=True)
+
+    assert response.status_code == 200
+    assert "Exported Markdown recap" in response.text
+    output_path = tmp_path / "recaps" / "quarter" / "2026-q2.md"
+    assert output_path.exists()
+    content = output_path.read_text(encoding="utf-8")
+    assert "# Q2 2026 Recap" in content
+    assert "Generated: 2026-08-31T00:00:00" in content
+    assert "Period: Q2 2026" in content
+    assert "Source artifact: data/recaps/quarter/2026.json" in content
+    assert "- Books completed: 3" in content
+    assert "- Favorite author: Alice" in content
+    assert "- Favorite genre: Sci Fi" in content
+    assert "- Favorite series: Recap Saga" in content
+    assert "- Likely re-listens: 1 (estimated)" in content
+
+
+def test_recap_export_requires_admin_login(tmp_path: Path) -> None:
+    client, session_factory = make_recaps_client(exports_dir=str(tmp_path))
+    recap = add_recap(session_factory)
+
+    response = client.post(f"/recaps/{recap.id}/export", headers={"accept": "text/html"})
+
+    assert response.status_code == 403
+    assert "Admin login is required" in response.text
+    assert not (tmp_path / "recaps" / "quarter" / "2026-q2.md").exists()
+
+
+def test_read_only_recap_detail_hides_export_form(tmp_path: Path) -> None:
+    client, session_factory = make_recaps_client(admin_password=None, exports_dir=str(tmp_path))
+    add_recap(session_factory)
+
+    response = client.get("/recaps/quarter/2026/2")
+
+    assert response.status_code == 200
+    assert "Export Markdown" not in response.text
+    assert 'action="/recaps/' not in response.text
 
 
 def test_yearly_recap_page_is_read_only_without_admin_password_and_labels_missing_metrics() -> None:

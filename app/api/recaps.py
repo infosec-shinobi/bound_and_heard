@@ -13,7 +13,12 @@ from app.core.database import get_db
 from app.core.templates import template_context, templates
 from app.core.write_protection import require_write_access
 from app.models import Recap
-from app.services.recap_service import RecapAlreadyExistsError, generate_quarterly_recap, generate_yearly_recap
+from app.services.recap_service import (
+    RecapAlreadyExistsError,
+    export_recap_markdown,
+    generate_quarterly_recap,
+    generate_yearly_recap,
+)
 
 
 router = APIRouter(prefix="/recaps", tags=["recaps"])
@@ -46,6 +51,7 @@ def recap_response(request: Request, recap: Recap) -> HTMLResponse:
             recap=recap,
             payload=recap.payload or {},
             message=request.query_params.get("message"),
+            error=request.query_params.get("error"),
             format_count=format_count,
             format_hours=format_hours,
         ),
@@ -128,6 +134,15 @@ async def generate_recap_action(
 
     db.commit()
     return recap_detail_redirect(recap, message=f"Generated {recap.title}.")
+
+
+@router.post("/{recap_id}/export", dependencies=[Depends(require_write_access)])
+async def export_recap_action(request: Request, recap_id: int, db: Session = Depends(get_db)) -> RedirectResponse:
+    recap = db.scalar(select(Recap).where(Recap.id == recap_id, Recap.user_id == DEFAULT_LOCAL_USER_ID))
+    if recap is None:
+        raise HTTPException(status_code=404, detail="Recap not found")
+    output_path = export_recap_markdown(recap, output_dir=request.app.state.settings.exports_dir)
+    return recap_detail_redirect(recap, message=f"Exported Markdown recap to {output_path}.")
 
 
 @router.get("/year/{year}", response_class=HTMLResponse)

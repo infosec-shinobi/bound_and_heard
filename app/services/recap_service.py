@@ -88,6 +88,14 @@ def generate_yearly_recap(
     )
 
 
+def export_recap_markdown(recap: Recap, *, output_dir: str | Path = "data/exports") -> str:
+    directory = Path(output_dir) / "recaps" / recap.period_type
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"{_recap_slug(recap)}.md"
+    path.write_text(_recap_markdown(recap), encoding="utf-8")
+    return str(path)
+
+
 def generate_recap(
     db: Session,
     *,
@@ -199,6 +207,110 @@ def _write_recap_artifact(payload: dict[str, object], *, output_dir: str | Path,
     path = directory / f"{recap_period.slug}.json"
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return str(path)
+
+
+def _recap_slug(recap: Recap) -> str:
+    if recap.period_type == "quarter":
+        return f"{recap.year}-q{recap.quarter}"
+    return str(recap.year)
+
+
+def _recap_markdown(recap: Recap) -> str:
+    payload = recap.payload or {}
+    lines = [
+        f"# {recap.title}",
+        "",
+        f"Generated: {recap.generated_at.isoformat()}",
+        f"Period: {_recap_period_label(recap)}",
+        f"Source artifact: {recap.output_path}",
+        "",
+        recap.summary,
+        "",
+        "## Totals",
+        "",
+        f"- Books completed: {payload.get('completed_count', 'Not available')}",
+        f"- Pages read: {payload.get('pages_read', 'Not available')}",
+        f"- Audiobook seconds: {payload.get('audiobook_seconds', 'Not available')}",
+        f"- Lifetime enjoyed seconds: {payload.get('lifetime_enjoyed_seconds', 'Not available')}",
+        "",
+        "## Favorites",
+        "",
+        f"- Favorite author: {_first_label(payload.get('favorite_authors'))}",
+        f"- Favorite genre: {_first_label(payload.get('favorite_genres'))}",
+        f"- Favorite series: {_first_name(payload.get('favorite_series'))}",
+        "",
+        "## Highlights",
+        "",
+        f"- Longest book: {_longest_book_label(payload.get('longest_book'))}",
+        f"- Most active month: {_month_label(payload.get('most_active_month'))}",
+        "",
+        "## Format Mix",
+        "",
+    ]
+    format_breakdown = payload.get("format_breakdown")
+    if isinstance(format_breakdown, dict) and format_breakdown:
+        lines.extend(f"- {label}: {count}" for label, count in sorted(format_breakdown.items()))
+    else:
+        lines.append("- Not available")
+    repeats = payload.get("repeats") if isinstance(payload.get("repeats"), dict) else {}
+    series_progress = payload.get("series_progress") if isinstance(payload.get("series_progress"), dict) else {}
+    lines.extend(
+        [
+            "",
+            "## Repeats",
+            "",
+            f"- Re-reads: {repeats.get('rereads', 0)}",
+            f"- Re-listens: {repeats.get('relistens', 0)}",
+            f"- Likely re-listens: {repeats.get('likely_relistens', 0)} (estimated)",
+            "",
+            "## Series Progress",
+            "",
+            f"- Active series: {series_progress.get('active_series_count', 0)}",
+            f"- Completed series entries: {series_progress.get('completed_series_entries', 0)}",
+            f"- Planned entries: {series_progress.get('planned_entries', 0)}",
+            f"- Collection ranges: {series_progress.get('collection_range_entries', 0)}",
+            "",
+        ]
+    )
+    return "\n".join(str(line) for line in lines)
+
+
+def _recap_period_label(recap: Recap) -> str:
+    if recap.period_type == "quarter":
+        return f"Q{recap.quarter} {recap.year}"
+    return str(recap.year)
+
+
+def _first_label(value: object) -> str:
+    if isinstance(value, list) and value and isinstance(value[0], dict):
+        return str(value[0].get("label") or "Not available")
+    return "Not available"
+
+
+def _first_name(value: object) -> str:
+    if isinstance(value, list) and value and isinstance(value[0], dict):
+        return str(value[0].get("name") or "Not available")
+    return "Not available"
+
+
+def _longest_book_label(value: object) -> str:
+    if not isinstance(value, dict):
+        return "Not available"
+    title = value.get("title") or "Unknown title"
+    metric = value.get("metric") or "value"
+    metric_value = value.get("value") or "Not available"
+    return f"{title} ({metric_value} {metric})"
+
+
+def _month_label(value: object) -> str:
+    if not isinstance(value, dict):
+        return "Not available"
+    year = value.get("year")
+    month = value.get("month")
+    count = value.get("count")
+    if not isinstance(year, int) or not isinstance(month, int):
+        return "Not available"
+    return f"{year}-{month:02d} ({count} completed)"
 
 
 def _longest_completed_book(db: Session, *, user_id: int, period: PeriodRange) -> dict[str, object] | None:

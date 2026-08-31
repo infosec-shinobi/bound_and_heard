@@ -129,13 +129,13 @@ Derived from `docs/ROADMAP.md` MVP 7 - Analytics and Recaps, with continuity fro
 
 ## Chunk 10 - Recap Export
 
-- [ ] Decide supported export formats for MVP 7: Markdown, HTML, or both
-- [ ] Add export service for selected recap format
-- [ ] Preserve exported files under local data/export storage
-- [ ] Add protected export action for generated recaps if exports create files
-- [ ] Keep viewing existing recap pages read-only where possible
-- [ ] Include enough metadata in exports to identify period and generated date
-- [ ] Add tests for export content and permissions
+- [x] Decide supported export formats for MVP 7: Markdown, HTML, or both
+- [x] Add export service for selected recap format
+- [x] Preserve exported files under local data/export storage
+- [x] Add protected export action for generated recaps if exports create files
+- [x] Keep viewing existing recap pages read-only where possible
+- [x] Include enough metadata in exports to identify period and generated date
+- [x] Add tests for export content and permissions
 
 ## Chunk 11 - Permissions And Safety
 

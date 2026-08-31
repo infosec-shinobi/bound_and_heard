@@ -12,7 +12,12 @@ from sqlalchemy.pool import StaticPool
 from app.core.bootstrap import DEFAULT_LOCAL_USER_ID
 from app.core.database import Base
 from app.models import Book, BookGenre, Genre, ReadingEvent, Series, SeriesBook, User
-from app.services.recap_service import RecapAlreadyExistsError, generate_quarterly_recap, generate_yearly_recap
+from app.services.recap_service import (
+    RecapAlreadyExistsError,
+    export_recap_markdown,
+    generate_quarterly_recap,
+    generate_yearly_recap,
+)
 
 
 def make_session_factory() -> sessionmaker[Session]:
@@ -157,3 +162,24 @@ def test_generate_yearly_recap_uses_quarter_zero_and_is_deterministic(tmp_path: 
         assert overwritten.quarter == 0
         assert overwritten.payload == first_payload
         assert Path(overwritten.output_path).read_text(encoding="utf-8") == first_artifact
+
+
+def test_export_recap_markdown_writes_metadata_and_metrics(tmp_path: Path) -> None:
+    session_factory = make_session_factory()
+    with session_factory() as db:
+        add_user(db)
+        seed_recap_data(db)
+        db.commit()
+        recap = generate_quarterly_recap(db, user_id=DEFAULT_LOCAL_USER_ID, year=2026, quarter=2, output_dir=tmp_path)
+        db.commit()
+
+        output_path = Path(export_recap_markdown(recap, output_dir=tmp_path / "exports"))
+
+        assert output_path == tmp_path / "exports" / "recaps" / "quarter" / "2026-q2.md"
+        content = output_path.read_text(encoding="utf-8")
+        assert "# Q2 2026 Recap" in content
+        assert "Period: Q2 2026" in content
+        assert "Generated:" in content
+        assert "Source artifact:" in content
+        assert "- Books completed: 2" in content
+        assert "- Favorite series: Recap Saga" in content

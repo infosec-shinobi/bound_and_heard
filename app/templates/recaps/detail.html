@@ -9,11 +9,19 @@
     </div>
     <div class="col-lg-4 text-lg-end">
       <a class="btn btn-outline-secondary" href="/recaps">All Recaps</a>
+      {% if can_write %}
+        <form class="d-inline" method="post" action="/recaps/{{ recap.id }}/export">
+          <button class="btn btn-primary" type="submit">Export Markdown</button>
+        </form>
+      {% endif %}
     </div>
   </div>
 
   {% if message %}
     <div class="alert alert-success" role="status">{{ message }}</div>
+  {% endif %}
+  {% if error %}
+    <div class="alert alert-danger" role="alert">{{ error }}</div>
   {% endif %}
 
   <div class="row g-3 mb-4">
