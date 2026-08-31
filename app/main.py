@@ -13,6 +13,7 @@ from app.api.analytics import router as analytics_router
 from app.api.books import router as books_router
 from app.api.imports import router as imports_router
 from app.api.pages import router as pages_router
+from app.api.recaps import router as recaps_router
 from app.api.scraping import router as scraping_router
 from app.api.series import router as series_router
 from app.api.settings import router as settings_router
@@ -85,6 +86,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(analytics_router)
     app.include_router(books_router)
     app.include_router(imports_router)
+    app.include_router(recaps_router)
     app.include_router(scraping_router)
     app.include_router(series_router)
     app.include_router(settings_router)

@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <div class="row align-items-center gy-3 mb-4">
+    <div class="col-lg-8">
+      <p class="app-kicker small fw-semibold mb-2">{% if recap.period_type == 'quarter' %}Quarterly recap{% else %}Yearly recap{% endif %}</p>
+      <h1 class="display-6 mb-2">{{ recap.title }}</h1>
+      <p class="lead app-muted mb-0">{{ recap.summary }}</p>
+    </div>
+    <div class="col-lg-4 text-lg-end">
+      <a class="btn btn-outline-secondary" href="/recaps">All Recaps</a>
+    </div>
+  </div>
+
+  {% if message %}
+    <div class="alert alert-success" role="status">{{ message }}</div>
+  {% endif %}
+
+  <div class="row g-3 mb-4">
+    <div class="col-sm-6 col-xl-3"><section class="card h-100"><div class="card-body"><p class="app-muted mb-1">Books Completed</p><p class="display-6 mb-0">{{ format_count(payload.get('completed_count')) }}</p></div></section></div>
+    <div class="col-sm-6 col-xl-3"><section class="card h-100"><div class="card-body"><p class="app-muted mb-1">Pages Read</p><p class="display-6 mb-0">{{ format_count(payload.get('pages_read')) }}</p></div></section></div>
+    <div class="col-sm-6 col-xl-3"><section class="card h-100"><div class="card-body"><p class="app-muted mb-1">Audiobook Hours</p><p class="display-6 mb-0">{{ format_hours(payload.get('audiobook_seconds')) }}</p></div></section></div>
+    <div class="col-sm-6 col-xl-3"><section class="card h-100"><div class="card-body"><p class="app-muted mb-1">Lifetime Enjoyed</p><p class="display-6 mb-0">{{ format_hours(payload.get('lifetime_enjoyed_seconds')) }}</p><p class="small app-muted mb-0">May include Libby-reported lifetime time.</p></div></section></div>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-lg-6">
+      <section class="card h-100">
+        <div class="card-body">
+          <h2 class="h5 mb-3">Favorites</h2>
+          <dl class="row mb-0 app-detail-list">
+            <dt class="col-5">Favorite Author</dt><dd class="col-7">{% if payload.get('favorite_authors') %}{{ payload.get('favorite_authors')[0].label }}{% else %}<span class="app-muted">Not available</span>{% endif %}</dd>
+            <dt class="col-5">Favorite Genre</dt><dd class="col-7">{% if payload.get('favorite_genres') %}{{ payload.get('favorite_genres')[0].label }}{% else %}<span class="app-muted">Not available</span>{% endif %}</dd>
+            <dt class="col-5">Favorite Series</dt><dd class="col-7">{% if payload.get('favorite_series') %}{{ payload.get('favorite_series')[0].name }}{% else %}<span class="app-muted">Not available</span>{% endif %}</dd>
+          </dl>
+        </div>
+      </section>
+    </div>
+    <div class="col-lg-6">
+      <section class="card h-100">
+        <div class="card-body">
+          <h2 class="h5 mb-3">Highlights</h2>
+          {% set longest = payload.get('longest_book') %}
+          {% set active_month = payload.get('most_active_month') %}
+          <dl class="row mb-0 app-detail-list">
+            <dt class="col-5">Longest Book</dt><dd class="col-7">{% if longest %}{{ longest.title }} <span class="app-muted">({{ format_count(longest.value) }} {{ longest.metric }})</span>{% else %}<span class="app-muted">Not available</span>{% endif %}</dd>
+            <dt class="col-5">Most Active Month</dt><dd class="col-7">{% if active_month %}{{ active_month.year }}-{{ '%02d'|format(active_month.month) }} <span class="app-muted">({{ active_month.count }} completed)</span>{% else %}<span class="app-muted">Not available</span>{% endif %}</dd>
+          </dl>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div class="row g-4 mt-1">
+    <div class="col-lg-4">
+      <section class="card h-100">
+        <div class="card-body">
+          <h2 class="h5 mb-3">Format Mix</h2>
+          <div class="table-responsive">
+            <table class="table table-sm mb-0"><thead><tr><th>Format</th><th class="text-end">Books</th></tr></thead><tbody>
+              {% for label, count in payload.get('format_breakdown', {}).items() %}
+                <tr><td>{{ label|replace('_', ' ')|title }}</td><td class="text-end">{{ count }}</td></tr>
+              {% else %}
+                <tr><td colspan="2" class="app-muted">Not available</td></tr>
+              {% endfor %}
+            </tbody></table>
+          </div>
+        </div>
+      </section>
+    </div>
+    <div class="col-lg-4">
+      <section class="card h-100">
+        <div class="card-body">
+          <h2 class="h5 mb-3">Repeat Highlights</h2>
+          {% set repeats = payload.get('repeats', {}) %}
+          <dl class="row mb-0 app-detail-list">
+            <dt class="col-7">Re-reads</dt><dd class="col-5 text-end">{{ repeats.get('rereads', 0) }}</dd>
+            <dt class="col-7">Re-listens</dt><dd class="col-5 text-end">{{ repeats.get('relistens', 0) }}</dd>
+            <dt class="col-7">Likely Re-listens</dt><dd class="col-5 text-end">{{ repeats.get('likely_relistens', 0) }} <span class="app-muted">estimated</span></dd>
+          </dl>
+        </div>
+      </section>
+    </div>
+    <div class="col-lg-4">
+      <section class="card h-100">
+        <div class="card-body">
+          <h2 class="h5 mb-3">Series Progress</h2>
+          {% set series = payload.get('series_progress', {}) %}
+          <dl class="row mb-0 app-detail-list">
+            <dt class="col-7">Active Series</dt><dd class="col-5 text-end">{{ series.get('active_series_count', 0) }}</dd>
+            <dt class="col-7">Completed Entries</dt><dd class="col-5 text-end">{{ series.get('completed_series_entries', 0) }}</dd>
+            <dt class="col-7">Planned Entries</dt><dd class="col-5 text-end">{{ series.get('planned_entries', 0) }}</dd>
+            <dt class="col-7">Collection Ranges</dt><dd class="col-5 text-end">{{ series.get('collection_range_entries', 0) }}</dd>
+          </dl>
+        </div>
+      </section>
+    </div>
+  </div>
+{% endblock %}

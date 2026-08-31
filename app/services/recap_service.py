@@ -158,6 +158,14 @@ def build_recap_payload(db: Session, *, user_id: int, recap_period: RecapPeriod)
             {"id": item.series_id, "name": item.name, "completed_entries": item.completed_entries}
             for item in series_summary.most_active_series
         ],
+        "series_progress": {
+            "total_series": series_summary.total_series,
+            "completed_series_entries": series_summary.completed_series_entries,
+            "active_series_count": series_summary.active_series_count,
+            "planned_entries": series_summary.planned_entries,
+            "collection_range_entries": series_summary.collection_range_entries,
+            "collection_covered_positions": series_summary.collection_covered_positions,
+        },
         "longest_book": longest_book,
         "most_active_month": None
         if most_active_month is None

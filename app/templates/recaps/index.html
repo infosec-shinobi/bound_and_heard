@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <div class="row align-items-center gy-3 mb-4">
+    <div class="col-lg-8">
+      <p class="app-kicker small fw-semibold mb-2">Generated recaps</p>
+      <h1 class="display-6 mb-2">Recaps</h1>
+      <p class="lead app-muted mb-0">Read-only quarterly and yearly recap pages generated from your local analytics.</p>
+    </div>
+  </div>
+
+  {% if message %}
+    <div class="alert alert-success" role="status">{{ message }}</div>
+  {% endif %}
+  {% if error %}
+    <div class="alert alert-danger" role="alert">{{ error }}</div>
+  {% endif %}
+
+  <section class="card mb-4">
+    <div class="card-body">
+      <div class="row g-3 align-items-end">
+        <div class="col-lg-4">
+          <h2 class="h5 mb-1">Generate A Recap</h2>
+          <p class="app-muted mb-lg-0">Create a yearly or quarterly recap from current analytics.</p>
+        </div>
+        {% if can_write %}
+          <form class="col-lg-8" method="post" action="/recaps/generate">
+            <div class="row g-2 align-items-end">
+              <div class="col-sm-3">
+                <label class="form-label" for="period_type">Type</label>
+                <select class="form-select" id="period_type" name="period_type">
+                  <option value="year">Yearly</option>
+                  <option value="quarter">Quarterly</option>
+                </select>
+              </div>
+              <div class="col-sm-3">
+                <label class="form-label" for="year">Year</label>
+                <input class="form-control" id="year" name="year" type="number" min="1900" max="2200" value="{{ current_year }}" required>
+              </div>
+              <div class="col-sm-2">
+                <label class="form-label" for="quarter">Quarter</label>
+                <select class="form-select" id="quarter" name="quarter">
+                  {% for value in [1, 2, 3, 4] %}<option value="{{ value }}">Q{{ value }}</option>{% endfor %}
+                </select>
+              </div>
+              <div class="col-sm-2 form-check mb-2 ms-2">
+                <input class="form-check-input" id="overwrite" name="overwrite" type="checkbox" value="yes">
+                <label class="form-check-label" for="overwrite">Overwrite</label>
+              </div>
+              <div class="col-sm">
+                <button class="btn btn-primary w-100" type="submit">Generate</button>
+              </div>
+            </div>
+          </form>
+        {% else %}
+          <div class="col-lg-8">
+            <div class="alert app-status-alert mb-0" role="status">{{ write_disabled_reason }}</div>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead><tr><th>Recap</th><th>Period</th><th>Generated</th><th class="text-end">Open</th></tr></thead>
+          <tbody>
+            {% for recap in recaps %}
+              <tr>
+                <td>{{ recap.title }}</td>
+                <td>{% if recap.period_type == 'quarter' %}Q{{ recap.quarter }} {{ recap.year }}{% else %}{{ recap.year }}{% endif %}</td>
+                <td>{{ recap.generated_at.date().isoformat() }}</td>
+                <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{% if recap.period_type == 'quarter' %}/recaps/quarter/{{ recap.year }}/{{ recap.quarter }}{% else %}/recaps/year/{{ recap.year }}{% endif %}">View</a></td>
+              </tr>
+            {% else %}
+              <tr><td colspan="4" class="app-muted">No generated recaps yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+{% endblock %}

@@ -112,20 +112,20 @@ Derived from `docs/ROADMAP.md` MVP 7 - Analytics and Recaps, with continuity fro
 
 ## Chunk 9 - Recap Pages
 
-- [ ] Add quarterly recap page
-- [ ] Add yearly recap page
-- [ ] Show books completed
-- [ ] Show favorite author
-- [ ] Show favorite genre
-- [ ] Show favorite series
-- [ ] Show longest book
-- [ ] Show most active month
-- [ ] Show format mix
-- [ ] Show pages read and audiobook hours when known
-- [ ] Show re-read/re-listen highlights when available
-- [ ] Show series progress highlights
-- [ ] Clearly label missing or estimated metrics
-- [ ] Keep recap pages usable on desktop and mobile
+- [x] Add quarterly recap page
+- [x] Add yearly recap page
+- [x] Show books completed
+- [x] Show favorite author
+- [x] Show favorite genre
+- [x] Show favorite series
+- [x] Show longest book
+- [x] Show most active month
+- [x] Show format mix
+- [x] Show pages read and audiobook hours when known
+- [x] Show re-read/re-listen highlights when available
+- [x] Show series progress highlights
+- [x] Clearly label missing or estimated metrics
+- [x] Keep recap pages usable on desktop and mobile
 
 ## Chunk 10 - Recap Export
 
@@ -141,12 +141,12 @@ Derived from `docs/ROADMAP.md` MVP 7 - Analytics and Recaps, with continuity fro
 
 - [ ] Keep analytics viewing available to read-only users
 - [ ] Protect prior entry mutations behind admin login
-- [ ] Protect recap generation behind admin login
+- [x] Protect recap generation behind admin login
 - [ ] Protect recap overwrite/export mutations behind admin login when they write files or database rows
 - [ ] Preserve imported Libby history, scraped progress, metadata enrichment data, and series assignments during analytics/recap generation
 - [ ] Avoid destructive recomputation of source data
-- [ ] Return clear UI messages for generated, skipped, overwritten, and failed recap actions
-- [ ] Add tests for read-only access and admin-only mutations
+- [x] Return clear UI messages for generated, skipped, overwritten, and failed recap actions
+- [x] Add tests for read-only access and admin-only mutations
 
 ## Chunk 12 - Tests
 
