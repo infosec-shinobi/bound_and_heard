@@ -4,7 +4,7 @@ from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Form, Query, Request, status as http_status
 from fastapi.responses import RedirectResponse, Response
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, joinedload
 from starlette.responses import HTMLResponse
 
@@ -12,7 +12,7 @@ from app.core.bootstrap import DEFAULT_LOCAL_USER_ID
 from app.core.database import get_db
 from app.core.templates import template_context, templates
 from app.core.write_protection import require_write_access
-from app.models import Book, LibbySeriesSnapshot, Series, SeriesBook
+from app.models import Book, LibbySeriesHint, LibbySeriesSnapshot, Series, SeriesBook
 from app.services import libby_scrape_runner
 from app.services.libby_series import (
     apply_libby_series_population,
@@ -60,6 +60,13 @@ class SeriesDetailEntry:
     is_next_unread: bool
     is_collection: bool
     is_covered_by_collection: bool
+
+
+@dataclass(frozen=True)
+class SeriesSuggestionGroup:
+    series_name: str
+    libby_series_url: str
+    hints: list[LibbySeriesHint]
 
 
 def is_series_entry_completed(entry: SeriesBook) -> bool:
@@ -211,6 +218,10 @@ def clean_optional(value: str | None) -> str | None:
     return value or None
 
 
+def normalize_series_name(value: str | None) -> str:
+    return " ".join((value or "").casefold().split())
+
+
 def submitted_series_form(
     *,
     name: str | None,
@@ -280,6 +291,14 @@ def series_redirect(**params: str) -> RedirectResponse:
     )
 
 
+def series_suggestions_redirect(**params: str) -> RedirectResponse:
+    query = urlencode(params)
+    target = "/series/suggestions"
+    if query:
+        target = f"{target}?{query}"
+    return RedirectResponse(target, status_code=http_status.HTTP_303_SEE_OTHER)
+
+
 def series_detail_redirect(series_id: int, **params: str) -> RedirectResponse:
     query = urlencode(params)
     target = f"/series/{series_id}"
@@ -321,6 +340,55 @@ def get_series_entry(db: Session, series: Series, entry_id: int) -> SeriesBook |
     if entry is None or entry.series_id != series.id:
         return None
     return entry
+
+
+def apply_libby_series_hint(db: Session, hint: LibbySeriesHint) -> tuple[Series | None, str]:
+    if not hint.series_name:
+        return None, "Libby series suggestion is missing a series name."
+    existing_assignment = db.scalars(select(SeriesBook).where(SeriesBook.book_id == hint.book_id)).first()
+    if existing_assignment is not None:
+        hint.status = "skipped"
+        return None, "Book already has a series assignment. No Libby suggestion was applied."
+
+    normalized_hint_name = normalize_series_name(hint.series_name)
+    series = None
+    for candidate in db.scalars(select(Series).where(Series.user_id == DEFAULT_LOCAL_USER_ID)).all():
+        if normalize_series_name(candidate.name) == normalized_hint_name:
+            series = candidate
+            break
+    if series is None:
+        series = Series(user_id=DEFAULT_LOCAL_USER_ID, name=hint.series_name, status="unknown", wants_to_continue="unknown")
+        db.add(series)
+        db.flush()
+
+    db.add(SeriesBook(series_id=series.id, book_id=hint.book_id, position=hint.position))
+    hint.status = "applied"
+    hint.applied_at = datetime.now(timezone.utc)
+    return series, f"Applied Libby series suggestion: {hint.raw_label}"
+
+
+def pending_series_suggestion_groups(db: Session) -> list[SeriesSuggestionGroup]:
+    hints = db.scalars(
+        select(LibbySeriesHint)
+        .options(joinedload(LibbySeriesHint.book))
+        .where(
+            LibbySeriesHint.user_id == DEFAULT_LOCAL_USER_ID,
+            LibbySeriesHint.status == "pending",
+            LibbySeriesHint.series_name.is_not(None),
+        )
+        .order_by(LibbySeriesHint.series_name.asc(), LibbySeriesHint.position.asc(), LibbySeriesHint.raw_label.asc())
+    ).all()
+    groups: dict[tuple[str, str], SeriesSuggestionGroup] = {}
+    for hint in hints:
+        key = (normalize_series_name(hint.series_name), hint.libby_series_url)
+        if key not in groups:
+            groups[key] = SeriesSuggestionGroup(
+                series_name=hint.series_name or "Unknown series",
+                libby_series_url=hint.libby_series_url,
+                hints=[],
+            )
+        groups[key].hints.append(hint)
+    return sorted(groups.values(), key=lambda group: group.series_name.casefold())
 
 
 def selectable_books_statement(book_q: str | None):
@@ -442,6 +510,13 @@ async def series_list(
     for series_status in db.scalars(count_statement):
         if series_status in status_counts:
             status_counts[series_status] += 1
+    pending_suggestion_count = db.scalar(
+        select(func.count()).select_from(LibbySeriesHint).where(
+            LibbySeriesHint.user_id == DEFAULT_LOCAL_USER_ID,
+            LibbySeriesHint.status == "pending",
+            LibbySeriesHint.series_name.is_not(None),
+        )
+    )
 
     return templates.TemplateResponse(
         request,
@@ -454,10 +529,49 @@ async def series_list(
             selected_status=status or "",
             series_statuses=SERIES_STATUSES,
             status_counts=status_counts,
+            pending_suggestion_count=pending_suggestion_count or 0,
             message=message,
             error=error,
         ),
     )
+
+
+@router.get("/suggestions", response_class=HTMLResponse)
+async def series_suggestions(
+    request: Request,
+    db: Session = Depends(get_db),
+    message: str | None = Query(default=None),
+    error: str | None = Query(default=None),
+) -> HTMLResponse:
+    groups = pending_series_suggestion_groups(db)
+    return templates.TemplateResponse(
+        request,
+        "series/suggestions.html",
+        template_context(
+            request,
+            page_title="Series Suggestions",
+            groups=groups,
+            suggestion_count=sum(len(group.hints) for group in groups),
+            message=message,
+            error=error,
+        ),
+    )
+
+
+@router.post("/suggestions/{hint_id}/apply")
+async def apply_series_suggestion(
+    hint_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_write_access),
+) -> Response:
+    hint = db.get(LibbySeriesHint, hint_id)
+    if hint is None or hint.user_id != DEFAULT_LOCAL_USER_ID or hint.status != "pending":
+        return series_suggestions_redirect(error="Libby series suggestion not found.")
+    series, message = apply_libby_series_hint(db, hint)
+    db.commit()
+    if series is not None:
+        return series_suggestions_redirect(message=f"{message} Open {series.name} when you are ready to scrape and populate it.")
+    return series_suggestions_redirect(error=message)
 
 
 @router.get("/new", response_class=HTMLResponse)

@@ -12,7 +12,18 @@ from app.core.config import Settings
 from app.core.database import Base, get_db
 from app.importers.libby_json import parse_libby_export
 from app.main import create_app
-from app.models import Book, BookProgress, LibbySeriesSnapshot, ReadingEvent, ScrapeJob, ScrapeJobItem, Series, SeriesBook, User
+from app.models import (
+    Book,
+    BookProgress,
+    LibbySeriesHint,
+    LibbySeriesSnapshot,
+    ReadingEvent,
+    ScrapeJob,
+    ScrapeJobItem,
+    Series,
+    SeriesBook,
+    User,
+)
 from app.scrapers.libby_progress import parse_libby_progress
 from app.services.import_service import process_libby_timeline_items
 from app.services.scrape_progress import apply_scraped_progress
@@ -148,6 +159,31 @@ def add_reading_event(session_factory: sessionmaker[Session], book_id: int) -> N
         db.commit()
 
 
+def add_libby_series_hint(
+    session_factory: sessionmaker[Session],
+    book_id: int,
+    *,
+    series_name: str = "Suggested Saga",
+    position: float | None = 1,
+    status: str = "pending",
+) -> LibbySeriesHint:
+    with session_factory() as db:
+        hint = LibbySeriesHint(
+            user_id=DEFAULT_LOCAL_USER_ID,
+            book_id=book_id,
+            libby_series_key=f"series-{book_id}",
+            libby_series_url="https://libbyapp.com/shelf/series-123/page-1",
+            raw_label=f"{series_name} #{position}" if position is not None else series_name,
+            series_name=series_name,
+            position=position,
+            status=status,
+        )
+        db.add(hint)
+        db.commit()
+        db.refresh(hint)
+        return hint
+
+
 def libby_item_for_book(*, title: str, author: str, title_id: str):
     return parse_libby_export(
         {
@@ -178,8 +214,93 @@ def test_series_page_shows_empty_state_for_read_only_user() -> None:
 
     assert response.status_code == 200
     assert "No series found" in response.text
-    assert "Read-only mode" in response.text
-    assert "Set BOUND_AND_HEARD_ADMIN_PASSWORD to enable write actions." in response.text
+
+
+def test_series_page_links_to_suggestions_with_pending_count() -> None:
+    client, session_factory = make_series_client()
+    book = add_book(session_factory, title="Hinted Book", author="Author", libby_title_id="title-1")
+    add_libby_series_hint(session_factory, book.id)
+
+    response = client.get("/series")
+
+    assert response.status_code == 200
+    assert 'href="/series/suggestions"' in response.text
+    assert "Series Suggestions" in response.text
+    assert "1" in response.text
+
+
+def test_series_suggestions_page_groups_pending_libby_hints_for_read_only_users() -> None:
+    client, session_factory = make_series_client(admin_password=None)
+    first = add_book(session_factory, title="Suggested One", author="Author", libby_title_id="title-1")
+    second = add_book(session_factory, title="Suggested Two", author="Author", libby_title_id="title-2")
+    ignored = add_book(session_factory, title="Applied Already", author="Author", libby_title_id="title-3")
+    add_libby_series_hint(session_factory, first.id, series_name="Suggested Saga", position=1)
+    add_libby_series_hint(session_factory, second.id, series_name="Suggested Saga", position=2)
+    add_libby_series_hint(session_factory, ignored.id, series_name="Suggested Saga", position=3, status="applied")
+
+    response = client.get("/series/suggestions")
+
+    assert response.status_code == 200
+    assert "Series Suggestions" in response.text
+    assert "Found 2 pending Libby series suggestions" in response.text
+    assert "Suggested Saga" in response.text
+    assert "Suggested One" in response.text
+    assert "Suggested Two" in response.text
+    assert "Applied Already" not in response.text
+    assert "Open Libby series page" in response.text
+    assert "Force Re-Scrape" in response.text
+    assert "Admin login required" in response.text
+    assert 'method="post"' not in response.text
+
+
+def test_apply_series_suggestion_requires_admin_login() -> None:
+    client, session_factory = make_series_client()
+    book = add_book(session_factory, title="Protected Hint", author="Author", libby_title_id="title-1")
+    hint = add_libby_series_hint(session_factory, book.id)
+
+    response = client.post(f"/series/suggestions/{hint.id}/apply")
+
+    assert response.status_code == 403
+    with session_factory() as db:
+        assert db.query(Series).count() == 0
+        assert db.get(LibbySeriesHint, hint.id).status == "pending"
+
+
+def test_admin_can_apply_series_suggestion_from_suggestions_page() -> None:
+    client, session_factory = make_series_client()
+    login_as_admin(client)
+    book = add_book(session_factory, title="Apply Hint", author="Author", libby_title_id="title-1")
+    hint = add_libby_series_hint(session_factory, book.id, series_name="Apply Saga", position=4)
+
+    response = client.post(f"/series/suggestions/{hint.id}/apply", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"].startswith("/series/suggestions")
+    with session_factory() as db:
+        series = db.query(Series).filter_by(name="Apply Saga").one()
+        assignment = db.query(SeriesBook).filter_by(series_id=series.id, book_id=book.id).one()
+        assert assignment.position == 4
+        applied_hint = db.get(LibbySeriesHint, hint.id)
+        assert applied_hint.status == "applied"
+        assert applied_hint.applied_at is not None
+
+
+def test_apply_series_suggestion_does_not_overwrite_existing_series_assignment() -> None:
+    client, session_factory = make_series_client()
+    login_as_admin(client)
+    book = add_book(session_factory, title="Manual Assignment", author="Author", libby_title_id="title-1")
+    series = add_series(session_factory, name="Manual Saga")
+    add_series_entry(session_factory, series.id, book_id=book.id, position=1)
+    hint = add_libby_series_hint(session_factory, book.id, series_name="Suggested Saga", position=2)
+
+    response = client.post(f"/series/suggestions/{hint.id}/apply", follow_redirects=True)
+
+    assert response.status_code == 200
+    assert "Book already has a series assignment" in response.text
+    with session_factory() as db:
+        assert db.query(Series).filter_by(name="Suggested Saga").count() == 0
+        assert db.query(SeriesBook).filter_by(book_id=book.id).count() == 1
+        assert db.get(LibbySeriesHint, hint.id).status == "skipped"
 
 
 def test_series_page_lists_status_progress_and_next_unread() -> None:
