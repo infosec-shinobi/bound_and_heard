@@ -150,55 +150,55 @@ Derived from `docs/ROADMAP.md` MVP 7 - Analytics and Recaps, with continuity fro
 
 ## Chunk 12 - Tests
 
-- [ ] Test period boundary calculations
-- [ ] Test monthly completed-book counts
-- [ ] Test quarterly and yearly completed-book counts
-- [ ] Test format breakdown
-- [ ] Test top author ranking
-- [ ] Test top genre ranking
-- [ ] Test pages-read totals with missing page counts
-- [ ] Test audiobook-hour totals with missing durations
-- [ ] Test partial-progress summaries
-- [ ] Test re-read and re-listen counts from completed events
-- [ ] Test prior read/listen entries
-- [ ] Test lifetime enjoyed time aggregation
-- [ ] Test repeat-read/listen heuristic safety
-- [ ] Test series activity and favorite-series calculations
-- [ ] Test recap generation for quarter and year
-- [ ] Test recap export if implemented
-- [ ] Test permissions for analytics, prior entries, generation, and exports
-- [ ] Verify full `pytest` pass
+- [x] Test period boundary calculations
+- [x] Test monthly completed-book counts
+- [x] Test quarterly and yearly completed-book counts
+- [x] Test format breakdown
+- [x] Test top author ranking
+- [x] Test top genre ranking
+- [x] Test pages-read totals with missing page counts
+- [x] Test audiobook-hour totals with missing durations
+- [x] Test partial-progress summaries
+- [x] Test re-read and re-listen counts from completed events
+- [x] Test prior read/listen entries
+- [x] Test lifetime enjoyed time aggregation
+- [x] Test repeat-read/listen heuristic safety
+- [x] Test series activity and favorite-series calculations
+- [x] Test recap generation for quarter and year
+- [x] Test recap export if implemented
+- [x] Test permissions for analytics, prior entries, generation, and exports
+- [x] Verify full `pytest` pass
 
 ## Chunk 13 - Documentation
 
-- [ ] Update README with analytics dashboard workflow
-- [ ] Document recap generation workflow
-- [ ] Document prior read/listen entry behavior
-- [ ] Document lifetime enjoyed time versus current progress
-- [ ] Document re-read/re-listen counting rules
-- [ ] Document Libby `picked up` count limitations
-- [ ] Document recap export behavior and storage location
-- [ ] Update database documentation for recap/prior-entry schema changes
-- [ ] Update architecture documentation if analytics or recap services materially change
+- [x] Update README with analytics dashboard workflow
+- [x] Document recap generation workflow
+- [x] Document prior read/listen entry behavior
+- [x] Document lifetime enjoyed time versus current progress
+- [x] Document re-read/re-listen counting rules
+- [x] Document Libby `picked up` count limitations
+- [x] Document recap export behavior and storage location
+- [x] Update database documentation for recap/prior-entry schema changes
+- [x] Update architecture documentation if analytics or recap services materially change
 
 ## MVP 7 Done Criteria
 
-- [ ] User can view books completed by month
-- [ ] User can view format breakdown
-- [ ] User can view top authors
-- [ ] User can view top genres
-- [ ] User can view books completed by selected period
-- [ ] User can view audiobook hours when known
-- [ ] User can view pages read when known
-- [ ] User can view partial-progress summaries
-- [ ] User can see re-read and re-listen counts derived from completed events
-- [ ] User can add prior read/listen entries for books consumed before tracking began
-- [ ] Lifetime enjoyed time is shown separately from current-loan progress
-- [ ] Libby `picked up` session count is not treated as true completed read/listen count
-- [ ] User can view series activity
-- [ ] User can generate a quarterly recap page
-- [ ] User can generate a yearly recap page
-- [ ] Recap shows favorite author, favorite genre, favorite series, longest book, most active month, and format mix
-- [ ] User can export a recap to Markdown or HTML
-- [ ] Analytics and recap generation preserve source data and manual edits
-- [ ] Basic tests pass
+- [x] User can view books completed by month
+- [x] User can view format breakdown
+- [x] User can view top authors
+- [x] User can view top genres
+- [x] User can view books completed by selected period
+- [x] User can view audiobook hours when known
+- [x] User can view pages read when known
+- [x] User can view partial-progress summaries
+- [x] User can see re-read and re-listen counts derived from completed events
+- [x] User can add prior read/listen entries for books consumed before tracking began
+- [x] Lifetime enjoyed time is shown separately from current-loan progress
+- [x] Libby `picked up` session count is not treated as true completed read/listen count
+- [x] User can view series activity
+- [x] User can generate a quarterly recap page
+- [x] User can generate a yearly recap page
+- [x] Recap shows favorite author, favorite genre, favorite series, longest book, most active month, and format mix
+- [x] User can export a recap to Markdown or HTML
+- [x] Analytics and recap generation preserve source data and manual edits
+- [x] Basic tests pass

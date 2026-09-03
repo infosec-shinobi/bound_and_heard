@@ -116,6 +116,10 @@ Bound & Heard should generate fun recap pages:
 - Series progress
 - Suggested next reads
 
+MVP 7 stores generated recap metadata in the `recaps` table and writes deterministic JSON artifacts under the configured recap directory. Recap pages read from the stored payload so generated pages remain stable until an admin explicitly overwrites the recap.
+
+Markdown recap exports are written separately under the configured export directory. Viewing analytics and existing recaps is read-only, while prior-entry mutations, recap generation, overwrite, and export actions require admin write access.
+
 ### Agentic Recommendations
 
 A future recommendation agent should review the user's reading/listening history and suggest new content.

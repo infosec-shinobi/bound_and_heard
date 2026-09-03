@@ -699,6 +699,8 @@ When importing Libby JSON:
 
 Manual quick corrections from the import review workflow update the book row directly and preserve imported source rows. Status, manual progress, and completion-date corrections create `reading_events` rows with `source="manual"`, `event_type="manually_corrected"`, and `raw_data.changed_fields` describing the before/after values. Clearing manual progress or completion date records `to: null`. Setting or clearing completion date does not implicitly change status.
 
+Prior read/listen entries are stored as `reading_events` rows with `source="manual"`, `event_type="manually_completed"`, and `raw_data.prior_entry = true`. They represent user-entered completion evidence for books consumed before tracking began and do not mutate the linked book row or imported Libby events.
+
 ## Progress Skip Logic
 
 A book does not need progress scraping if:

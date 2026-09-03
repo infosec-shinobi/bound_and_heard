@@ -34,6 +34,10 @@ BOUND_AND_HEARD_ADMIN_PASSWORD=change-me
 BOUND_AND_HEARD_SESSION_SECRET=change-this-dev-secret
 # Optional: improves Google Books metadata lookup quota behavior.
 BOUND_AND_HEARD_GOOGLE_BOOKS_API_KEY=
+# Optional: generated recap JSON artifacts.
+BOUND_AND_HEARD_RECAPS_DIR=data/recaps
+# Optional: exported recap Markdown files.
+BOUND_AND_HEARD_EXPORTS_DIR=data/exports
 ```
 
 Run database migrations:
@@ -79,6 +83,14 @@ Directory used for the persistent local Playwright browser profile for Libby. De
 `BOUND_AND_HEARD_SCRAPED_DIR`
 
 Directory used to preserve Libby scrape snapshots. Defaults to `data/scraped`. Snapshot files can contain private reading activity and should not be committed.
+
+`BOUND_AND_HEARD_RECAPS_DIR`
+
+Directory used to preserve generated recap JSON artifacts. Defaults to `data/recaps`.
+
+`BOUND_AND_HEARD_EXPORTS_DIR`
+
+Directory used to preserve exported recap files. Defaults to `data/exports`.
 
 `BOUND_AND_HEARD_APP_NAME`
 
@@ -241,6 +253,42 @@ Books are skipped when their latest Libby borrow timestamp is less than or equal
 Failed items can be retried or skipped from the job detail page. Failed, cancelled, or completed jobs with open items can be recovered and restarted. Old jobs can be deleted from job history; deleting a job removes database job/item/snapshot records but does not delete snapshot files already written to disk.
 
 Raw scrape snapshots are stored under `data/scraped/libby/job-{job_id}/item-{item_id}/` by default. These files may contain titles, library information, reading journey text, progress, and other private account state. Keep `data/**` untracked and avoid sharing snapshots unless you have reviewed them.
+
+## Analytics And Recaps
+
+Open `/analytics` from the navigation to view read-only analytics. The dashboard supports all-time, yearly, and quarterly filters and shows completed books by month, completed count, format breakdown, top authors, top genres, pages read, audiobook time, partial progress, repeat counts, lifetime enjoyed time, and series activity.
+
+Analytics views are available without admin login. They do not create, edit, delete, or recompute source records.
+
+### Prior Read/Listen Entries
+
+Book detail pages let admins add prior read/listen entries for books consumed before tracking began. Prior entries are stored as `reading_events` rows with `source="manual"`, `event_type="manually_completed"`, and `raw_data.prior_entry=true`.
+
+Prior entries count toward analytics and recap completion totals. They do not rewrite the book status, completion date, Libby import events, or scraped progress. Existing prior entries can be deleted from the book detail page by admins.
+
+### Lifetime Enjoyed And Repeats
+
+Lifetime enjoyed time is separate from current-loan progress. `book_progress.position_seconds` is the current observed position, while `book_progress.enjoyed_seconds` is Libby-reported lifetime enjoyed/listened time when available.
+
+Re-read and re-listen counts are derived from completion events. Libby's `picked up this audiobook N times` text is a session/activity count and is not treated as a true read/listen count. Conservative Libby repeat heuristics are shown separately as lower-confidence likely re-listens when enough borrow and duration evidence exists.
+
+### Recap Generation
+
+Recap generation requires admin login because it writes a database row and JSON artifact.
+
+1. Open `/admin/login` and sign in.
+2. Open `/recaps` from the navigation.
+3. Choose yearly or quarterly generation.
+4. Enter the year and quarter when needed.
+5. Select overwrite only when you intentionally want to regenerate an existing recap.
+
+Generated recap JSON artifacts are stored under `BOUND_AND_HEARD_RECAPS_DIR`, usually `data/recaps/year/` or `data/recaps/quarter/`. Existing recap pages remain viewable without admin login.
+
+### Recap Export
+
+MVP 7 supports Markdown recap exports. Open a generated recap while logged in as admin and use `Export Markdown`. Exported files are stored under `BOUND_AND_HEARD_EXPORTS_DIR`, usually `data/exports/recaps/year/` or `data/exports/recaps/quarter/`.
+
+Exports include enough metadata to identify the recap title, period, generated timestamp, and source recap artifact path. Exporting writes files and requires admin login; viewing existing recap pages remains read-only.
 
 ## Common Commands
 
