@@ -11,7 +11,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.bootstrap import DEFAULT_LOCAL_USER_ID
 from app.core.database import Base
-from app.models import Book, BookGenre, Genre, ReadingEvent, Series, SeriesBook, User
+from app.models import Book, BookGenre, BookProgress, Genre, MetadataEnrichmentRun, ReadingEvent, Series, SeriesBook, User
 from app.services.recap_service import (
     RecapAlreadyExistsError,
     export_recap_markdown,
@@ -183,3 +183,105 @@ def test_export_recap_markdown_writes_metadata_and_metrics(tmp_path: Path) -> No
         assert "Source artifact:" in content
         assert "- Books completed: 2" in content
         assert "- Favorite series: Recap Saga" in content
+
+
+def test_generate_recap_preserves_source_data_and_only_adds_recap(tmp_path: Path) -> None:
+    session_factory = make_session_factory()
+    with session_factory() as db:
+        add_user(db)
+        book = add_book(db, title="Preserved Libby", author="Author", book_format="audiobook", audio_seconds=3600)
+        libby_event = ReadingEvent(
+            user_id=DEFAULT_LOCAL_USER_ID,
+            book_id=book.id,
+            source="libby",
+            source_event_id="libby-preserved-borrow",
+            event_type="borrowed",
+            event_date=datetime(2026, 4, 1, tzinfo=timezone.utc),
+            raw_data={"library": "test"},
+        )
+        completed_event = ReadingEvent(
+            user_id=DEFAULT_LOCAL_USER_ID,
+            book_id=book.id,
+            source="libby",
+            source_event_id="libby-preserved-completed",
+            event_type="completed",
+            event_date=datetime(2026, 4, 15, tzinfo=timezone.utc),
+            progress_percent=100,
+            raw_data={"activity": "Completed"},
+        )
+        progress = BookProgress(
+            user_id=DEFAULT_LOCAL_USER_ID,
+            book_id=book.id,
+            source="scraped",
+            progress_percent=100,
+            position_seconds=3600,
+            enjoyed_seconds=3600,
+        )
+        enrichment = MetadataEnrichmentRun(
+            user_id=DEFAULT_LOCAL_USER_ID,
+            book_id=book.id,
+            provider="open_library",
+            lookup_type="title_author",
+            normalized_query="preserved libby author",
+            status="succeeded",
+            fields_applied={"page_count": {"from": None, "to": 123}},
+        )
+        series = Series(user_id=DEFAULT_LOCAL_USER_ID, name="Preserved Series", status="active", wants_to_continue="yes")
+        db.add_all([libby_event, completed_event, progress, enrichment, series])
+        db.flush()
+        assignment = SeriesBook(series_id=series.id, book_id=book.id, position=1)
+        db.add(assignment)
+        db.commit()
+
+        before = {
+            "book": (book.title, book.primary_author_name, book.audio_seconds, book.status),
+            "events": [
+                (event.source, event.source_event_id, event.event_type, event.event_date, event.progress_percent, event.raw_data)
+                for event in db.query(ReadingEvent).order_by(ReadingEvent.id).all()
+            ],
+            "progress": (
+                progress.source,
+                progress.progress_percent,
+                progress.position_seconds,
+                progress.enjoyed_seconds,
+            ),
+            "enrichment": (
+                enrichment.provider,
+                enrichment.lookup_type,
+                enrichment.normalized_query,
+                enrichment.status,
+                enrichment.fields_applied,
+            ),
+            "series_assignment": (assignment.series_id, assignment.book_id, assignment.position, assignment.position_end),
+        }
+
+        generate_quarterly_recap(db, user_id=DEFAULT_LOCAL_USER_ID, year=2026, quarter=2, output_dir=tmp_path)
+        db.commit()
+
+        db.refresh(book)
+        db.refresh(progress)
+        db.refresh(enrichment)
+        db.refresh(assignment)
+        after = {
+            "book": (book.title, book.primary_author_name, book.audio_seconds, book.status),
+            "events": [
+                (event.source, event.source_event_id, event.event_type, event.event_date, event.progress_percent, event.raw_data)
+                for event in db.query(ReadingEvent).order_by(ReadingEvent.id).all()
+            ],
+            "progress": (
+                progress.source,
+                progress.progress_percent,
+                progress.position_seconds,
+                progress.enjoyed_seconds,
+            ),
+            "enrichment": (
+                enrichment.provider,
+                enrichment.lookup_type,
+                enrichment.normalized_query,
+                enrichment.status,
+                enrichment.fields_applied,
+            ),
+            "series_assignment": (assignment.series_id, assignment.book_id, assignment.position, assignment.position_end),
+        }
+
+        assert after == before

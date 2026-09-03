@@ -139,12 +139,12 @@ Derived from `docs/ROADMAP.md` MVP 7 - Analytics and Recaps, with continuity fro
 
 ## Chunk 11 - Permissions And Safety
 
-- [ ] Keep analytics viewing available to read-only users
-- [ ] Protect prior entry mutations behind admin login
+- [x] Keep analytics viewing available to read-only users
+- [x] Protect prior entry mutations behind admin login
 - [x] Protect recap generation behind admin login
-- [ ] Protect recap overwrite/export mutations behind admin login when they write files or database rows
-- [ ] Preserve imported Libby history, scraped progress, metadata enrichment data, and series assignments during analytics/recap generation
-- [ ] Avoid destructive recomputation of source data
+- [x] Protect recap overwrite/export mutations behind admin login when they write files or database rows
+- [x] Preserve imported Libby history, scraped progress, metadata enrichment data, and series assignments during analytics/recap generation
+- [x] Avoid destructive recomputation of source data
 - [x] Return clear UI messages for generated, skipped, overwritten, and failed recap actions
 - [x] Add tests for read-only access and admin-only mutations
 

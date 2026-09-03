@@ -2093,6 +2093,31 @@ def test_delete_prior_completion_removes_only_prior_entry() -> None:
         assert db.get(ReadingEvent, normal_id) is not None
 
 
+def test_delete_prior_completion_requires_admin_login() -> None:
+    client, session_factory = make_books_client()
+    book = add_book(session_factory, title="Protected Delete Prior", author="Author")
+    with session_factory() as db:
+        prior = ReadingEvent(
+            user_id=DEFAULT_LOCAL_USER_ID,
+            book_id=book.id,
+            source="manual",
+            source_event_id="manual_prior:protected_delete",
+            event_type="manually_completed",
+            event_date=datetime(2020, 1, 1, tzinfo=timezone.utc),
+            progress_percent=100,
+            raw_data={"prior_entry": True},
+        )
+        db.add(prior)
+        db.commit()
+        prior_id = prior.id
+
+    response = client.post(f"/books/{book.id}/prior-completions/{prior_id}/delete")
+
+    assert response.status_code == 403
+    with session_factory() as db:
+        assert db.get(ReadingEvent, prior_id) is not None
+
+
 def test_book_detail_shows_archived_state() -> None:
     client, session_factory = make_books_client()
     book = add_book(session_factory, title="Archived Detail", author="Author", archived=True)
