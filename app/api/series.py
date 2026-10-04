@@ -1013,12 +1013,16 @@ def scrape_series_libby_page(
     if clean_url is None:
         return series_detail_redirect(series.id, error="Libby series URL is required.")
     try:
+        scrape_kwargs = {}
+        if request.app.state.settings.libby_browser_headless:
+            scrape_kwargs["headless"] = True
         result = libby_scrape_runner.scrape_libby_series_page(
             db,
             series=series,
             libby_series_url=clean_url,
             profile_dir=request.app.state.settings.libby_browser_profile_dir,
             scraped_dir=request.app.state.settings.scraped_dir,
+            **scrape_kwargs,
         )
     except Exception as exc:
         db.rollback()

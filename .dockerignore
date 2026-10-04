@@ -1,0 +1,21 @@
+.env
+.env.*
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+
+# Private/runtime app state. Mount this at runtime instead.
+data/
+exports/*.json
+
+# Local VCS/editor state.
+.git/
+.gitignore
+.idea/
+.vscode/
+
+# Docker output should not recursively enter builds.
+Dockerfile
+docker-compose*.yml

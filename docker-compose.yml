@@ -1,0 +1,26 @@
+services:
+  bound-and-heard:
+    build: .
+    image: bound-and-heard:latest
+    container_name: bound-and-heard
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      BOUND_AND_HEARD_DATABASE_URL: sqlite:////app/data/bound_and_heard.sqlite3
+      BOUND_AND_HEARD_IMPORTS_DIR: /app/data/imports
+      BOUND_AND_HEARD_LIBBY_BROWSER_PROFILE_DIR: /app/data/browser/libby-profile
+      BOUND_AND_HEARD_LIBBY_BROWSER_HEADLESS: "true"
+      BOUND_AND_HEARD_SCRAPED_DIR: /app/data/scraped
+      BOUND_AND_HEARD_RECAPS_DIR: /app/data/recaps
+      BOUND_AND_HEARD_EXPORTS_DIR: /app/data/exports
+    ports:
+      - "${BOUND_AND_HEARD_PORT:-8000}:8000"
+    volumes:
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s

@@ -2,6 +2,7 @@
 exports/*.json
 .env
 .env.*
+!.env.docker.example
 .venv/
 __pycache__/
 *.py[cod]

@@ -54,6 +54,132 @@ uvicorn app.main:app --reload
 
 Open `http://127.0.0.1:8000`.
 
+## Docker Compose Deployment
+
+The Docker image is built without local private data. `.dockerignore` excludes `.env`, `data/`, legacy local `exports/*.json`, browser profiles, caches, and SQLite files. Runtime state is mounted through `./data:/app/data` in `docker-compose.yml`.
+
+1. Create a deployment directory on your server:
+
+```bash
+mkdir -p bound-and-heard
+cd bound-and-heard
+```
+
+2. Copy the project source to that directory, excluding local runtime state if you are using `git clone`. If you copy the working directory directly, do not rely on the image build to carry data; copy runtime state into `./data` separately as shown below.
+
+3. Create the server environment file:
+
+```bash
+cp .env.docker.example .env
+```
+
+Edit `.env` and set at least:
+
+```dotenv
+BOUND_AND_HEARD_ADMIN_PASSWORD=your-admin-password
+BOUND_AND_HEARD_SESSION_SECRET=generate-a-long-random-secret
+BOUND_AND_HEARD_DEFAULT_USER_NAME=Your Name
+BOUND_AND_HEARD_GOOGLE_BOOKS_API_KEY=
+BOUND_AND_HEARD_PORT=8000
+```
+
+4. Start the app:
+
+```bash
+docker compose up -d --build
+```
+
+The container runs `alembic upgrade head` on startup, then starts Uvicorn on container port `8000`. `BOUND_AND_HEARD_PORT` controls the host port exposed by Docker Compose. Open `http://SERVER_IP:8000` unless you changed that value.
+
+### Docker Runtime Paths
+
+The compose file pins all persistent paths under `/app/data` inside the container:
+
+- Database: `/app/data/bound_and_heard.sqlite3`
+- Raw imports: `/app/data/imports`
+- Libby browser profile: `/app/data/browser/libby-profile`
+- Scrape snapshots: `/app/data/scraped`
+- Recap JSON artifacts: `/app/data/recaps`
+- Exported recap files: `/app/data/exports`
+
+Those paths map to `./data` beside `docker-compose.yml` on the host.
+
+### Migrating Local Data To The Server
+
+Stop the local app before copying data so the SQLite database and browser profile are not changing during the transfer.
+
+From this project root on your local machine, copy these into the server deployment directory:
+
+- `data/bound_and_heard.sqlite3`
+- `data/bound_and_heard.sqlite3-wal` and `data/bound_and_heard.sqlite3-shm`, if present
+- `data/imports/`
+- `data/enriched/`, if you have local enriched/provider files there
+- `data/exports/`
+- `data/recaps/`
+- `data/scraped/`
+- `data/browser/libby-profile/`, if you want to preserve the existing Libby session
+- `exports/`, only if you still have older legacy exports outside `data/exports`
+
+Example using `rsync` from macOS/Linux/WSL/Git Bash:
+
+```bash
+rsync -av data/ user@server:/path/to/bound-and-heard/data/
+rsync -av exports/ user@server:/path/to/bound-and-heard/legacy-exports/
+```
+
+Example using PowerShell from Windows:
+
+```powershell
+robocopy .\data \\SERVER\share\bound-and-heard\data /MIR
+robocopy .\exports \\SERVER\share\bound-and-heard\legacy-exports /E
+```
+
+If you use SSH from PowerShell instead of a Windows share, create an archive first:
+
+```powershell
+Compress-Archive -Path .\data\* -DestinationPath .\bound-and-heard-data.zip -Force
+scp .\bound-and-heard-data.zip user@server:/path/to/bound-and-heard/
+```
+
+Then on the server:
+
+```bash
+cd /path/to/bound-and-heard
+mkdir -p data
+unzip -o bound-and-heard-data.zip -d data
+docker compose up -d --build
+docker compose logs -f bound-and-heard
+```
+
+After migration, confirm the app sees your existing data:
+
+```bash
+docker compose exec bound-and-heard ls -la /app/data
+docker compose exec bound-and-heard alembic current
+```
+
+### Libby Browser Profile Notes In Docker
+
+`BOUND_AND_HEARD_LIBBY_BROWSER_HEADLESS=true` is set in `docker-compose.yml` so existing Libby scrape jobs can run on a headless homelab server. A migrated `data/browser/libby-profile/` may preserve your current Libby session, but browser sessions can expire and may need re-authentication.
+
+Headless mode does not provide an interactive login screen. It only works after the Libby browser profile already contains a valid authenticated session:
+
+1. Run the app locally with `BOUND_AND_HEARD_LIBBY_BROWSER_HEADLESS=false`, which is the default outside Docker.
+2. Log in through `/scraping/libby/session` using the visible Chromium window.
+3. Stop the local app so the browser profile is not being written.
+4. Copy `data/browser/libby-profile/` to the server's `data/browser/libby-profile/` path.
+5. Run Docker Compose on the server with `BOUND_AND_HEARD_LIBBY_BROWSER_HEADLESS=true`.
+
+Once copied, server-side scrape jobs reuse the mounted profile from `/app/data/browser/libby-profile`. This usually avoids re-login until Libby expires the session, the cookies become invalid, or the browser profile is damaged.
+
+If Libby requires login again, refresh the profile using one of these approaches:
+
+- Run the app locally, log in with a visible browser, then copy `data/browser/libby-profile/` back to the server.
+- Add your own VNC/noVNC or desktop access around the container, then use `/scraping/libby/session` on the server.
+- Temporarily run the container with display forwarding if your server environment supports it.
+
+The default Docker Compose file does not include VNC/noVNC or display forwarding. In that default setup, `/scraping/libby/session` launches Chromium inside the container, but you will not be able to see or interact with the login window.
+
 ## Environment Variables
 
 `BOUND_AND_HEARD_ADMIN_PASSWORD`
@@ -79,6 +205,10 @@ Directory used to preserve raw uploaded import files. Defaults to `data/imports`
 `BOUND_AND_HEARD_LIBBY_BROWSER_PROFILE_DIR`
 
 Directory used for the persistent local Playwright browser profile for Libby. Defaults to `data/browser/libby-profile`. This directory contains local browser cookies/session state and should not be committed.
+
+`BOUND_AND_HEARD_LIBBY_BROWSER_HEADLESS`
+
+Whether Playwright should launch Chromium in headless mode for Libby browser and scrape operations. Defaults to `false` for local desktop development. Docker Compose sets this to `true` for homelab/server use.
 
 `BOUND_AND_HEARD_SCRAPED_DIR`
 

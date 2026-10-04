@@ -113,13 +113,14 @@ def scrape_libby_series_page(
     libby_series_url: str,
     profile_dir: str,
     scraped_dir: str,
+    headless: bool = False,
 ) -> dict[str, object]:
     from playwright.sync_api import sync_playwright
 
     playwright = sync_playwright().start()
     context = None
     try:
-        context = playwright.chromium.launch_persistent_context(user_data_dir=profile_dir, headless=False, locale="en-US")
+        context = playwright.chromium.launch_persistent_context(user_data_dir=profile_dir, headless=headless, locale="en-US")
         page = context.pages[0] if context.pages else context.new_page()
         page.set_default_timeout(10_000)
         page.set_default_navigation_timeout(30_000)
@@ -152,6 +153,7 @@ def run_libby_scrape_job(
     job: ScrapeJob,
     profile_dir: str,
     scraped_dir: str,
+    headless: bool = False,
 ) -> dict[str, int]:
     queued_items = [item for item in sorted(job.items, key=lambda value: (value.queued_at, value.id)) if item.status == "queued"]
     summary = {"succeeded": 0, "failed": 0, "skipped": 0}
@@ -164,7 +166,7 @@ def run_libby_scrape_job(
     playwright = sync_playwright().start()
     context = None
     try:
-        context = playwright.chromium.launch_persistent_context(user_data_dir=profile_dir, headless=False, locale="en-US")
+        context = playwright.chromium.launch_persistent_context(user_data_dir=profile_dir, headless=headless, locale="en-US")
         page = context.pages[0] if context.pages else context.new_page()
         page.set_default_timeout(10_000)
         page.set_default_navigation_timeout(30_000)

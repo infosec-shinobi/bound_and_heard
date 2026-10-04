@@ -156,7 +156,10 @@ async def libby_session_page(
 @router.post("/libby/session/open", dependencies=[Depends(require_write_access)])
 async def open_libby_session(request: Request) -> Response:
     try:
-        open_libby_browser_session(request.app.state.settings.libby_browser_profile_dir)
+        open_kwargs = {}
+        if request.app.state.settings.libby_browser_headless:
+            open_kwargs["headless"] = True
+        open_libby_browser_session(request.app.state.settings.libby_browser_profile_dir, **open_kwargs)
     except LibbyBrowserError as exc:
         query = urlencode({"error": str(exc)})
         return RedirectResponse(
@@ -379,11 +382,15 @@ def start_libby_scrape_job(job_id: int, request: Request, db: Session = Depends(
     db.commit()
 
     try:
+        runner_kwargs = {}
+        if request.app.state.settings.libby_browser_headless:
+            runner_kwargs["headless"] = True
         run_summary = libby_scrape_runner.run_libby_scrape_job(
             db,
             job=job,
             profile_dir=request.app.state.settings.libby_browser_profile_dir,
             scraped_dir=request.app.state.settings.scraped_dir,
+            **runner_kwargs,
         )
     except Exception as exc:
         now = datetime.now(timezone.utc)

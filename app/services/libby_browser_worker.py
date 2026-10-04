@@ -10,11 +10,12 @@ DESKTOP_CHROME_USER_AGENT = (
 
 
 def main() -> int:
-    if len(sys.argv) != 2:
-        print("Usage: python -m app.services.libby_browser_worker <profile_dir>", file=sys.stderr)
+    if len(sys.argv) not in {2, 3} or (len(sys.argv) == 3 and sys.argv[2] != "--headless"):
+        print("Usage: python -m app.services.libby_browser_worker <profile_dir> [--headless]", file=sys.stderr)
         return 2
 
     profile_dir = sys.argv[1]
+    headless = len(sys.argv) == 3
     Path(profile_dir).mkdir(parents=True, exist_ok=True)
 
     from playwright.sync_api import sync_playwright
@@ -22,7 +23,7 @@ def main() -> int:
     playwright = sync_playwright().start()
     context = playwright.chromium.launch_persistent_context(
         user_data_dir=profile_dir,
-        headless=False,
+        headless=headless,
         user_agent=DESKTOP_CHROME_USER_AGENT,
         no_viewport=True,
         locale="en-US",
