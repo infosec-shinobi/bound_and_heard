@@ -6,6 +6,8 @@ It is designed to track books read and listened to, import Libby timeline JSON, 
 
 See the `docs/` folder for architecture and planning documents.
 
+MVP 8 recommendation scope, provider behavior, explainability requirements, and privacy boundaries are defined in `docs/RECOMMENDATIONS.md`.
+
 ## Setup
 
 Create and activate a virtual environment:

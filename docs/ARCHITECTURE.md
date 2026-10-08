@@ -122,9 +122,9 @@ Markdown recap exports are written separately under the configured export direct
 
 ### Agentic Recommendations
 
-A future recommendation agent should review the user's reading/listening history and suggest new content.
+A recommendation agent should review safe summaries of the user's reading/listening history and suggest new content.
 
-Recommendations should be explainable.
+Recommendations should be explainable, advisory, and non-mutating. MVP 8 should build provider prompts from an allowlist of safe summarized fields rather than raw imports, scrape snapshots, browser profiles, metadata cache responses, secrets, or local files. See `docs/RECOMMENDATIONS.md` for scope, provider, fallback, freshness, and privacy rules.
 
 Example:
 
@@ -189,8 +189,9 @@ Protected actions include:
 
 ### Future AI
 
-- Local LLM through Ollama or OpenAI-compatible APIs
-- Agentic recommendation service
+- Optional local or remote OpenAI-compatible recommendation provider
+- Deterministic no-provider fallback for local recommendations
+- Agentic recommendation service using safe summarized context
 
 ## UI Philosophy
 

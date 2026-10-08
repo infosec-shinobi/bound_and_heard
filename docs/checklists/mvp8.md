@@ -10,19 +10,19 @@ Derived from `docs/ROADMAP.md` MVP 8 - Agentic Recommendations, with continuity 
 
 ## Chunk 1 - Recommendation Scope And Safety
 
-- [ ] Define recommendation types for MVP 8: series continuation, new series, genre exploration, author-adjacent, and backlog prioritization
-- [ ] Define which local data the advisor can use
-- [ ] Define what data should never be sent to an external model without explicit configuration
-- [ ] Decide whether MVP 8 supports local-only LLM, OpenAI-compatible remote APIs, or both
-- [ ] Define fallback behavior when no LLM provider is configured
-- [ ] Define explainability requirements for each recommendation
-- [ ] Define confidence or rationale fields for recommendations
-- [ ] Define freshness rules for regenerating recommendations
-- [ ] Document privacy and safety assumptions before implementation
+- [x] Define recommendation types for MVP 8: series continuation, new series, genre exploration, author-adjacent, and backlog prioritization
+- [x] Define which local data the advisor can use
+- [x] Define what data should never be sent to an external model without explicit configuration
+- [x] Decide whether MVP 8 supports local-only LLM, OpenAI-compatible remote APIs, or both
+- [x] Define fallback behavior when no LLM provider is configured
+- [x] Define explainability requirements for each recommendation
+- [x] Define confidence or rationale fields for recommendations
+- [x] Define freshness rules for regenerating recommendations
+- [x] Document privacy and safety assumptions before implementation
 
 ## Chunk 1.1 - Update Logic For Scrape Jobs
 
--[ ] If a book is checked out after the last scrape job, the book should be removed from the "skipped" list so that it is eligible for a scrape job again without forcing it...
+- [ ] If a book is checked out after the last scrape job, the book should be removed from the "skipped" list so that it is eligible for a scrape job again without forcing it...
 
 ## Chunk 2 - Recommendation Data Model
 
