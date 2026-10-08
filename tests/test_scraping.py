@@ -454,6 +454,45 @@ def test_new_libby_scrape_job_page_force_rescrape_bypasses_unchanged_skip() -> N
     assert 'name="force" value="true"' in response.text
 
 
+def test_new_libby_scrape_job_page_queues_book_with_newer_borrow_after_previous_skip() -> None:
+    client, session_factory = make_scraping_client()
+    client.post("/admin/login", data={"password": "secret"})
+    book_id = add_libby_book(
+        session_factory,
+        title="Borrowed Again Book",
+        libby_title_id="borrowed-again-title",
+        last_scraped_borrowed_at=datetime(2026, 6, 20, tzinfo=timezone.utc),
+    )
+    with session_factory() as db:
+        db.add(
+            ReadingEvent(
+                user_id=DEFAULT_LOCAL_USER_ID,
+                book_id=book_id,
+                source="libby",
+                event_type="borrowed",
+                event_date=datetime(2026, 7, 10, tzinfo=timezone.utc),
+            )
+        )
+        db.add(
+            ScrapeJob(
+                user_id=DEFAULT_LOCAL_USER_ID,
+                source="libby",
+                status="completed",
+                summary={"queued_count": 0, "skipped_count": 1},
+                finished_at=datetime(2026, 6, 21, tzinfo=timezone.utc),
+            )
+        )
+        db.commit()
+
+    response = client.get("/scraping/libby/jobs/new")
+
+    assert response.status_code == 200
+    assert "Borrowed Again Book" in response.text
+    assert "Latest borrow already scraped" not in response.text
+    assert "No queued books." not in response.text
+    assert f'value="{book_id}"' in response.text
+
+
 def test_create_libby_scrape_job_requires_admin_login() -> None:
     client, _ = make_scraping_client()
 
@@ -553,6 +592,42 @@ def test_create_libby_scrape_job_force_rescrape_queues_unchanged_books() -> None
         assert job.summary["force"] is True
         assert job.summary["queued_book_ids"] == [queued_book_id]
         assert item.book_id == queued_book_id
+
+
+def test_create_libby_scrape_job_queues_book_with_newer_borrow_without_force() -> None:
+    client, session_factory = make_scraping_client()
+    client.post("/admin/login", data={"password": "secret"})
+    book_id = add_libby_book(
+        session_factory,
+        title="Borrowed Again Book",
+        libby_title_id="borrowed-again-title",
+        last_scraped_borrowed_at=datetime(2026, 6, 20, tzinfo=timezone.utc),
+    )
+    with session_factory() as db:
+        db.add(
+            ReadingEvent(
+                user_id=DEFAULT_LOCAL_USER_ID,
+                book_id=book_id,
+                source="libby",
+                event_type="borrowed",
+                event_date=datetime(2026, 7, 10, tzinfo=timezone.utc),
+            )
+        )
+        db.commit()
+
+    response = client.post("/scraping/libby/jobs", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"].startswith("/scraping/libby/jobs/")
+    with session_factory() as db:
+        job = db.query(ScrapeJob).one()
+        item = db.query(ScrapeJobItem).one()
+        assert job.summary["force"] is False
+        assert job.summary["queued_book_ids"] == [book_id]
+        assert job.summary["skipped_count"] == 0
+        assert item.book_id == book_id
+        assert item.latest_borrowed_at == datetime(2026, 7, 10)
+        assert item.last_scraped_borrowed_at == datetime(2026, 6, 20)
 
 
 def test_create_libby_scrape_job_with_selected_books_only_queues_selected_books() -> None:

@@ -22,7 +22,7 @@ Derived from `docs/ROADMAP.md` MVP 8 - Agentic Recommendations, with continuity 
 
 ## Chunk 1.1 - Update Logic For Scrape Jobs
 
-- [ ] If a book is checked out after the last scrape job, the book should be removed from the "skipped" list so that it is eligible for a scrape job again without forcing it...
+- [x] If a book is checked out after the last scrape job, the book should be removed from the "skipped" list so that it is eligible for a scrape job again without forcing it...
 
 ## Chunk 2 - Recommendation Data Model
 
