@@ -84,6 +84,7 @@ Required fields for every recommendation:
 - `confidence`: `high`, `medium`, or `low`.
 - `provider`: `local`, `openai_compatible`, or another provider key.
 - `model`: Model name when a model is used.
+- `status`: User feedback state such as `active`, `saved`, or `dismissed`.
 
 Recommended optional fields:
 
@@ -150,6 +151,15 @@ Default rules:
 - Preserve previous runs for audit/history until a future cleanup workflow is added.
 
 Regeneration must be admin-only. Viewing existing recommendations may remain read-only.
+
+## Persistence Model
+
+MVP 8 stores recommendation history in two tables:
+
+- `recommendation_runs`: one row per generation attempt, including status, provider/model metadata, safe input summary, run summary, timestamps, and errors.
+- `recommendations`: one row per individual recommendation, including type, status, local book/series links, explanation fields, confidence, source context, generated timestamp, and provider payload.
+
+The run-level `input_summary` is intentionally a safe summary, not a raw prompt dump by default. It may include enough structured context to explain why a run produced recommendations, but it must follow the excluded-data rules above.
 
 ## Privacy And Safety Assumptions
 

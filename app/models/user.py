@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from app.models.progress import BookProgress
     from app.models.reading_event import ReadingEvent
     from app.models.recap import Recap
+    from app.models.recommendation import Recommendation, RecommendationRun
     from app.models.scrape import ScrapeJob
     from app.models.series import LibbySeriesHint, LibbySeriesSnapshot, Series
 
@@ -50,3 +51,5 @@ class User(Base):
     genres: Mapped[list[Genre]] = relationship(back_populates="user")
     book_genres: Mapped[list[BookGenre]] = relationship(back_populates="user")
     recaps: Mapped[list[Recap]] = relationship(back_populates="user")
+    recommendation_runs: Mapped[list[RecommendationRun]] = relationship(back_populates="user")
+    recommendations: Mapped[list[Recommendation]] = relationship(back_populates="user")

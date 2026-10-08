@@ -41,6 +41,7 @@ users
   +-- genres
   +-- libby_series_snapshots
   +-- recaps
+  +-- recommendation_runs
   +-- recommendations
 
 metadata_cache_entries stores provider responses globally by lookup query and checksum.
@@ -643,6 +644,63 @@ Recommended period_type values:
 
 Yearly recaps store `quarter = 0` so the user/period uniqueness constraint works consistently across SQLite and future database engines.
 
+### recommendation_runs
+
+Stores recommendation generation attempts and audit metadata.
+
+Fields:
+
+- id
+- user_id
+- recommendation_type
+- status
+- provider
+- model
+- source
+- started_at
+- finished_at
+- generated_at
+- summary
+- input_summary
+- provider_metadata
+- error_code
+- error_message
+- created_at
+- updated_at
+
+Recommended recommendation_type values:
+
+- all
+- series_continuation
+- new_series
+- genre_exploration
+- author_adjacent
+- backlog_prioritization
+
+Recommended status values:
+
+- pending
+- running
+- completed
+- failed
+- cancelled
+
+Recommended provider values:
+
+- local
+- openai_compatible
+- local_openai_compatible
+
+Recommended source values:
+
+- deterministic_fallback
+- llm_generated
+- mixed
+
+`input_summary` stores the safe summarized context used for the run when useful for auditability. It must not store raw imports, scrape snapshots, browser profile data, secrets, full filesystem paths, or raw provider responses. `provider_metadata` stores non-secret provider/model metadata such as base provider type, response IDs, token counts, latency, or finish reasons.
+
+Indexes support filtering by `user_id`, `recommendation_type`, `status`, `provider`, `model`, `source`, `started_at`, `finished_at`, `generated_at`, `created_at`, and `error_code`.
+
 ### recommendations
 
 Stores generated recommendations.
@@ -650,15 +708,47 @@ Stores generated recommendations.
 Fields:
 
 - id
+- run_id
 - user_id
-- generated_at
+- local_book_id
+- local_series_id
 - recommendation_type
+- status
+- source
+- provider
+- model
+- confidence
 - title
 - author
 - series_name
+- suggested_starting_point
+- format_hint
 - reasoning
-- source
+- source_context
+- rationale_tags
+- caveats
 - payload
+- generated_at
+- created_at
+- updated_at
+
+Recommended status values:
+
+- active
+- saved
+- dismissed
+
+Recommended confidence values:
+
+- high
+- medium
+- low
+
+`source_context`, `rationale_tags`, and `caveats` store explainability data tied to safe local facts. `payload` can store provider-specific structured output after validation. Recommendation rows are advisory and must not mutate source records.
+
+Indexes support filtering by `user_id`, `run_id`, `recommendation_type`, `status`, `source`, `provider`, `model`, `confidence`, `generated_at`, `created_at`, `local_book_id`, `local_series_id`, `series_name`, and `format_hint`.
+
+MVP 8 uses `recommendation_runs` plus `recommendations` so provider metadata, safe prompt inputs, run status, and individual feedback states remain separate.
 
 ## Deduplication Strategy
 

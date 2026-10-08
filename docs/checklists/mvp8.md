@@ -26,14 +26,14 @@ Derived from `docs/ROADMAP.md` MVP 8 - Agentic Recommendations, with continuity 
 
 ## Chunk 2 - Recommendation Data Model
 
-- [ ] Decide final schema for recommendation runs and individual recommendations
-- [ ] Preserve prompt inputs or summarized context where safe and useful
-- [ ] Preserve model/provider metadata for auditability
-- [ ] Store recommendation type, title, author, series name, reasoning, and source data references
-- [ ] Store accepted, dismissed, or saved user feedback if useful
-- [ ] Add indexes for user, recommendation type, status, generated timestamp, and source
-- [ ] Add Alembic migration
-- [ ] Verify `alembic upgrade head`
+- [x] Decide final schema for recommendation runs and individual recommendations
+- [x] Preserve prompt inputs or summarized context where safe and useful
+- [x] Preserve model/provider metadata for auditability
+- [x] Store recommendation type, title, author, series name, reasoning, and source data references
+- [x] Store accepted, dismissed, or saved user feedback if useful
+- [x] Add indexes for user, recommendation type, status, generated timestamp, and source
+- [x] Add Alembic migration
+- [x] Verify `alembic upgrade head`
 
 ## Chunk 3 - Reading History Summarizer
 
