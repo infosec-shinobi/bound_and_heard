@@ -37,15 +37,15 @@ Derived from `docs/ROADMAP.md` MVP 8 - Agentic Recommendations, with continuity 
 
 ## Chunk 3 - Reading History Summarizer
 
-- [ ] Add service to summarize completed books by period
-- [ ] Include favorite authors, genres, formats, and series from MVP 7 analytics
-- [ ] Include recent reads/listens and recent abandons
-- [ ] Include unread planned series entries and next unread books
-- [ ] Include ratings and notes only when useful and safe
-- [ ] Include format preferences and audiobook/page-length preferences
-- [ ] Exclude raw Libby scraped HTML, browser profile data, session secrets, and private operational data
-- [ ] Keep summarizer deterministic and testable
-- [ ] Add tests for summary content and privacy exclusions
+- [x] Add service to summarize completed books by period
+- [x] Include favorite authors, genres, formats, and series from MVP 7 analytics
+- [x] Include recent reads/listens and recent abandons
+- [x] Include unread planned series entries and next unread books
+- [x] Include ratings and notes only when useful and safe
+- [x] Include format preferences and audiobook/page-length preferences
+- [x] Exclude raw Libby scraped HTML, browser profile data, session secrets, and private operational data
+- [x] Keep summarizer deterministic and testable
+- [x] Add tests for summary content and privacy exclusions
 
 ## Chunk 4 - Recommendation Service Interface
 

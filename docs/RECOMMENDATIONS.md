@@ -161,6 +161,30 @@ MVP 8 stores recommendation history in two tables:
 
 The run-level `input_summary` is intentionally a safe summary, not a raw prompt dump by default. It may include enough structured context to explain why a run produced recommendations, but it must follow the excluded-data rules above.
 
+## Reading History Summary Contract
+
+`app.services.recommendation_summary.summarize_reading_history` builds the safe local context that later recommendation providers can consume.
+
+The summary includes:
+
+- Period start/end.
+- Completed-book totals, pages read, audiobook seconds, and lifetime enjoyed audiobook seconds.
+- Favorite authors, genres, formats, and series derived from analytics-safe completed-book data.
+- Recent completed books and recent abandons.
+- Rating aggregates, highly rated items, typical page count, and typical audiobook duration.
+- Active/paused/unknown series, next unread entries, and planned unread entries.
+- Safety flags confirming raw imports, scrape snapshots, browser profiles, secrets, and raw provider responses are excluded.
+
+The summary deliberately excludes:
+
+- `reading_events.raw_data`.
+- Raw import or scrape file paths and contents.
+- Browser profile paths and session state.
+- Environment values, provider keys, admin password, session secret, and deployment details.
+- Full notes by default.
+
+Bounded note excerpts are available only when `include_note_summaries=True`. This is intended for a later explicit user setting or reviewed prompt path, not as the default provider context.
+
 ## Privacy And Safety Assumptions
 
 MVP 8 assumes a local-first, single-user deployment protected by the existing admin password model.
