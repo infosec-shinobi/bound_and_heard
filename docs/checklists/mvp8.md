@@ -49,15 +49,15 @@ Derived from `docs/ROADMAP.md` MVP 8 - Agentic Recommendations, with continuity 
 
 ## Chunk 4 - Recommendation Service Interface
 
-- [ ] Define provider-neutral recommendation request object
-- [ ] Define provider-neutral recommendation response object
-- [ ] Define provider interface for generating recommendations
-- [ ] Implement local deterministic fallback provider for tests and no-LLM mode
-- [ ] Implement optional local LLM provider if selected
-- [ ] Implement optional OpenAI-compatible provider if selected
-- [ ] Handle provider timeouts, malformed responses, empty responses, and rate limits safely
-- [ ] Avoid blocking the UI indefinitely during generation
-- [ ] Add tests for provider parsing and error handling
+- [x] Define provider-neutral recommendation request object
+- [x] Define provider-neutral recommendation response object
+- [x] Define provider interface for generating recommendations
+- [x] Implement local deterministic fallback provider for tests and no-LLM mode
+- [x] Implement optional local LLM provider if selected
+- [x] Implement optional OpenAI-compatible provider if selected
+- [x] Handle provider timeouts, malformed responses, empty responses, and rate limits safely
+- [x] Avoid blocking the UI indefinitely during generation
+- [x] Add tests for provider parsing and error handling
 
 ## Chunk 5 - Prompting And Output Contracts
 

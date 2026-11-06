@@ -185,6 +185,54 @@ The summary deliberately excludes:
 
 Bounded note excerpts are available only when `include_note_summaries=True`. This is intended for a later explicit user setting or reviewed prompt path, not as the default provider context.
 
+## Recommendation Service Interface (Chunk 4)
+
+`app.services.recommendation_providers` defines validated provider-neutral
+`RecommendationRequest`, `RecommendationSuggestion`, and `RecommendationResponse`
+objects plus the async `RecommendationProvider` protocol. Suggestions use
+`reasoning` (matching the persisted model) for the human-readable reason.
+Provider/model provenance belongs to the response; user feedback and persistence
+are separate concerns.
+
+Pass the result of `summarize_reading_history` as the request's `history`.
+The typed `HistoryContext` projects nested fields onto an allowlist of favorites,
+recent books, rating/length preferences, and series context. Unknown fields,
+including note excerpts, raw payloads, and operational metadata, are discarded.
+It does not attempt to sanitize secrets manually entered into bibliographic text.
+
+`app.services.recommendation_service.generate_recommendations` is an awaitable,
+non-mutating service entry point. Without a provider it uses
+`DeterministicRecommendationProvider`, which returns stable next-unread suggestions
+from active series unless continuation intent is explicitly false. It supports
+series continuation and series-backed backlog requests; it does not invent
+discovery suggestions. Broader backlog ranking and discovery remain later work.
+
+Optional adapters are constructed explicitly at this stage:
+
+- `OpenAICompatibleRecommendationProvider(base_url=..., model=..., api_key=...)`
+  calls `{base_url}/chat/completions`; include `/v1` in the base URL when required.
+- `LocalOpenAICompatibleRecommendationProvider` uses the same API, allows no key,
+  and requires a loopback hostname (`localhost`, `127.0.0.1`, or `::1`). For a
+  LAN/container endpoint, explicitly use the remote-compatible adapter instead.
+
+The adapters request a JSON object containing a `recommendations` list, validate
+every suggestion, enforce requested type/count, and reject malformed output as a
+whole. An empty list is `no_results`. Model-supplied local IDs are cleared rather
+than trusted as database links; deterministic suggestions retain known local IDs.
+Local matching of discovery results belongs to a later chunk.
+
+Async HTTP uses a 30-second adapter deadline by default, plus a 35-second service
+deadline (both configurable up to 120 seconds). Responses are capped at 1 MB;
+redirects and automatic retries are disabled. Failures return sanitized statuses
+(`timeout`, `rate_limited`, `malformed`, or `failed`) without raw response bodies,
+exception strings, keys, or prompt logging. Cancellation propagates to callers.
+Configured-provider failures are surfaced rather than silently replaced by local
+results. Awaiting generation does not block the event loop; UI wiring, environment
+configuration, prompt specialization, jobs, and run persistence remain later chunks.
+
+Tests in `tests/test_recommendation_providers.py` use mocked transports, not live
+model endpoints. Chunk 4 verification: full suite, **458 passed**.
+
 ## Privacy And Safety Assumptions
 
 MVP 8 assumes a local-first, single-user deployment protected by the existing admin password model.
