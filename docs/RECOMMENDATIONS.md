@@ -47,15 +47,79 @@ MVP 8 should implement privacy by construction: provider prompts should be built
 
 ## Provider Support
 
-MVP 8 should support both no-provider fallback and optional OpenAI-compatible remote APIs.
+MVP 8 should support no-provider fallback, optional OpenAI-compatible APIs, and opt-in browser-local inference.
 
 Provider modes:
 
 - `none`: No LLM provider is configured. The app uses deterministic local recommendations where possible and clearly labels that model-powered discovery is unavailable.
 - `openai_compatible`: The app sends safe summarized context to an OpenAI-compatible chat/completions API configured by environment variables.
 - `local_openai_compatible`: A local server such as Ollama, LM Studio, or another OpenAI-compatible endpoint may use the same provider interface when configured with a local base URL.
+- `browser_local` (planned, Chunk 7.1): A small downloaded model runs on the viewing device in a browser worker. This is distinct from a local model server and requires explicit per-device consent.
 
 MVP 8 does not need a provider-specific Ollama API implementation if the selected local runtime exposes an OpenAI-compatible endpoint. A separate native local provider can be added later if there is a concrete need.
+
+## Browser-Local Inference Plan (MVP 8 Chunk 7.1)
+
+This is planned work, not an implemented provider. Evaluate
+[WebLLM](https://webllm.mlc.ai/docs/) with a Web Worker as the initial runtime
+candidate. Prototype small quantized models before selecting a pinned runtime
+and model: measure actual artifact size, memory needs, initialization/generation
+time, context capacity, structured-output reliability, and recommendation quality
+on target devices. Review model licensing. Small models should primarily rank or
+explain supplied bibliographic candidates; they must not be trusted to invent
+accurate book catalogs or reading history.
+
+### Consent And Device Lifecycle
+
+- Offer an unchecked **Enable on-device AI recommendations** checkbox and an
+  explicit **Download model** action. Disclose model identity, expected download
+  size/source, device requirements, and data flow before authorization.
+- No model download or inference initialization occurs before consent. Consent
+  belongs to this browser/device and model version, not every device accessing
+  the server. A changed model requires renewed download authorization.
+- Detect WebGPU, secure context, and required GPU capabilities. HTTPS is generally
+  required for homelab access; localhost is a special case. Plain
+  `http://SERVER_IP` should show setup guidance rather than attempting generation.
+- Show loading/download/generation progress and allow cancellation. Run inference
+  in a worker so the UI remains responsive. Provide clear recovery for download,
+  storage, GPU-memory, and generation failures.
+- Model artifacts may persist in browser-origin storage after the tab/session
+  closes. Explain cache reuse and possible browser eviction, and provide
+  **Remove downloaded model**. Do not imply the model stays loaded after closing
+  the page or that browser caching guarantees permanent/offline availability.
+- The model runs on the device displaying the app, not the Bound & Heard host.
+  Unsupported devices, declined consent, and failures retain deterministic local
+  suggestions. Never silently switch to a remote inference provider.
+
+### Execution And Trust Boundaries
+
+1. An admin initiates generation. The backend supplies the existing allowlisted
+   history, source catalog, prompts/output schema, and bounded safe candidates.
+   Browser-local mode must not expose raw files, notes, operational secrets, or
+   provider credentials to the client.
+2. The browser worker performs inference locally. Model downloads may contact an
+   external artifact host, revealing normal request metadata, but reading history
+   and prompts must not be sent to that host or any remote inference service.
+   Bundle/pin trusted runtime assets and model sources; avoid third-party runtime
+   scripts or telemetry that could access reading history.
+3. Local series tracking remains authoritative, including continuation intent and
+   opt-in status rules. Browser generation does not overwrite source records.
+4. Generated results may be previewed in the browser. Saving is a separate
+   protected submission to the Bound & Heard server, not an external model host.
+   Treat submitted content, IDs, provider labels, and evidence as untrusted.
+5. Before persistence, the backend validates schema, requested type/count,
+   references against server-retained generation context, duplicate matching, and
+   local IDs resolved from trusted records. Do not accept a browser-supplied
+   history/catalog as proof of evidence. Record provider/model provenance without
+   implying that the server can attest which model actually executed on a client.
+6. Saved runs follow the normal recommendation freshness/history rules; artifact
+   caching is separate from recommendation caching. Interrupted browser sessions
+   must not appear as successfully completed runs.
+
+Tests should cover consent/download gating, capabilities, cancellation, cache
+removal, privacy/network boundaries, tampered output/context, and admin checks.
+Include real-browser/device smoke tests alongside mocked unit tests. UI controls,
+configuration, and run persistence integrate with Chunks 8–10.
 
 ## No-Provider Fallback
 
@@ -264,6 +328,48 @@ duplicate detection remain later chunks.
 Tests in `tests/test_recommendation_prompts.py` cover every template, privacy,
 determinism, untrusted history placement, evidence validation, uncertainty fields,
 and starting-point requirements. Chunk 5 verification: full suite, **475 passed**.
+
+## Series Continuation (Chunk 6)
+
+The history summarizer translates stored continuation intent (`yes`, `no`,
+`unknown`) into `true`, `false`, or `null` for the provider contract. It includes
+abandoned series separately under `series.abandoned`; completed series are never
+continuation candidates. Next-unread selection orders numbered entries before
+unnumbered entries and skips completed books, including undated completion status
+or near-complete progress evidence. Archived books and books belonging to another
+user are excluded from these local series candidates.
+
+`RecommendationRequest` accepts `include_paused_series` and
+`include_abandoned_series`, both false by default. Callers can explicitly opt in
+without changing stored series status or intent. An explicit `no` always vetoes
+a suggestion; unknown intent is allowed for otherwise eligible series but is
+disclosed as a caveat. Unknown/completed statuses remain excluded even with flags.
+These request flags are service-level controls; UI/settings wiring remains later work.
+
+`generate_recommendations` treats local tracking as authoritative:
+
+- Explicit `series_continuation` requests use deterministic local results only,
+  including `no_results` when there is no eligible next unread entry. No model is called.
+- General next-read requests return eligible local continuation results first,
+  up to the requested limit, without calling a model or mixing provenance.
+- When general requests have no local candidates, a configured model can provide
+  discovery results, but model-generated `series_continuation` items are removed.
+- Explicit discovery requests continue to use the configured provider even if
+  local series candidates exist.
+
+Active series rank before opted-in paused/abandoned series, then by name and ID.
+Each suggestion includes completion counts, status, continuation intent, planned
+versus local entry, position when known, evidence references, and a starting point.
+Unknown positions/intent and opted-in non-active status lower confidence and add
+caveats. Local suggestions preserve trusted `local_series_id` and `local_book_id`
+for `/series/{id}` and `/books/{id}` links; planned entries have no book link.
+Rendering these links belongs to the recommendation UI chunk.
+
+Generation does not modify books, events, series entries, status, or intent.
+`tests/test_series_recommendations.py` covers database-to-request integration,
+status/intent policies, completion evidence, user/archive exclusions, deterministic
+ordering/limits, local precedence, IDs, and source preservation.
+Chunk 6 verification: full suite, **499 passed**.
 
 ## Privacy And Safety Assumptions
 

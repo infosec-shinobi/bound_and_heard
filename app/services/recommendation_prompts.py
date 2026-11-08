@@ -11,7 +11,8 @@ PROMPT_TEMPLATES = {
     "series_continuation": (
         "Suggest next unread entries in active local series with continuation intent. "
         "Explain series status, intent, completed versus known counts, and next unread order. "
-        "Do not invent missing entries or include paused/abandoned series."
+        "Do not invent missing entries. Include paused/abandoned series only when the corresponding "
+        "request flag is true; never override explicit negative continuation intent."
     ),
     "new_series": (
         "Suggest new series connected to favorite genres, authors, ratings, formats, or completed series. "

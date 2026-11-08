@@ -74,13 +74,13 @@ Derived from `docs/ROADMAP.md` MVP 8 - Agentic Recommendations, with continuity 
 
 ## Chunk 6 - Series Continuation Suggestions
 
-- [ ] Identify active series with unread planned or owned entries
-- [ ] Prefer next unread entries from local series tracking before model suggestions
-- [ ] Include paused/abandoned series only when the user asks or settings allow it
-- [ ] Explain why the series is being suggested
-- [ ] Link recommendations back to local series pages and books when possible
-- [ ] Avoid overwriting series status or wants-to-continue fields
-- [ ] Add tests for active, paused, completed, and abandoned series cases
+- [x] Identify active series with unread planned or owned entries
+- [x] Prefer next unread entries from local series tracking before model suggestions
+- [x] Include paused/abandoned series only when the user asks or settings allow it
+- [x] Explain why the series is being suggested
+- [x] Link recommendations back to local series pages and books when possible
+- [x] Avoid overwriting series status or wants-to-continue fields
+- [x] Add tests for active, paused, completed, and abandoned series cases
 
 ## Chunk 7 - New Series And Genre Exploration
 
@@ -91,6 +91,27 @@ Derived from `docs/ROADMAP.md` MVP 8 - Agentic Recommendations, with continuity 
 - [ ] Include why each suggestion matches the user's history
 - [ ] Include suggested starting point when recommending a series
 - [ ] Add tests for duplicate avoidance and explanation quality fields
+
+## Chunk 7.1 - Browser-Local Recommendations
+
+Planned opt-in `browser_local` mode; see `docs/RECOMMENDATIONS.md` for the execution and privacy boundaries. Start with a proof of concept before choosing a model or committing to the browser runtime.
+
+- [ ] Prototype WebLLM in a Web Worker using existing safe prompts and structured output contracts
+- [ ] Evaluate small quantized models on target devices for download size, memory use, latency, context limits, output validity, and recommendation quality; review licenses and select a pinned model/runtime
+- [ ] Detect secure-context, WebGPU, and GPU capability support before offering model initialization; document HTTPS requirements for homelab access
+- [ ] Add an unchecked-by-default on-device AI consent checkbox and explicit download action showing model identity, download size, source, resource requirements, and privacy details
+- [ ] Do not download model artifacts or initialize inference until the user explicitly authorizes it
+- [ ] Show download/loading/generation progress, cancellation, and clear recoverable errors without freezing the UI
+- [ ] Cache model artifacts per browser/origin, disclose persistence beyond the current session and possible browser eviction, and provide a remove-model control
+- [ ] Keep consent device/browser-local; do not automatically enable downloads on another device or after a model change
+- [ ] Add an admin-protected generation-context flow using only the existing allowlisted history, source catalog, prompts, and bounded local candidates
+- [ ] Run inference on the viewing device, without sending history/prompts to model hosts or remote inference services; pin trusted assets and avoid third-party runtime scripts with access to history
+- [ ] Keep local series tracking authoritative and ground small-model suggestions in supplied bibliographic candidates where possible
+- [ ] Validate browser output server-side before saving, including schema, evidence against server-retained input, type/count, duplicate matching, and trusted local links; treat all browser submissions as untrusted
+- [ ] Preserve admin-only generation/save actions and distinguish browser previews from persisted recommendation runs with provider/model provenance
+- [ ] Fall back visibly to deterministic local suggestions on unsupported devices, declined consent, or failures; never silently use a remote provider
+- [ ] Test consent/download gating, capability failures, cache removal, cancellation, malformed/tampered results, privacy/network boundaries, and permission checks
+- [ ] Add a real-browser/device smoke-test matrix and document performance, quality, storage, and HTTPS limitations
 
 ## Chunk 8 - Recommendation UI
 
@@ -105,10 +126,12 @@ Derived from `docs/ROADMAP.md` MVP 8 - Agentic Recommendations, with continuity 
 - [ ] Keep existing recommendations viewable in read-only mode
 - [ ] Keep generation and feedback mutations admin-only
 - [ ] Keep UI usable on desktop and mobile
+- [ ] Integrate browser-local consent, download/progress/removal controls, and preview-versus-save states from Chunk 7.1
 
 ## Chunk 9 - Configuration And Provider Setup
 
 - [ ] Add configuration for recommendation provider selection
+- [ ] Include opt-in `browser_local` mode, a pinned supported model/runtime, and per-device consent separate from server provider configuration
 - [ ] Add configuration for local LLM base URL/model if supported
 - [ ] Add configuration for OpenAI-compatible base URL/model/API key if supported
 - [ ] Keep API keys out of committed files and logs
@@ -125,6 +148,7 @@ Derived from `docs/ROADMAP.md` MVP 8 - Agentic Recommendations, with continuity 
 - [ ] Preserve older recommendations for comparison unless explicitly deleted
 - [ ] Add retry behavior or clear failed-run recovery path
 - [ ] Add tests for run persistence, regeneration, and failure handling
+- [ ] Distinguish browser model-artifact caching from saved recommendation runs; handle interrupted browser generation without treating it as a completed run
 
 ## Chunk 11 - Privacy And Manual Data Protection
 
@@ -149,6 +173,7 @@ Derived from `docs/ROADMAP.md` MVP 8 - Agentic Recommendations, with continuity 
 - [ ] Test duplicate owned/read avoidance
 - [ ] Test recommendation UI permissions
 - [ ] Test recommendation run persistence and errors
+- [ ] Test browser-local consent, capabilities, output validation, network privacy, and lifecycle behavior from Chunk 7.1
 - [ ] Verify full `pytest` pass
 
 ## Chunk 13 - Documentation
@@ -160,6 +185,7 @@ Derived from `docs/ROADMAP.md` MVP 8 - Agentic Recommendations, with continuity 
 - [ ] Document regeneration behavior
 - [ ] Update database documentation for recommendation tables
 - [ ] Update architecture documentation for recommendation service and provider interface
+- [ ] Document browser-local setup, model download/cache removal, HTTPS requirements, device compatibility, and privacy versus server-side inference
 
 ## MVP 8 Done Criteria
 
@@ -174,4 +200,6 @@ Derived from `docs/ROADMAP.md` MVP 8 - Agentic Recommendations, with continuity 
 - [ ] Existing recommendations are viewable in read-only mode
 - [ ] Recommendation generation is admin-only
 - [ ] Provider/model configuration is documented
+- [ ] On supported devices, users can explicitly authorize a model download and generate browser-local recommendations without remote inference; unsupported or declined cases retain deterministic suggestions
+- [ ] Browser-local results cannot bypass admin permissions, server-side validation, or local series/source-data protection rules
 - [ ] Basic tests pass

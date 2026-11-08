@@ -57,6 +57,7 @@ def summarize_reading_history(
         },
         "series": {
             "active_or_paused": active_series,
+            "abandoned": [_series_summary(series) for series in series_rows if series.status == "abandoned"],
             "next_unread": [item for item in (_next_unread_summary(series) for series in series_rows) if item is not None][:MAX_RECENT_ITEMS],
             "planned_unread": _planned_entries(series_rows)[:MAX_RECENT_ITEMS],
         },
@@ -157,13 +158,13 @@ def _recent_abandons(books: list[Book], period: analytics.PeriodRange) -> list[d
 
 
 def _series_summary(series: Series) -> dict[str, object]:
-    entries = sorted(series.books, key=lambda entry: (entry.position is None, entry.position or 0, entry.id))
-    completed_count = sum(1 for entry in entries if entry.book is not None and _completion_dates(entry.book))
+    entries = _series_entries(series)
+    completed_count = sum(1 for entry in entries if entry.book is not None and _is_completed(entry.book))
     return {
         "series_id": series.id,
         "name": series.name,
         "status": series.status,
-        "wants_to_continue": series.wants_to_continue,
+        "wants_to_continue": {"yes": True, "no": False}.get(series.wants_to_continue),
         "known_entries": len(entries),
         "completed_entries": completed_count,
         "planned_unread_entries": sum(1 for entry in entries if entry.book is None),
@@ -184,9 +185,9 @@ def _favorite_series(series_rows: list[Series], period: analytics.PeriodRange) -
 
 
 def _next_unread_summary(series: Series) -> dict[str, object] | None:
-    for entry in sorted(series.books, key=lambda item: (item.position is None, item.position or 0, item.id)):
+    for entry in _series_entries(series):
         if entry.book is None:
-            if entry.planned_title:
+            if entry.planned_title and entry.planned_title.strip():
                 return {
                     "series_id": series.id,
                     "series_name": series.name,
@@ -197,7 +198,7 @@ def _next_unread_summary(series: Series) -> dict[str, object] | None:
                     "local_book_id": None,
                 }
             continue
-        if not _completion_dates(entry.book):
+        if not _is_completed(entry.book):
             return {
                 "series_id": series.id,
                 "series_name": series.name,
@@ -208,6 +209,19 @@ def _next_unread_summary(series: Series) -> dict[str, object] | None:
                 "local_book_id": entry.book.id,
             }
     return None
+
+
+def _series_entries(series: Series) -> list[SeriesBook]:
+    return sorted(
+        (entry for entry in series.books if entry.book is None or (
+            entry.book.user_id == series.user_id and entry.book.archived_at is None
+        )),
+        key=lambda entry: (entry.position is None, entry.position or 0, entry.id),
+    )
+
+
+def _is_completed(book: Book) -> bool:
+    return bool(_completion_dates(book)) or _has_undated_completion_evidence(book)
 
 
 def _planned_entries(series_rows: list[Series]) -> list[dict[str, object]]:

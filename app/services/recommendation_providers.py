@@ -55,6 +55,7 @@ class SeriesContext(SafeContextModel):
 
 class SeriesSummary(SafeContextModel):
     active_or_paused: list[SeriesContext] = Field(default_factory=list)
+    abandoned: list[SeriesContext] = Field(default_factory=list)
     next_unread: list[UnreadContext] = Field(default_factory=list)
     planned_unread: list[UnreadContext] = Field(default_factory=list)
 
@@ -106,6 +107,8 @@ class RecommendationRequest(BaseModel):
     history: HistoryContext
     recommendation_type: RecommendationType | None = None
     max_results: int = Field(default=5, ge=1, le=20)
+    include_paused_series: bool = False
+    include_abandoned_series: bool = False
 
 
 class RecommendationSuggestion(BaseModel):
@@ -148,10 +151,29 @@ class DeterministicRecommendationProvider:
         suggestions = []
         kind = request.recommendation_type
         if kind in {None, "series_continuation", "backlog_prioritization"}:
-            for series in sorted(request.history.series.active_or_paused, key=lambda row: (row.name.casefold(), row.series_id)):
+            candidates = [
+                (f"series.{field}:{index}", series)
+                for field in ("active_or_paused", "abandoned")
+                for index, series in enumerate(getattr(request.history.series, field))
+            ]
+            seen = set()
+            for reference, series in sorted(candidates, key=lambda row: (row[1].status != "active", row[1].name.casefold(), row[1].series_id)):
                 entry = series.next_unread
-                if series.status != "active" or series.wants_to_continue is False or entry is None:
+                allowed = series.status == "active" or (
+                    series.status == "paused" and request.include_paused_series
+                ) or (series.status == "abandoned" and request.include_abandoned_series)
+                if not allowed or series.wants_to_continue is False or entry is None:
                     continue
+                if series.series_id in seen or entry.series_id != series.series_id or not entry.title.strip():
+                    continue
+                seen.add(series.series_id)
+                caveats = []
+                if entry.position is None:
+                    caveats.append("Series position is unknown.")
+                if series.wants_to_continue is None:
+                    caveats.append("Continuation intent is unknown.")
+                if series.status != "active":
+                    caveats.append(f"Series is {series.status}; included by explicit request.")
                 suggestions.append(RecommendationSuggestion(
                     recommendation_type=kind or "series_continuation",
                     title=entry.title,
@@ -160,11 +182,12 @@ class DeterministicRecommendationProvider:
                     local_book_id=entry.local_book_id,
                     local_series_id=series.series_id,
                     format_hint=entry.format,
-                    reasoning=f"Continue active series {series.name}: {series.completed_entries} of {series.known_entries} known entries completed; this is the next unread entry.",
-                    confidence="high" if entry.position is not None else "medium",
-                    source_context=[f"series:{series.series_id}", f"completed_entries:{series.completed_entries}", f"wants_to_continue:{series.wants_to_continue}"],
+                    reasoning=f"Continue {series.status} series {series.name}: {series.completed_entries} of {series.known_entries} known entries completed; continuation intent is {'yes' if series.wants_to_continue else 'unknown'}. This is the next unread {'local book' if entry.local_book_id else 'planned entry'}" + (f" at position {entry.position:g}." if entry.position is not None else "."),
+                    confidence="high" if not caveats else "medium",
+                    source_context=[reference],
+                    suggested_starting_point=entry.title,
                     rationale_tags=["series_next", "backlog"],
-                    caveats=[] if entry.position is not None else ["Series position is unknown."],
+                    caveats=caveats,
                 ))
         return RecommendationResponse(
             provider=self.name,

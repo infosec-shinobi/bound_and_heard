@@ -101,7 +101,7 @@ def test_remote_request_privacy_and_response():
     history.update({"secrets": "PRIVATE", "note_summaries": ["PRIVATE"], "raw_import": "PRIVATE"})
     history["series"]["active_or_paused"][0]["next_unread"]["raw_data"] = "PRIVATE"
     history["recent"] = {"completed": [{"title": "Safe Book", "notes": "PRIVATE", "raw_data": "PRIVATE"}]}
-    request = RecommendationRequest(history=history)
+    request = RecommendationRequest(history=history, recommendation_type="new_series")
 
     def handler(http_request):
         payload = json.loads(http_request.content)
@@ -192,7 +192,7 @@ def test_service_guards_custom_provider_errors_and_deadlines():
         async def generate(self, request):
             raise RuntimeError("SECRET private history")
 
-    response = asyncio.run(generate_recommendations(request_context(), provider=Provider()))
+    response = asyncio.run(generate_recommendations(request_context(recommendation_type="new_series"), provider=Provider()))
     assert response.status == "failed"
     assert "SECRET" not in response.model_dump_json()
 
@@ -200,7 +200,7 @@ def test_service_guards_custom_provider_errors_and_deadlines():
         async def generate(self, request):
             await asyncio.sleep(1)
 
-    response = asyncio.run(generate_recommendations(request_context(), provider=SlowProvider(), timeout_seconds=0.01))
+    response = asyncio.run(generate_recommendations(request_context(recommendation_type="new_series"), provider=SlowProvider(), timeout_seconds=0.01))
     assert response.status == "timeout"
 
 

@@ -224,6 +224,7 @@ Add an explainable AI reading advisor.
 - Genre exploration suggestions
 - Explanation for each recommendation
 - Optional local LLM integration
+- Opt-in browser-local model downloads and on-device recommendations, with capability checks, explicit consent, validated output, and deterministic fallback
 
 ### Success Criteria
 

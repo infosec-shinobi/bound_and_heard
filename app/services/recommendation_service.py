@@ -19,9 +19,23 @@ async def generate_recommendations(
     """Non-mutating, awaitable service boundary; callers need not block the UI thread."""
     if not 0 < timeout_seconds <= 120:
         raise ValueError("Timeout must be between 0 and 120 seconds.")
-    provider = provider or DeterministicRecommendationProvider()
+    local = DeterministicRecommendationProvider()
+    # Local series tracking is authoritative, even when a model is configured.
+    # Explicit continuation requests never ask a model to invent missing entries.
+    if provider is None or request.recommendation_type in {None, "series_continuation"}:
+        response = await local.generate(request)
+        if provider is None or response.recommendations or request.recommendation_type == "series_continuation":
+            return response
+    provider = provider or local
     try:
-        return await asyncio.wait_for(provider.generate(request), timeout=timeout_seconds)
+        response = await asyncio.wait_for(provider.generate(request), timeout=timeout_seconds)
+        if request.recommendation_type is None and response.status in {"succeeded", "no_results"}:
+            # With no eligible local continuation, model discovery cannot manufacture one.
+            items = [item for item in response.recommendations if item.recommendation_type != "series_continuation"]
+            response = response.model_copy(update={
+                "recommendations": items, "status": "succeeded" if items else "no_results",
+            })
+        return response
     except TimeoutError:
         return RecommendationResponse(provider=provider.name, model=provider.model, status="timeout", message="Recommendation generation timed out.")
     except Exception:
