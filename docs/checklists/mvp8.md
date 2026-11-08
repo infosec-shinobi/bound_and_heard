@@ -61,16 +61,16 @@ Derived from `docs/ROADMAP.md` MVP 8 - Agentic Recommendations, with continuity 
 
 ## Chunk 5 - Prompting And Output Contracts
 
-- [ ] Create prompt template for series continuation suggestions
-- [ ] Create prompt template for new series suggestions
-- [ ] Create prompt template for genre exploration suggestions
-- [ ] Create prompt template for general next-read suggestions
-- [ ] Require structured output that can be parsed reliably
-- [ ] Require recommendation reasoning tied to local reading history
-- [ ] Ask the model to avoid inventing completed reading history
-- [ ] Ask the model to label uncertainty when metadata is incomplete
-- [ ] Add parser validation for structured recommendation output
-- [ ] Add tests for prompt construction and response parsing
+- [x] Create prompt template for series continuation suggestions
+- [x] Create prompt template for new series suggestions
+- [x] Create prompt template for genre exploration suggestions
+- [x] Create prompt template for general next-read suggestions
+- [x] Require structured output that can be parsed reliably
+- [x] Require recommendation reasoning tied to local reading history
+- [x] Ask the model to avoid inventing completed reading history
+- [x] Ask the model to label uncertainty when metadata is incomplete
+- [x] Add parser validation for structured recommendation output
+- [x] Add tests for prompt construction and response parsing
 
 ## Chunk 6 - Series Continuation Suggestions
 

@@ -228,10 +228,42 @@ redirects and automatic retries are disabled. Failures return sanitized statuses
 exception strings, keys, or prompt logging. Cancellation propagates to callers.
 Configured-provider failures are surfaced rather than silently replaced by local
 results. Awaiting generation does not block the event loop; UI wiring, environment
-configuration, prompt specialization, jobs, and run persistence remain later chunks.
+configuration, jobs, and run persistence remain later chunks.
 
 Tests in `tests/test_recommendation_providers.py` use mocked transports, not live
 model endpoints. Chunk 4 verification: full suite, **458 passed**.
+
+## Prompting And Output Contracts (Chunk 5)
+
+`app.services.recommendation_prompts` builds separate system instructions for
+series continuation, new series, genre exploration, author-adjacent, backlog,
+and general next-read requests. Shared instructions require advisory-only output,
+history-based reasoning, no invented completions, and explicit caveats/lower
+confidence when metadata or evidence is incomplete. History values remain in the
+user message and are explicitly treated as untrusted data, not instructions.
+
+The user message includes the allowlisted history, requested type/count, and a
+request-local `source_catalog`. Catalog keys such as `favorites.genres:0` or
+`series.active_or_paused:0` identify individual supplied facts. Each model
+suggestion must cite only exact catalog keys in `source_context`; nonexistent
+references reject the whole response. Empty history has no valid evidence keys.
+These references are request-local evidence, not trusted database links.
+
+Providers still request JSON-object mode and include the Pydantic output schema
+in the system prompt. Parsing enforces types, nonempty titles/reasoning, confidence,
+source references, requested type/count, and unknown-field rejection. New-series
+suggestions additionally require a nonblank series name and starting point.
+Malformed output is rejected without logging or returning raw model content.
+An empty recommendations list remains a valid `no_results` response.
+
+Evidence validation proves references exist, not that the model's prose or
+external bibliographic claims are accurate. Caveat quality and semantic reasoning
+remain model instructions rather than guarantees; discovery matching and local
+duplicate detection remain later chunks.
+
+Tests in `tests/test_recommendation_prompts.py` cover every template, privacy,
+determinism, untrusted history placement, evidence validation, uncertainty fields,
+and starting-point requirements. Chunk 5 verification: full suite, **475 passed**.
 
 ## Privacy And Safety Assumptions
 

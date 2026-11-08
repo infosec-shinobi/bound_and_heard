@@ -28,7 +28,8 @@ def suggestion(**kwargs):
     return {
         "recommendation_type": "new_series", "title": "New Saga",
         "reasoning": "Related to your favorite fantasy genre.", "confidence": "medium",
-        "source_context": ["favorite_genre:Fantasy"], **kwargs,
+        "source_context": ["series.active_or_paused:0"],
+        "series_name": "New Saga", "suggested_starting_point": "First Book", **kwargs,
     }
 
 
